@@ -1,5 +1,8 @@
 numpy==2.2.6 
-opencv-python==4.12.0.88
+opencv-contrib-python==4.12.0.88
 matplotlib==3.10.7
 scikit-image==0.25.2
 scikit-learn==1.7.2
+pandas==2.3.3
+
+# pip install tensorflow[and-cuda]
