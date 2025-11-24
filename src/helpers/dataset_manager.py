@@ -1,5 +1,6 @@
 import os
 import argparse
+from typing import Literal
 
 class DatasetManager:
     """
@@ -192,8 +193,9 @@ class DatasetManager:
             img_dir: str,
             mask_dir: str,
             patch_dir: str | None = None,
-            patch_size: int = 128,
-            scaling_factor: float = 1.0
+            patch_size: int = 256,
+            scaling_factor: float = 1.0,
+            type: Literal["train", "val", "test"] = "train"
         ):
             """
             Splits images and corresponding root masks into uniform-sized patches
@@ -300,8 +302,8 @@ class DatasetManager:
             print("-" * 35)
 
             # Prepare output folders
-            save_img_dir = os.path.join(patch_dir, "images")
-            save_mask_dir = os.path.join(patch_dir, "masks")
+            save_img_dir = os.path.join(patch_dir, f"{type}_images", type)
+            save_mask_dir = os.path.join(patch_dir, f"{type}_masks", type)
             os.makedirs(save_img_dir, exist_ok=True)
             os.makedirs(save_mask_dir, exist_ok=True)
             print(f"Saving patches to:\n  - {save_img_dir}\n  - {save_mask_dir}")
@@ -368,14 +370,13 @@ class DatasetManager:
                 for j, patch in enumerate(patches_mask):
                     # Remove the channel dimension (1) before saving the mask
                     patch_to_save = patch.squeeze(-1)
-                    save_name = f"{image_base_name}_root_mask_patch_{j}.png"
+                    # save_name = f"{image_base_name}_patch_{j}_root_mask.png"
+                    save_name = f"{image_base_name}_patch_{j}.png"
                     cv2.imwrite(os.path.join(save_mask_dir, save_name), patch_to_save)
                 
                 print(f"  Successfully saved {num_patches} patches for {img_file}.")
 
             print("\n--- Patch Generation Complete ---")
-
-                
 
 def main():
     """
@@ -409,7 +410,7 @@ def main():
         "--patch_size",
         "-p",
         type=int,
-        default=128,
+        default=256,
         help="The side length (in pixels) for the square patches (default: 128)."
     )
     parser.add_argument(
@@ -419,6 +420,14 @@ def main():
         default=1.0,
         help="A scaling factor to resize images before patching (e.g., 0.5 for half resolution) (default: 1.0)."
     )
+
+    parser.add_argument(
+        "--type",
+        "-t",
+        type=str,
+        default="train"
+    )
+
 
     args = parser.parse_args()
 
@@ -430,7 +439,8 @@ def main():
         mask_dir=args.mask_dir,
         patch_dir=args.output,
         patch_size=args.patch_size,
-        scaling_factor=args.scale
+        scaling_factor=args.scale,
+        type=args.type
     )
 
 
