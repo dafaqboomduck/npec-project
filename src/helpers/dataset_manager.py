@@ -1,4 +1,5 @@
 import os
+import argparse
 
 class DatasetManager:
     """
@@ -376,10 +377,62 @@ class DatasetManager:
 
                 
 
-if __name__ == "__main__":
-    # Example usage:
-    manager = DatasetManager()
-    img_dir = "test_data/train_images/train"
-    mask_dir = "test_data/train_masks/train"
+def main():
+    """
+    Parses command-line arguments and runs the patch generation process.
+    """
+    parser = argparse.ArgumentParser(
+        description="Generates fixed-size patches from image and mask directories."
+    )
+    
+    # Required Arguments
+    parser.add_argument(
+        "img_dir",
+        type=str,
+        help="Path to the directory containing source images (.png)."
+    )
+    parser.add_argument(
+        "mask_dir",
+        type=str,
+        help="Path to the directory containing source masks (.tif)."
+    )
+    
+    # Optional Arguments
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=str,
+        default=None,
+        help="Optional destination path for the patches. If not provided, a default path like '<root_dir>_patches' will be used."
+    )
+    parser.add_argument(
+        "--patch_size",
+        "-p",
+        type=int,
+        default=128,
+        help="The side length (in pixels) for the square patches (default: 128)."
+    )
+    parser.add_argument(
+        "--scale",
+        "-s",
+        type=float,
+        default=1.0,
+        help="A scaling factor to resize images before patching (e.g., 0.5 for half resolution) (default: 1.0)."
+    )
 
-    manager.create_and_save_patches(img_dir, mask_dir)
+    args = parser.parse_args()
+
+    manager = DatasetManager()
+    
+    # Call the main processing function with parsed arguments
+    manager.create_and_save_patches(
+        img_dir=args.img_dir,
+        mask_dir=args.mask_dir,
+        patch_dir=args.output,
+        patch_size=args.patch_size,
+        scaling_factor=args.scale
+    )
+
+
+if __name__ == "__main__":
+    main()
