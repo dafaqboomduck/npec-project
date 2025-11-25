@@ -274,8 +274,8 @@ class DatasetManager:
 
             if patch_dir is None:
                 # img_dir example: test_data/train_images/train
-                dataset_root = os.path.dirname(os.path.dirname(img_dir))   # test_data
-                dataset_root_name = os.path.basename(dataset_root)         # test_data
+                dataset_root = os.path.dirname(os.path.dirname(img_dir))   
+                dataset_root_name = os.path.basename(dataset_root)         
                 patch_dir = os.path.join(
                     os.path.dirname(dataset_root),
                     f"{dataset_root_name}_patches"
