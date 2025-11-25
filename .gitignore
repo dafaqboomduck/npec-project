@@ -1,5 +1,6 @@
 *.DS_Store
 *.labeling
+__pycache__/
 dataset_patches/
 dataset/
 dataset_sample/
