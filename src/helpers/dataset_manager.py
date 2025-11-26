@@ -153,24 +153,24 @@ class DatasetManager:
                 scaled_im = im
                 scaled_mask = mask
 
+            # Extract Petri Dish area - returns coordinates
+            x_start, y_start, x_end, y_end = extract_petri_dish(scaled_im, return_coords = True)
+            
+            cropped_im = scaled_im[y_start:y_end, x_start:x_end]
+            cropped_mask = scaled_mask[y_start:y_end, x_start:x_end]
+            
             # Pad
-            padded_im = padder(scaled_im, patch_size)
-            padded_mask = padder(scaled_mask, patch_size)
-
+            padded_im = padder(cropped_im, patch_size)
+            padded_mask = padder(cropped_mask, patch_size)
+            print(f"  Padded image shape: {padded_im.shape}")
+            
             # Ensure mask has channel dimension for patchify
             if padded_mask.ndim == 2:
                 padded_mask = np.expand_dims(padded_mask, axis=-1)
 
-            # Extract Petri Dish area - returns coordinates
-            x_start, y_start, x_end, y_end = extract_petri_dish(padded_im, return_coords = True)
-            
-            cropped_im = padded_im[y_start:y_end, x_start:x_end]
-            cropped_mask = padded_mask[y_start:y_end, x_start:x_end]
-            print(f"  Cropped image shape: {cropped_im.shape}")
-
             # Patchify the cropped square area
-            patches_im = patchify(cropped_im, (patch_size, patch_size, 3), step=patch_size)
-            patches_mask = patchify(cropped_mask, (patch_size, patch_size, 1), step=patch_size)
+            patches_im = patchify(padded_im, (patch_size, patch_size, 3), step=patch_size)
+            patches_mask = patchify(padded_mask, (patch_size, patch_size, 1), step=patch_size)
 
             # Flatten patch arrays: (N_h, N_w, 1, patch_h, patch_w, N_c) -> (N, patch_h, patch_w, N_c)
             patches_im = patches_im.reshape(-1, patch_size, patch_size, 3)
