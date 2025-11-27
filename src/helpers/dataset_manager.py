@@ -97,7 +97,7 @@ class DatasetManager:
             dataset_root_name = os.path.basename(dataset_root)         
             patch_dir = os.path.join(
                 os.path.dirname(dataset_root),
-                f"{dataset_root_name}_patches"
+                f"{dataset_root_name}_patches_{patch_size}px"
             )
 
         print(f"Destination Patch Dir: {patch_dir}")
