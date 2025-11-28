@@ -112,9 +112,12 @@ class ImagePreprocessor:
                 "patch_size": patch_size
             }
 
-            # 5. Save patches
+            # 5. Save patches (row-major order from patchify)
             for j, patch in enumerate(patches_im):
-                save_name = f"{image_base_name}_patch_{j}.png"
+                # Calculate row and column index for clarity in debugging
+                row_idx = j // grid_cols
+                col_idx = j % grid_cols
+                save_name = f"{image_base_name}_r{row_idx:03d}_c{col_idx:03d}.png"
                 cv2.imwrite(str(save_img_dir / save_name), patch)
 
             self.logger.debug(f"Saved {len(patches_im)} patches for {img_path.name}")
