@@ -16,10 +16,6 @@ logger = logging.getLogger(__name__)
 
 from .custom_functions import f1
 
-MODEL_PATH = "../artifacts/models/unet_model_256px_v1.keras"
-INPUT_DIR = "./test_images/test"
-
-
 class InferenceManager:
     """
     Manages image patching and unpatching for model inference.
