@@ -16,6 +16,7 @@ def run_inference():
     patch_input_dir = None
     
     try:
+        # Initialize the ImagePreprocessor
         processor = ImagePreprocessor()
         
         # 1. Load Images
@@ -31,10 +32,8 @@ def run_inference():
 
         # The exact location where patches are saved
         patch_input_dir = patch_dir_root / "patches"
-
-        ## B. TEST INFERENCE MANAGER
-        print("\n--- 2. Testing InferenceManager ---")
         
+        # Initialize the InferenceManager
         manager = InferenceManager(str(MODEL_PATH), patch_size=PATCH_SIZE)
         
         # Process Directory (Predict and Unpatch)
