@@ -5,6 +5,7 @@ import glob
 import json
 import cv2
 import numpy as np
+from tqdm.auto import tqdm
 import tensorflow as tf
 from pathlib import Path
 from keras.models import load_model
@@ -143,7 +144,7 @@ class InferenceManager:
 
         try:
             # Process each group
-            for base_name, patch_files in image_groups.items():
+            for base_name, patch_files in tqdm(image_groups.items(), desc="Processing images", unit="img"):
                 if base_name not in self.metadata:
                     logger.warning(f"No metadata for '{base_name}'. Skipping.")
                     continue
@@ -152,11 +153,6 @@ class InferenceManager:
                 grid_shape = tuple(img_meta["grid_shape"])
                 padded_shape = tuple(img_meta["padded_shape"])
                 cropped_shape = tuple(img_meta["cropped_shape"])
-
-                logger.debug(
-                    f"Processing {base_name}: grid={grid_shape}, "
-                    f"padded={padded_shape}, cropped={cropped_shape}"
-                )
 
                 sorted_files = self._get_sorted_patches(patch_files)
 
