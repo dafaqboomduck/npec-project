@@ -118,7 +118,7 @@ class InferenceManager:
         # Load metadata
         if metadata_path is None:
             # Assume metadata is in the root patch directory (parent of parent)
-            meta_file = input_path.parent.parent / "patch_metadata.json"
+            meta_file = input_path.parent / "patch_metadata.json"
         else:
             meta_file = Path(metadata_path)
         
