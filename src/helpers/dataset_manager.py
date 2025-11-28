@@ -1,6 +1,7 @@
 import os
 import argparse
 from typing import Literal
+from tqdm.auto import tqdm
 from .padder import padder 
 from .extract_petri_dish import extract_petri_dish
 
@@ -81,12 +82,6 @@ class DatasetManager:
         import numpy as np
         from patchify import patchify
 
-        print(f"--- Starting Patch Generation ---")
-        print(f"Parameters: Patch Size={patch_size}, Scaling Factor={scaling_factor}")
-        print(f"Source Image Dir: {img_dir}")
-        print(f"Source Mask Dir: {mask_dir}")
-        print("-" * 35)
-
         if not os.path.exists(img_dir) or not os.path.exists(mask_dir):
             print("Error: Input directories not found.")
             return
@@ -100,102 +95,98 @@ class DatasetManager:
                 f"{dataset_root_name}_patches_{patch_size}px"
             )
 
-        print(f"Destination Patch Dir: {patch_dir}")
         os.makedirs(patch_dir, exist_ok=True)
 
         self.load_images(img_dir)
         self.load_masks(mask_dir)
-        
-        print(f"Found {len(self.img_files)} images and {len(self.mask_files)} masks.")
 
-        mask_set = {m.lower() for m in self.mask_files}
+        # Create a lookup dictionary: lowercase name -> actual filename
+        mask_lookup = {m.lower(): m for m in self.mask_files}
 
         valid_pairs = []
         for img_file in self.img_files:
             base = os.path.splitext(img_file)[0].lower()
             corr_mask = base + "_root_mask.tif"
-            if corr_mask in mask_set:
-                valid_pairs.append((img_file, corr_mask))
-
-        print(f"Identified {len(valid_pairs)} valid image/mask pairs for processing.")
-        print("-" * 35)
+            if corr_mask in mask_lookup:
+                mask_file = mask_lookup[corr_mask]  # Use the actual filename
+                valid_pairs.append((img_file, mask_file))
 
         # Prepare output folders
         save_img_dir = os.path.join(patch_dir, f"{type}_images", type)
         save_mask_dir = os.path.join(patch_dir, f"{type}_masks", type)
         os.makedirs(save_img_dir, exist_ok=True)
         os.makedirs(save_mask_dir, exist_ok=True)
-        print(f"Saving patches to:\n  - {save_img_dir}\n  - {save_mask_dir}")
 
-        for i, (img_file, mask_file) in enumerate(valid_pairs):
-            print(f"\n[{i+1}/{len(valid_pairs)}] Processing: {img_file}")
-            im_path = os.path.join(img_dir, img_file)
-            mask_path = os.path.join(mask_dir, mask_file)
+        total_patches_saved = 0
+        
+        # Main progress bar for processing images
+        with tqdm(total=len(valid_pairs), desc="Processing images", unit="img") as pbar:
+            for img_file, mask_file in valid_pairs:
+                im_path = os.path.join(img_dir, img_file)
+                mask_path = os.path.join(mask_dir, mask_file)
 
-            im = cv2.imread(im_path)
-            # Load mask as grayscale (0 flag)
-            mask = cv2.imread(mask_path, 0)
+                im = cv2.imread(im_path)
+                # Load mask as grayscale (0 flag)
+                mask = cv2.imread(mask_path, 0)
 
-            if im is None or mask is None:
-                print(f"  Warning: Could not read image/mask. Skipping.")
-                continue
+                if im is None or mask is None:
+                    pbar.set_postfix_str(f"Skipped: {img_file}")
+                    pbar.update(1)
+                    continue
 
-            # Initial shape check
-            print(f"  Original shape: Image={im.shape}, Mask={mask.shape}")
+                # Scale if required
+                if scaling_factor != 1.0:
+                    scaled_im = cv2.resize(im, (0, 0), fx=scaling_factor, fy=scaling_factor)
+                    # Use nearest neighbor for mask to preserve discrete values
+                    scaled_mask = cv2.resize(mask, (0, 0), fx=scaling_factor, fy=scaling_factor,
+                                                interpolation=cv2.INTER_NEAREST)
+                else:
+                    scaled_im = im
+                    scaled_mask = mask
 
-            # Scale if required
-            if scaling_factor != 1.0:
-                scaled_im = cv2.resize(im, (0, 0), fx=scaling_factor, fy=scaling_factor)
-                # Use nearest neighbor for mask to preserve discrete values
-                scaled_mask = cv2.resize(mask, (0, 0), fx=scaling_factor, fy=scaling_factor,
-                                            interpolation=cv2.INTER_NEAREST)
-            else:
-                scaled_im = im
-                scaled_mask = mask
+                # Extract Petri Dish area - returns coordinates
+                x_start, y_start, x_end, y_end = extract_petri_dish(scaled_im, return_coords = True)
+                
+                cropped_im = scaled_im[y_start:y_end, x_start:x_end]
+                cropped_mask = scaled_mask[y_start:y_end, x_start:x_end]
+                
+                # Pad
+                padded_im = padder(cropped_im, patch_size)
+                padded_mask = padder(cropped_mask, patch_size)
+                
+                # Ensure mask has channel dimension for patchify
+                if padded_mask.ndim == 2:
+                    padded_mask = np.expand_dims(padded_mask, axis=-1)
 
-            # Extract Petri Dish area - returns coordinates
-            x_start, y_start, x_end, y_end = extract_petri_dish(scaled_im, return_coords = True)
-            
-            cropped_im = scaled_im[y_start:y_end, x_start:x_end]
-            cropped_mask = scaled_mask[y_start:y_end, x_start:x_end]
-            
-            # Pad
-            padded_im = padder(cropped_im, patch_size)
-            padded_mask = padder(cropped_mask, patch_size)
-            print(f"  Padded image shape: {padded_im.shape}")
-            
-            # Ensure mask has channel dimension for patchify
-            if padded_mask.ndim == 2:
-                padded_mask = np.expand_dims(padded_mask, axis=-1)
+                # Patchify the cropped square area
+                patches_im = patchify(padded_im, (patch_size, patch_size, 3), step=patch_size)
+                patches_mask = patchify(padded_mask, (patch_size, patch_size, 1), step=patch_size)
 
-            # Patchify the cropped square area
-            patches_im = patchify(padded_im, (patch_size, patch_size, 3), step=patch_size)
-            patches_mask = patchify(padded_mask, (patch_size, patch_size, 1), step=patch_size)
+                # Flatten patch arrays: (N_h, N_w, 1, patch_h, patch_w, N_c) -> (N, patch_h, patch_w, N_c)
+                patches_im = patches_im.reshape(-1, patch_size, patch_size, 3)
+                patches_mask = patches_mask.reshape(-1, patch_size, patch_size, 1)
+                
+                num_patches = len(patches_im)
+                image_base_name = os.path.splitext(img_file)[0]
+                
+                # Save image and mask patches
+                for j, patch in enumerate(patches_im):
+                    save_name = f"{image_base_name}_patch_{j}.png"
+                    cv2.imwrite(os.path.join(save_img_dir, save_name), patch)
 
-            # Flatten patch arrays: (N_h, N_w, 1, patch_h, patch_w, N_c) -> (N, patch_h, patch_w, N_c)
-            patches_im = patches_im.reshape(-1, patch_size, patch_size, 3)
-            patches_mask = patches_mask.reshape(-1, patch_size, patch_size, 1)
-            
-            num_patches = len(patches_im)
-            print(f"  Generated {num_patches} patches (size {patch_size}x{patch_size})")
+                for j, patch in enumerate(patches_mask):
+                    # Remove the channel dimension (1) before saving the mask
+                    patch_to_save = patch.squeeze(-1)
+                    save_name = f"{image_base_name}_patch_{j}.png"
+                    cv2.imwrite(os.path.join(save_mask_dir, save_name), patch_to_save)
+                
+                total_patches_saved += num_patches
+                pbar.set_postfix_str(f"{num_patches} patches | Total: {total_patches_saved}")
+                pbar.update(1)
 
-            image_base_name = os.path.splitext(img_file)[0]
-            
-            # Save image and mask patches
-            for j, patch in enumerate(patches_im):
-                save_name = f"{image_base_name}_patch_{j}.png"
-                cv2.imwrite(os.path.join(save_img_dir, save_name), patch)
-
-            for j, patch in enumerate(patches_mask):
-                # Remove the channel dimension (1) before saving the mask
-                patch_to_save = patch.squeeze(-1)
-                # save_name = f"{image_base_name}_patch_{j}_root_mask.png"
-                save_name = f"{image_base_name}_patch_{j}.png"
-                cv2.imwrite(os.path.join(save_mask_dir, save_name), patch_to_save)
-            
-            print(f"  Successfully saved {num_patches} patches for {img_file}.")
-
-        print("\n--- Patch Generation Complete ---")
+        print(f"\n✓ Complete! Generated {total_patches_saved} patches total")
+        print(f"  Images: {save_img_dir}")
+        print(f"  Masks: {save_mask_dir}")
 
 def main():
     """
