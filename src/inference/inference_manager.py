@@ -1,211 +1,317 @@
 import os
-import re
-import shutil
-import glob
-import json
 import cv2
 import numpy as np
 from tqdm.auto import tqdm
 import tensorflow as tf
 from pathlib import Path
-from keras.models import load_model
-from typing import List, Dict, Optional
-from patchify import unpatchify
+from typing import List, Optional, Union
+from patchify import unpatchify, patchify
+from keras.models import load_model # Import necessary Keras function
 
 import logging
 logger = logging.getLogger(__name__)
 
-from .custom_functions import f1
+# Assuming these are defined elsewhere and accessible
+from .custom_functions import f1, iou, dice_bce_loss
+from src.helpers.padder import padder
+from src.helpers.extract_petri_dish import extract_petri_dish
 
 class InferenceManager:
     """
-    Manages image patching and unpatching for model inference.
-    Uses saved metadata to correctly reconstruct images without distortion.
-    """
-
-    def __init__(self, model_path: str, patch_size: int = 256):
-        self.patch_size = patch_size
-        self.model_path = model_path
-        self.metadata: Dict[str, Dict] = {}
-
-        logger.debug(f"Loading model from {self.model_path}...")
-        if not os.path.exists(model_path):
-            msg = f"Model file not found at {model_path}"
-            logger.error(msg)
-            raise FileNotFoundError(msg)
-
-        self.model = load_model(self.model_path, custom_objects={'f1': f1})
-        logger.debug("Model loaded successfully.")
-
-    def load_metadata(self, metadata_path: Path) -> None:
-        """Load the patch metadata JSON file created during preprocessing."""
-        if not metadata_path.exists():
-            raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
-        with open(metadata_path, "r") as f:
-            self.metadata = json.load(f)
-        logger.debug(f"Loaded metadata for {len(self.metadata)} images")
-
-    def _get_sorted_patches(self, patches: List[str]) -> List[str]:
+    Manages image patching, model inference, and mask unpatching/restoration 
+    for image segmentation, specifically handling petridish extraction and padding.
+    """    
+    def __init__(self, checkpoint_path: Union[Path, str], custom_objects: dict):
         """
-        Sort patches by row and column indices.
-        Expected format: {base_name}_r{row:03d}_c{col:03d}.png
-        """
-        def sort_key(text):
-            filename = os.path.basename(text)
-            match = re.search(r'_r(\d+)_c(\d+)\.png$', filename)
-            if match:
-                row = int(match.group(1))
-                col = int(match.group(2))
-                return (row, col)
-            return (0, 0)
-        return sorted(patches, key=sort_key)
+        Initializes the InferenceManager and loads the Keras model once.
 
-    def unpatch_pred_mask(self, preds: np.ndarray, grid_shape: tuple, padded_shape: tuple, cropped_shape: tuple) -> np.ndarray:
+        Args:
+            checkpoint_path (Path | str): Path to the saved Keras model checkpoint (.keras or .h5).
+            custom_objects (dict): Dictionary of custom functions required for model loading (e.g., custom losses, metrics).
         """
-        Unpatches the prediction mask and crops to original size.
+        # Initialize state variables
+        self.img_shape = None
+        self.crop_coords = None
+        self.patch_grid_shape = None # Stores (N_rows, N_cols)
+        self.model = None
+        self.img_files: List[str] = []
+        
+        # Load model upon initialization for efficiency
+        self._init_model(Path(checkpoint_path), custom_objects)
+    
+    def _init_model(self, checkpoint_path: Path, custom_objects: dict):
+        """
+        Loads the Keras model from the specified checkpoint path.
         
         Args:
-            preds: Predicted patch masks (N_total, P, P, C).
-            grid_shape: (rows, cols) - how patches are arranged.
-            padded_shape: (H, W) of the padded image.
-            cropped_shape: (H, W) of the original cropped image (before padding).
+            checkpoint_path (Path): The path to the saved model checkpoint.
+            custom_objects (dict): Custom functions/objects needed for loading the model.
         
-        Returns:
-            The reconstructed mask cropped to the original image size.
+        Raises:
+            FileExistsError: If the checkpoint path is invalid.
+            ImportError: If the model cannot be loaded (e.g., file corruption, wrong format).
         """
-        # Squeeze channel dim if present
-        if preds.shape[-1] == 1:
-            preds = preds.squeeze(axis=-1)
 
-        rows, cols = grid_shape
-        expected_patches = rows * cols
+        if not checkpoint_path.exists():
+            logger.error(f"Could not find the path to the saved model checkpoint: {checkpoint_path}. Please make sure the path is correct.")
+            raise FileExistsError
+        else:
+            try:
+                self.model = load_model(checkpoint_path, custom_objects=custom_objects)
+                logger.debug(f"Model loaded successfully from {checkpoint_path}.")
+            except Exception as e:
+                logger.exception(f"Model could not be loaded from model checkpoint: {checkpoint_path}. Please make sure this is a .keras or a .h5 file containing a saved Keras model.")
+                raise ImportError
+    
+    def load_images(self, input_dir: Union[Path, str]):
+        """
+        Loads the list of image files (ending with .png) from the specified directory.
 
-        if len(preds) != expected_patches:
-            raise ValueError(
-                f"Grid shape {grid_shape} expects {expected_patches} patches, "
-                f"but got {len(preds)} predictions."
-            )
+        Args:
+            input_dir (Path | str): The path to the directory containing the image files.
+        """
+        files = sorted(os.listdir(input_dir))
+        self.img_files = [f for f in files if f.lower().endswith(".png")]
+        logger.debug(f"Found {len(self.img_files)} image files.")
 
-        # Reshape to grid: (rows, cols, patch_h, patch_w)
-        target_shape = (rows, cols) + preds.shape[-2:]
+    def patch_image(self, img: np.ndarray, patch_size: int = 256, scaling_factor: float = 1.0, normalize: bool = False) -> np.ndarray:
+        """
+        Scales, pads, extracts, and patches the image for inference.
+
+        Args:
+            img (np.ndarray): The raw input image (H, W, C or H, W).
+            patch_size (int): The square size of the patches (P x P). Defaults to 256.
+            scaling_factor (float): Factor by which to scale the image before processing. Defaults to 1.0.
+            normalize (bool): If True, patches are normalized to [0, 1]. Defaults to False.
+
+        Returns:
+            np.ndarray: The resulting array of patches ready for model input 
+                        (N_total_patches, P, P, 3).
+        """
+        self.img_shape = img.shape
+        
+        if scaling_factor != 1.0:
+            # Scale the image
+            scaled_im = cv2.resize(img, (0, 0), fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_LINEAR)
+        else:
+            scaled_im = img
+
+        # Extract the petri dish area using the potentially scaled image
+        self.crop_coords = extract_petri_dish(scaled_im, return_coords=True)
+        x1_scaled, y1_scaled, x2_scaled, y2_scaled = self.crop_coords
+
+        if scaling_factor != 1.0:
+            # CRITICAL FIX: Rescale coordinates back to the original image's space
+            # before cropping the original image.
+            scale_ratio = 1.0 / scaling_factor
+            x1 = int(x1_scaled * scale_ratio)
+            y1 = int(y1_scaled * scale_ratio)
+            x2 = int(x2_scaled * scale_ratio)
+            y2 = int(y2_scaled * scale_ratio)
+            self.crop_coords = (x1, y1, x2, y2)
+        else:
+            x1, y1, x2, y2 = self.crop_coords
+
+
+        # Crop the image using the original coordinates
+        dish = img[y1:y2, x1:x2]
+
+        # Pad the image
+        padded_im = padder(dish, patch_size)
+
+        # Convert grayscale to 3-channel if necessary (assuming padder maintains channels)
+        if padded_im.ndim < 3:
+            padded_im = cv2.cvtColor(padded_im, cv2.COLOR_GRAY2BGR)
+
+        self.image_to_patch = padded_im
+
+        # Patch the image (Assuming 3-channel image)
+        patches = patchify(padded_im, (patch_size, patch_size, 3), step=patch_size)
+        
+        # Store the shape of the patch grid for unpatching
+        self.patch_grid_shape = patches.shape[:2]
+
+        # Flatten the patches for model input
+        num_patches = patches.shape[0] * patches.shape[1]
+        # Reshape to (N_total_patches, patch_size, patch_size, 3)
+        patches = patches.reshape(num_patches, patch_size, patch_size, 3)
+        
+        if normalize:
+            # Normalization
+            patches = patches / 255.0 
+    
+        return patches
+
+    def _unpatch_pred_mask(self, preds: np.ndarray) -> np.ndarray:
+        """
+        Unpatches the prediction mask into the original padded image size.
+
+        Args:
+            preds (np.ndarray): The model predictions, typically (N_total_patches, P, P, C_out).
+
+        Returns:
+            np.ndarray: The stitched mask, sized to the padded crop (H_padded, W_padded).
+            
+        Raises:
+            ValueError: If patching state variables are not initialized.
+        """
+        
+        # Check for required state
+        if self.patch_grid_shape is None or self.img_shape is None:
+             raise ValueError("Must run patch_image() first or provide img and ensure patches were created.")
+
+        # Squeeze the channel dimension if it's 1
+        preds = preds.squeeze(axis=-1)
+
+        N_rows, N_cols = self.patch_grid_shape
+        P = preds.shape[-1] # Patch width/height (assuming square)
+
+        # Reshape predictions from (N_total_patches, P, P) or (N_total_patches, P, P, C_out)
+        # to (N_rows, N_cols, P, P)
+        target_shape = (N_rows, N_cols, P, P)
+        
+        # The number of patches must match N_rows * N_cols
+        if preds.shape[0] != N_rows * N_cols:
+             raise ValueError(f"Mismatched patch count. Expected {N_rows * N_cols}, got {preds.shape[0]}.")
+
         preds_reshaped = preds.reshape(target_shape)
 
-        # Unpatch to full padded size
-        full_mask = unpatchify(preds_reshaped, padded_shape)
-
-        # Crop to original (pre-padding) size to remove padding artifacts
-        crop_h, crop_w = cropped_shape
-        cropped_mask = full_mask[:crop_h, :crop_w]
-
-        return cropped_mask
-
-    def process_directory(self, input_dir: str, metadata_path: Optional[str] = None, cleanup: bool = False):
+        # The target shape for unpatchify is the shape of the full padded image
+        H_padded = N_rows * P
+        W_padded = N_cols * P
+            
+        # Unpatch and return the mask
+        return unpatchify(preds_reshaped, (H_padded, W_padded))
+    
+    def create_root_mask(self, patches: np.ndarray) -> Optional[np.ndarray]:
         """
-        Iterates through patches, groups them, predicts, and saves merged masks.
+        Runs model prediction on the patches and unpatches the results.
+
+        Args:
+            patches (np.ndarray): The patches ready for model input.
+
+        Returns:
+            Optional[np.ndarray]: The stitched, padded mask (H_padded, W_padded), 
+                                  or None if prediction fails.
+        """
+        if self.model is None:
+            logger.error("Model is not initialized.")
+            return None
+            
+        try:
+            # verbose=0 suppresses progress bar during batch processing
+            preds = self.model.predict(patches, verbose=0) 
+            padded_mask = self._unpatch_pred_mask(preds)
+
+            return padded_mask
+        
+        except Exception as e:
+            logger.exception(f"UNEXPECTED EXCEPTION DURING PREDICTION/UNPATCHING: {e}")
+            return None
+    
+    def restore_mask(self, padded_mask: np.ndarray, patch_size: int = 256) -> np.ndarray:
+        """
+        Reverses the padding and cropping steps to restore the prediction 
+        to the original image's shape and coordinate system.
+
+        Args:
+            padded_mask (np.ndarray): The stitched prediction (padded size).
+            patch_size (int): The patch size used in padder. Defaults to 256.
+
+        Returns:
+            np.ndarray: The mask restored to the original image dimensions (H_original, W_original).
+        
+        Raises:
+            ValueError: If crop_coords or img_shape are not initialized.
+        """
+        if self.crop_coords is None or self.img_shape is None:
+             raise ValueError("restore_mask requires self.crop_coords and self.img_shape to be set by patch_image().")
+             
+        # 1. Unpack coordinates from extract_petri_dish (in original image coordinates)
+        x_start, y_start, x_end, y_end = self.crop_coords
+        
+        # Calculate the dimensions of the crop BEFORE padding
+        h_crop = y_end - y_start
+        w_crop = x_end - x_start
+
+        # 2. Re-calculate the padding that was added 
+        # (This logic MUST mirror the 'padder' utility function)
+        height_padding = ((h_crop // patch_size) + 1) * patch_size - h_crop
+        width_padding  = ((w_crop // patch_size) + 1) * patch_size - w_crop
+
+        # Calculate exactly how much was added to top and left
+        top_pad = height_padding // 2
+        left_pad = width_padding // 2
+
+        # 3. Remove the padding (Un-pad)
+        # Extract the region starting at top/left pad, with the size of the original crop.
+        unpadded_mask = padded_mask[top_pad : top_pad + h_crop, left_pad : left_pad + w_crop]
+
+        # 4. Restore to Original Canvas (Un-crop)
+        # Create a blank array with the original raw dimensions
+        final_mask = np.zeros(self.img_shape[:2], dtype=padded_mask.dtype)
+
+        # Place the unpadded mask into the specific coordinates where the dish was found
+        final_mask[y_start : y_end, x_start : x_end] = unpadded_mask
+        
+        return final_mask
+        
+    def process_directory(self, input_dir: Union[Path, str]):
+        """
+        Iterates through images in the input directory, performs patching, 
+        prediction, and saves the merged masks.
         
         Args:
-            input_dir: Path to folder containing the patches (e.g., 'test_images/test/').
-            metadata_path: Path to patch_metadata.json. If None, looks in parent of input_dir.
-            cleanup: If True, deletes the input directory after processing.
+            input_dir (Path | str): Path to folder containing the raw images.
+        
+        Raises:
+            ValueError: If the input directory does not exist or if images haven't been loaded.
         """
         input_path = Path(input_dir)
         if not input_path.exists():
             raise ValueError(f"Input directory {input_dir} does not exist.")
 
-        # Load metadata
-        if metadata_path is None:
-            # Assume metadata is in the root patch directory (parent of parent)
-            meta_file = input_path.parent / "patch_metadata.json"
-        else:
-            meta_file = Path(metadata_path)
-        
-        self.load_metadata(meta_file)
+        # Ensure images are loaded
+        if not self.img_files:
+            self.load_images(input_path)
+            if not self.img_files:
+                logger.warning(f"No PNG images found in {input_dir}. Exiting.")
+                return
 
         # Setup output directory
         output_dir = input_path.parent / "predicted_masks"
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Processing images. Output: {output_dir}")
+        
+        for img_filename in tqdm(self.img_files, desc="Processing images", unit="img"):
+            img_file_path = input_path / img_filename
+            
+            # Read image
+            img = cv2.imread(str(img_file_path))
+            if img is None:
+                logger.warning(f"Could not read: {img_file_path}")
+                continue
 
-        # Group files by base image name
-        # Pattern: {base_name}_r{row}_c{col}.png
-        image_groups: Dict[str, List[str]] = {}
-        all_files = glob.glob(str(input_path / "*_r*_c*.png"))
-        logger.debug(f"Found {len(all_files)} patch files.")
+            # 1. Patch the image
+            patches = self.patch_image(img, normalize=True)
 
-        for file_path in all_files:
-            filename = os.path.basename(file_path)
-            # Match everything before _r###_c###.png as base name
-            match = re.match(r'(.+?)_r\d+_c\d+\.png$', filename)
-            if match:
-                base_name = match.group(1)
-                if base_name not in image_groups:
-                    image_groups[base_name] = []
-                image_groups[base_name].append(file_path)
+            # 2. Predict the mask (model is already loaded)
+            padded_mask = self.create_root_mask(patches)
+            
+            if padded_mask is None:
+                logger.error(f"Prediction failed for {img_filename}. Skipping.")
+                continue
 
-        try:
-            # Process each group
-            for base_name, patch_files in tqdm(image_groups.items(), desc="Processing images", unit="img"):
-                if base_name not in self.metadata:
-                    logger.warning(f"No metadata for '{base_name}'. Skipping.")
-                    continue
+            # 3. Restore mask to original image size
+            corrected_mask = self.restore_mask(padded_mask)
 
-                img_meta = self.metadata[base_name]
-                grid_shape = tuple(img_meta["grid_shape"])
-                padded_shape = tuple(img_meta["padded_shape"])
-                cropped_shape = tuple(img_meta["cropped_shape"])
+            # 4. Convert to binary and save
+            binary_mask = (corrected_mask > 0.5).astype(np.uint8) * 255
 
-                sorted_files = self._get_sorted_patches(patch_files)
-
-                # Validate patch count
-                if len(sorted_files) != img_meta["num_patches"]:
-                    logger.warning(
-                        f"Expected {img_meta['num_patches']} patches for {base_name}, "
-                        f"found {len(sorted_files)}. Skipping."
-                    )
-                    continue
-
-                # Load and preprocess batch
-                batch_images = []
-                for p_file in sorted_files:
-                    img = cv2.imread(p_file)
-                    if img is None:
-                        logger.warning(f"Could not read: {p_file}")
-                        continue
-                    img = cv2.resize(img, (self.patch_size, self.patch_size))
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    img = img / 255.0
-                    batch_images.append(img)
-
-                batch_np = np.array(batch_images)
-
-                # Predict
-                predictions = self.model.predict(batch_np, verbose=0)
-
-                # Reconstruct mask using saved metadata
-                full_mask = self.unpatch_pred_mask(
-                    predictions,
-                    grid_shape=grid_shape,
-                    padded_shape=padded_shape,
-                    cropped_shape=cropped_shape
-                )
-
-                # Threshold to binary
-                binary_mask = (full_mask > 0.5).astype(np.uint8) * 255
-
-                # Save
-                save_path = output_dir / f"{base_name}_mask.tif"
-                cv2.imwrite(str(save_path), binary_mask)
-                logger.debug(f"Saved mask: {save_path}")
-
-            # Cleanup
-            if cleanup:
-                logger.info(f"Cleaning up: {input_dir}")
-                try:
-                    shutil.rmtree(input_dir)
-                except OSError as e:
-                    logger.error(f"Error deleting directory: {e}")
-
-            logger.info("Inference process completed.")
-
-        except Exception as e:
-            logger.exception(f" UNHANDLED EXCEPTION: {e}")
+            # Save path: replace original extension (e.g., .png) with _mask.tif
+            base_name = Path(img_filename).stem
+            save_path = output_dir / f"{base_name}_mask.tif"
+            
+            # Use appropriate color writing based on channels (CV_IMWRITE_TIFF_COMPRESSION for TIFF)
+            cv2.imwrite(str(save_path), binary_mask) 
+            logger.debug(f"Saved mask: {save_path}")
