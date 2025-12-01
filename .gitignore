@@ -3,6 +3,5 @@
 __pycache__/
 dataset_patches*/
 dataset/
-dataset_sample/
-dataset_sample_patches*/
+kaggle_dataset*/
 saved_models/
