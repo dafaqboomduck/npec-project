@@ -269,7 +269,8 @@ class InferenceManager:
         """
         input_path = Path(input_dir)
         if not input_path.exists():
-            raise ValueError(f"Input directory {input_dir} does not exist.")
+            logger.error(f"Input directory {input_dir} does not exist.")
+            raise ValueError
 
         # Ensure images are loaded
         if not self.img_files:
