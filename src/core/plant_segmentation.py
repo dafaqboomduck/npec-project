@@ -84,24 +84,37 @@ def merge_components_by_distance(labels: np.ndarray, distance_thresh: float) -> 
             if D[i, j] <= distance_thresh:
                 union(i, j)
     
-    # Map each root to a new sequential label ID
-    root_map = {}
-    new_id = 1
+    # Group components by their root
+    groups = {}
     for i in range(n):
         r = find(i)
-        if r not in root_map:
-            root_map[r] = new_id
-            new_id += 1
+        if r not in groups:
+            groups[r] = []
+        groups[r].append(i)
     
-    # Create output array with merged and renumbered labels
+    # For each group, find the leftmost x-coordinate
+    group_left_x = {}
+    for root, indices in groups.items():
+        min_x = float('inf')
+        for i in indices:
+            label_value = unique_labels[i]
+            x_coords = np.where(labels == label_value)[1]
+            min_x = min(min_x, x_coords.min())
+        group_left_x[root] = min_x
+    
+    # Sort groups by their leftmost x-coordinate
+    sorted_roots = sorted(groups.keys(), key=lambda r: group_left_x[r])
+    
+    # Create mapping: sorted position -> new label (starting from 1, since 0 is background)
+    root_map = {root: idx + 1 for idx, root in enumerate(sorted_roots)}
+    
     out = np.zeros_like(labels)
     for i in range(n):
         label_value = unique_labels[i]
         merged_id = root_map[find(i)]
-        # Assign all pixels of this component to its merged label
         out[labels == label_value] = merged_id
     
-    logger.debug(f"The merging resulted in {out.max()} component(s)")
+    logger.debug(f"The merging resulted in {len(groups)} component(s)")
     
     return out
 
