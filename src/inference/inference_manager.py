@@ -34,7 +34,7 @@ class InferenceManager:
         self.crop_coords = None
         self.patch_grid_shape = None # Stores (N_rows, N_cols)
         self.model = None
-        self.img_files: List[str] = []
+        
         
         # Load model upon initialization for efficiency
         self._init_model(Path(checkpoint_path), custom_objects)
@@ -62,17 +62,6 @@ class InferenceManager:
             except Exception as e:
                 logger.exception(f"Model could not be loaded from model checkpoint: {checkpoint_path}. Please make sure this is a .keras or a .h5 file containing a saved Keras model.")
                 raise ImportError
-    
-    def load_images(self, input_dir: Union[Path, str]):
-        """
-        Loads the list of image files (ending with .png) from the specified directory.
-
-        Args:
-            input_dir (Path | str): The path to the directory containing the image files.
-        """
-        files = sorted(os.listdir(input_dir))
-        self.img_files = [f for f in files if f.lower().endswith(".png")]
-        logger.debug(f"Found {len(self.img_files)} image files.")
 
     def patch_image(self, img: np.ndarray, patch_size: int = 256, scaling_factor: float = 1.0, normalize: bool = False) -> np.ndarray:
         """
@@ -255,64 +244,3 @@ class InferenceManager:
         final_mask[y_start : y_end, x_start : x_end] = unpadded_mask
         
         return final_mask
-        
-    def process_directory(self, input_dir: Union[Path, str]):
-        """
-        Iterates through images in the input directory, performs patching, 
-        prediction, and saves the merged masks.
-        
-        Args:
-            input_dir (Path | str): Path to folder containing the raw images.
-        
-        Raises:
-            ValueError: If the input directory does not exist or if images haven't been loaded.
-        """
-        input_path = Path(input_dir)
-        if not input_path.exists():
-            logger.error(f"Input directory {input_dir} does not exist.")
-            raise ValueError
-
-        # Ensure images are loaded
-        if not self.img_files:
-            self.load_images(input_path)
-            if not self.img_files:
-                logger.warning(f"No PNG images found in {input_dir}. Exiting.")
-                return
-
-        # Setup output directory
-        output_dir = input_path.parent / "predicted_masks"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Processing images. Output: {output_dir}")
-        
-        for img_filename in tqdm(self.img_files, desc="Processing images", unit="img"):
-            img_file_path = input_path / img_filename
-            
-            # Read image
-            img = cv2.imread(str(img_file_path))
-            if img is None:
-                logger.warning(f"Could not read: {img_file_path}")
-                continue
-
-            # 1. Patch the image
-            patches = self.patch_image(img, normalize=True)
-
-            # 2. Predict the mask (model is already loaded)
-            padded_mask = self.create_root_mask(patches)
-            
-            if padded_mask is None:
-                logger.error(f"Prediction failed for {img_filename}. Skipping.")
-                continue
-
-            # 3. Restore mask to original image size
-            corrected_mask = self.restore_mask(padded_mask)
-
-            # 4. Convert to binary and save
-            binary_mask = (corrected_mask > 0.5).astype(np.uint8) * 255
-
-            # Save path: replace original extension (e.g., .png) with _mask.tif
-            base_name = Path(img_filename).stem
-            save_path = output_dir / f"{base_name}_mask.tif"
-            
-            # Use appropriate color writing based on channels (CV_IMWRITE_TIFF_COMPRESSION for TIFF)
-            cv2.imwrite(str(save_path), binary_mask) 
-            logger.debug(f"Saved mask: {save_path}")
