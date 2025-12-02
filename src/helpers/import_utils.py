@@ -1,5 +1,5 @@
 import importlib
-from src.config.packages import PACKAGES
+from src.configs.packages import PACKAGES
 
 def attempt_imports(package_names=PACKAGES):
     modules = {}

@@ -11,15 +11,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 from src.inference import InferenceManager
-from src.core.processing import PlantSegmentor
+from src.core.segmenation import PlantSegmentor
 from src.core.root_length import analyze_plant_lengths
 
-from src.config.inference_config import MODEL_PATH
-from src.config.global_config import IMG_DIR
+from src.configs.inference import MODEL_PATH
+from src.configs.segmentation import SEGMENTATION_CONFIG, PLANT_ZONES
+from src.config import IMG_DIR
 from src.inference.custom_functions import f1, iou, dice_bce_loss
 from src.helpers import extract_sort_keys
 
-from models import InferenceError, InitializationError, PlantResult
+from src.models import InferenceError, InitializationError, PlantResult
 
 class CVPipeline:
 
@@ -62,7 +63,7 @@ class CVPipeline:
             InitializationError: If the PlantSegmentor fails to initialize.
         """
         try:
-            self.segmentor = PlantSegmentor()
+            self.segmentor = PlantSegmentor(PLANT_ZONES, SEGMENTATION_CONFIG)
             logger.info("PlantSegmentor initialized successfully")
         except Exception as e:
             logger.exception("Failed to initialize PlantSegmentor")
