@@ -1,211 +1,247 @@
 import numpy as np
-from scipy.spatial.distance import cdist
-
 import logging
+from typing import Dict, Optional, Tuple
+from scipy.spatial.distance import cdist
+from scipy.ndimage import find_objects
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
+
+from src.config.segmentation_config import PLANT_ZONES, SegmentationConfig
+
+# Configure logger
 logger = logging.getLogger(__name__)
 
-from src.config.segmentation_config import *
 
 class PlantSegmentor:
-    def __init__(self, zones: dict = PLANT_ZONES):
-        self.zones = zones
-
-    def get_plant_position_by_zone(self, x_coord):
+    def __init__(self, 
+                 zones: Optional[Dict[int, Tuple[int, int]]] = None, 
+                 config: Optional[SegmentationConfig] = None):
         """
-        Determine which plant position (0-4) a component belongs to based on its X coordinate.
-        Returns None if the coordinate doesn't fall within any defined zone.
+        Initialize the segmentor.
+        
+        Args:
+            zones: Dictionary mapping plant ID to (x_min, x_max) tuples.
+            config: SegmentationConfig object with threshold values.
+        """
+        self.zones = zones if zones is not None else PLANT_ZONES
+        self.config = config if config is not None else SegmentationConfig()
+
+    def get_plant_position_by_zone(self, x_coord: float) -> Optional[int]:
+        """
+        Determine which plant position a coordinate belongs to.
         """
         for plant_id, (x_min, x_max) in self.zones.items():
             if x_min <= x_coord <= x_max:
                 return plant_id
         return None
-    
-    def filter_plant_components(self, labels, img_height, img_width):
+
+    def filter_plant_components(self, labels: np.ndarray) -> np.ndarray:
         """
-        Filter connected components to keep only valid plant roots.
-        """
-        filtered_labels = labels.copy()
-        unique_labels = [l for l in np.unique(labels) if l != 0]
-        top_region_height = int(img_height * TOP_REGION_RATIO)
+        Filter connected components to keep only valid plant roots based on geometric properties.
         
-        for label_id in unique_labels:
-            component_mask = (labels == label_id)
-            y_coords, x_coords = np.where(component_mask)
-            
-            if len(y_coords) == 0:
+        Optimized using scipy.ndimage.find_objects to avoid full-image scans.
+        """
+        if labels.max() == 0:
+            return labels
+
+        img_height, img_width = labels.shape
+        filtered_labels = labels.copy()
+        
+        # find_objects returns a list of slices (slice_y, slice_x) for labels 1..N
+        # It returns None for missing labels in the sequence
+        slices = find_objects(labels)
+        
+        top_region_height = int(img_height * self.config.top_region_ratio)
+        kept_count = 0
+        rejected_count = 0
+
+        for idx, sl in enumerate(slices):
+            if sl is None:
                 continue
                 
-            area = len(y_coords)
-            y_min, y_max = y_coords.min(), y_coords.max()
-            x_min, x_max = x_coords.min(), x_coords.max()
-            comp_height = y_max - y_min
-            comp_width = x_max - x_min
+            label_id = idx + 1 # find_objects is 0-indexed for label 1
             
-            if area < MIN_AREA:
-                logger.debug(f"  Component {label_id}: REJECTED - too small ({area}px)")
-                filtered_labels[filtered_labels == label_id] = 0
+            # Extract only the relevant crop for this component
+            # This is significantly faster than (labels == label_id) on the whole image
+            slice_y, slice_x = sl
+            component_crop = labels[slice_y, slice_x]
+            component_mask = (component_crop == label_id)
+            
+            # Calculate geometric properties
+            area = np.sum(component_mask)
+            y_min = slice_y.start
+            # Height/Width comes directly from slice dimensions
+            comp_height = slice_y.stop - slice_y.start
+            comp_width = slice_x.stop - slice_x.start
+
+            # 1. Area Check
+            if area < self.config.min_area:
+                self._reject(filtered_labels, sl, label_id, f"too small ({area}px)")
+                rejected_count += 1
                 continue
-            
-            if comp_height < img_height * MIN_HEIGHT_RATIO:
-                logger.debug(f"  Component {label_id}: REJECTED - insufficient height ({comp_height}px, {comp_height/img_height:.1%})")
-                filtered_labels[filtered_labels == label_id] = 0
+
+            # 2. Height Check
+            if comp_height < img_height * self.config.min_height_ratio:
+                self._reject(filtered_labels, sl, label_id, f"insufficient height ({comp_height}px)")
+                rejected_count += 1
                 continue
-            
-            top_pixels = np.sum(component_mask[:top_region_height, :])
-            if top_pixels < MIN_TOP_PIXELS:
-                logger.debug(f"  Component {label_id}: REJECTED - no top attachment (top_pixels={top_pixels})")
-                filtered_labels[filtered_labels == label_id] = 0
+
+            # 3. Top Attachment Check (Relative to the crop, top region is adjusted)
+            # We need to intersect the component's slice with the global top region
+            local_top_limit = max(0, top_region_height - slice_y.start)
+            if local_top_limit > 0:
+                top_pixels = np.sum(component_mask[:local_top_limit, :])
+            else:
+                top_pixels = 0
+
+            if top_pixels < self.config.min_top_pixels:
+                self._reject(filtered_labels, sl, label_id, f"no top attachment ({top_pixels}px)")
+                rejected_count += 1
                 continue
-            
+
+            # 4. Aspect Ratio Check
             aspect_ratio = comp_height / (comp_width + 1e-8)
-            if aspect_ratio < MIN_ASPECT_RATIO:
-                logger.debug(f"  Component {label_id}: REJECTED - too horizontal (aspect={aspect_ratio:.2f})")
-                filtered_labels[filtered_labels == label_id] = 0
+            if aspect_ratio < self.config.min_aspect_ratio:
+                self._reject(filtered_labels, sl, label_id, f"too horizontal (AR={aspect_ratio:.2f})")
+                rejected_count += 1
                 continue
-            
-            if comp_width > img_width * MAX_WIDTH_RATIO:
-                logger.debug(f"  Component {label_id}: REJECTED - too wide ({comp_width}px, {comp_width/img_width:.1%})")
-                filtered_labels[filtered_labels == label_id] = 0
+
+            # 5. Max Width Check
+            if comp_width > img_width * self.config.max_width_ratio:
+                self._reject(filtered_labels, sl, label_id, f"too wide ({comp_width}px)")
+                rejected_count += 1
                 continue
-            
+
+            # 6. Start Position Check
             if y_min > top_region_height:
-                logger.debug(f"  Component {label_id}: REJECTED - doesn't start in top region (y_min={y_min})")
-                filtered_labels[filtered_labels == label_id] = 0
+                self._reject(filtered_labels, sl, label_id, f"starts too low (y={y_min})")
+                rejected_count += 1
                 continue
-            
-            logger.debug(f"  Component {label_id}: ACCEPTED (area={area}, h={comp_height}, w={comp_width}, aspect={aspect_ratio:.2f})")
-        
+
+            # Accepted
+            logger.debug(f"Component {label_id}: ACCEPTED (area={area}, h={comp_height})")
+            kept_count += 1
+
+        logger.info(f"Filter Summary: Kept {kept_count}, Rejected {rejected_count}")
         return filtered_labels
+
+    def _reject(self, label_arr: np.ndarray, sl: Tuple[slice, slice], label_id: int, reason: str):
+        """Helper to zero out a label efficiently."""
+        logger.debug(f"Component {label_id}: REJECTED - {reason}")
+        # Only modify the specific slice in the array
+        crop = label_arr[sl]
+        crop[crop == label_id] = 0
 
     def merge_components_by_distance(self, labels: np.ndarray, distance_thresh: float) -> np.ndarray:
         """
         Merge connected components based on the distance between their highest points.
-        
-        This function uses a union-find algorithm to group components whose highest points
-        (topmost pixels) are within a specified distance threshold. Components are merged
-        by finding their topmost point (smallest y-coordinate, then smallest x-coordinate)
-        and calculating pairwise distances between these points.
-        
-        Args:
-            labels (np.ndarray): 2D array where each unique non-zero integer represents 
-                            a distinct connected component. Background is labeled as 0.
-            distance_thresh (float): Maximum Euclidean distance between highest points 
-                                for components to be merged.
-        
-        Returns:
-            np.ndarray: New label array with merged components renumbered sequentially 
-                    starting from 1. Background remains 0.
+        Uses scipy.sparse.csgraph for efficient connected component analysis.
         """
-        # Extract all unique component labels, excluding background (label 0)
         unique_labels = np.array([l for l in np.unique(labels) if l != 0])
-        n = len(unique_labels)
-
-        logger.debug(f"The number of original objects detected in the iamge is: {n}")
+        n_components = len(unique_labels)
         
-        # Find the highest (topmost) point for each component
+        logger.debug(f"Merging {n_components} original objects...")
+
+        if n_components == 0:
+            return labels
+
+        # 1. Find the highest (topmost) point for each component efficiently
+        # We can leverage find_objects again to find the start of the component
+        slices = find_objects(labels)
         highest_points = []
-        for label_value in unique_labels:
-            # Get all pixel coordinates belonging to this component
-            y_coords, x_coords = np.where(labels == label_value)
-            # Find minimum y-coordinate (topmost row)
-            y_min = y_coords.min()
-            mask = y_coords == y_min
-            # Among pixels in the topmost row, find the leftmost one
-            x_min = x_coords[mask].min()
-            highest_points.append([y_min, x_min])
+        
+        # Map sequential index 0..N back to original label ID
+        idx_to_label = {} 
+
+        valid_idx = 0
+        for original_label in unique_labels:
+            sl = slices[original_label - 1] # find_objects is 0-indexed vs label 1-indexed
+            y_start, x_start = sl[0].start, sl[1].start
+            
+            # Refine x: find the first x pixel in the top row of this component
+            # Extract just the top row relative to the slice
+            crop = labels[sl]
+            mask = (crop == original_label)
+            
+            # Get relative indices of pixels
+            rel_y, rel_x = np.where(mask)
+            
+            # Find the minimum y (which is 0 relative to the slice usually, but not always if shape is complex)
+            min_rel_y = rel_y.min()
+            
+            # Find the min x corresponding to that min y
+            top_row_mask = (rel_y == min_rel_y)
+            min_rel_x = rel_x[top_row_mask].min()
+            
+            # Convert back to absolute coordinates
+            abs_y = y_start + min_rel_y
+            abs_x = x_start + min_rel_x
+            
+            highest_points.append([abs_y, abs_x])
+            idx_to_label[valid_idx] = original_label
+            valid_idx += 1
 
         highest_points = np.array(highest_points)
 
-        # Initialize union-find structure
-        # Each component starts as its own parent
-        merged = np.arange(n)
+        # 2. Compute Distance Matrix
+        dist_matrix = cdist(highest_points, highest_points)
         
-        def find(x):
-            """
-            Find operation with path compression for union-find.
-            Returns the root parent of component x.
-            """
-            while merged[x] != x:
-                # Path compression: point directly to grandparent
-                merged[x] = merged[merged[x]]
-                x = merged[x]
-            return x
+        # 3. Create Adjacency Matrix
+        # adj[i, j] = 1 if distance <= threshold
+        adjacency = (dist_matrix <= distance_thresh).astype(int)
         
-        def union(a, b):
-            """
-            Union operation for union-find.
-            Merges the sets containing components a and b.
-            """
-            ra, rb = find(a), find(b)
-            if ra != rb:
-                # Make rb point to ra (merge sets)
-                merged[rb] = ra
+        # 4. Connected Components (Union-Find optimization)
+        # scipy's implementation is C-optimized and very fast
+        graph = csr_matrix(adjacency)
+        n_groups, group_labels = connected_components(csgraph=graph, directed=False, return_labels=True)
         
-        # Calculate pairwise Euclidean distances between all highest points
-        D = cdist(highest_points, highest_points)
-        
-        # Merge components whose highest points are within the distance threshold
-        for i in range(n):
-            for j in range(i + 1, n):
-                if D[i, j] <= distance_thresh:
-                    union(i, j)
-        
-        # Group components by their root
-        groups = {}
-        for i in range(n):
-            r = find(i)
-            if r not in groups:
-                groups[r] = []
-            groups[r].append(i)
-        
-        # For each group, find the highest point's X coordinate to determine plant zone
-        group_tip_x = {}
-        for root, indices in groups.items():
-            # Collect all coordinates from all components in this group
-            all_y = []
-            all_x = []
-            for i in indices:
-                label_value = unique_labels[i]
-                y_coords, x_coords = np.where(labels == label_value)
-                all_y.extend(y_coords)
-                all_x.extend(x_coords)
-            
-            # Convert to numpy arrays
-            all_y = np.array(all_y)
-            all_x = np.array(all_x)
-            
-            # Find the topmost point across all components in the group
-            min_y = all_y.min()
-            mask = (all_y == min_y)
-            tip_x = all_x[mask].min()
-            group_tip_x[root] = tip_x
-
-         # Assign plant positions based on zones
+        # 5. Process Groups and Assign Zones
         out = np.zeros_like(labels)
-        assigned_plants = {}
+        assigned_plants_map = {} # Maps group_id -> plant_position_id
 
-        for root, tip_x in group_tip_x.items():
+        # Group indices by their new group label
+        for group_id in range(n_groups):
+            # Get indices of components in this group
+            component_indices = np.where(group_labels == group_id)[0]
+            
+            # Find the "tip" of the group (min y, then min x) among all components in group
+            # We look at highest_points array we already built
+            group_points = highest_points[component_indices]
+            
+            # Sort by Y (primary) then X (secondary) to find top-most, left-most point
+            # Lexsort keys are provided in reverse order (X then Y)
+            sort_order = np.lexsort((group_points[:, 1], group_points[:, 0]))
+            top_point = group_points[sort_order[0]]
+            tip_x = top_point[1]
+            
             plant_pos = self.get_plant_position_by_zone(tip_x)
+            
             if plant_pos is not None:
-                assigned_plants[root] = plant_pos
-                logger.debug(f"Group with tip at x={tip_x} assigned to plant position {plant_pos}")
+                assigned_plants_map[group_id] = plant_pos
             else:
-                logger.warning(f"Warning: Group with tip at x={tip_x} doesn't fall in any defined zone")
+                logger.warning(f"Group tip at x={tip_x} outside defined zones.")
 
-        # Apply labels: use plant_position + 1 as label (0 is background)
-        for i in range(n):
-            label_value = unique_labels[i]
-            root = find(i)
-            if root in assigned_plants:
-                plant_label = assigned_plants[root] + 1  # +1 because 0 is background
-                out[labels == label_value] = plant_label
-        
-        detected_positions = sorted(assigned_plants.values())
-        missing_positions = [p for p in range(5) if p not in detected_positions]
-        
-        
-        logger.debug(f"The merging resulted in {len(groups)} component(s)")
-        logger.debug(f"Detected plants at positions: {detected_positions}")
-        logger.debug(f"Missing plants at positions: {missing_positions}")
-        
+        # 6. Reconstruct Output Image
+        # Iterate original labels and map them to new plant IDs
+        # We assume output labels should be (plant_pos + 1) to reserve 0 for background
+        for i, original_label in idx_to_label.items():
+            group_id = group_labels[i]
+            if group_id in assigned_plants_map:
+                new_val = assigned_plants_map[group_id] + 1
+                # Apply change only to the slice of the original component
+                sl = slices[original_label - 1]
+                crop_out = out[sl]
+                crop_lbl = labels[sl]
+                crop_out[crop_lbl == original_label] = new_val
+
+        # Logging Statistics
+        detected = sorted(list(set(assigned_plants_map.values())))
+        # Safely determine expected zones from the keys of the zones dict
+        all_possible_zones = sorted(self.zones.keys())
+        missing = [z for z in all_possible_zones if z not in detected]
+
+        logger.info(f"Merged into {len(assigned_plants_map)} plants. Positions: {detected}")
+        if missing:
+            logger.info(f"Missing positions: {missing}")
+
         return out
