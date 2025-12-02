@@ -5,8 +5,8 @@ from scipy.spatial.distance import cdist
 from scipy.ndimage import find_objects
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-
-from src.config.segmentation_config import PLANT_ZONES, SegmentationConfig
+from src.models import SegmentationConfig
+from src.config.segmentation_config import PLANT_ZONES, SEGMENTATION_CONFIG
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class PlantSegmentor:
             config: SegmentationConfig object with threshold values.
         """
         self.zones = zones if zones is not None else PLANT_ZONES
-        self.config = config if config is not None else SegmentationConfig()
+        self.config = config if config is not None else SEGMENTATION_CONFIG
 
     def get_plant_position_by_zone(self, x_coord: float) -> Optional[int]:
         """
