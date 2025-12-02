@@ -4,6 +4,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+PLANT_ZONES = {
+    0: (0, 1190),     # Plant 0: center ~940, boundary at midpoint to plant 1
+    1: (1190, 1690),  # Plant 1: center ~1440
+    2: (1690, 2200),  # Plant 2: center ~1940
+    3: (2200, 2760),  # Plant 3: center ~2470
+    4: (2760, 4000),  # Plant 4: center ~3060, extends to right edge
+}
+
+
+def get_plant_position_by_zone(x_coord):
+    """
+    Determine which plant position (0-4) a component belongs to based on its X coordinate.
+    Returns None if the coordinate doesn't fall within any defined zone.
+    """
+    for plant_id, (x_min, x_max) in PLANT_ZONES.items():
+        if x_min <= x_coord <= x_max:
+            return plant_id
+    return None
 
 def merge_components_by_distance(labels: np.ndarray, distance_thresh: float) -> np.ndarray:
     """
