@@ -12,9 +12,10 @@ logger = logging.getLogger(__name__)
 
 from src.inference import InferenceManager
 from src.core.processing import PlantSegmentor
-from src.core.mock_length import get_plant_results
+from core.root_length import analyze_plant_lengths
 
-from src.config.inference_config import MODEL_PATH, RAW_IMG_DIR
+from src.config.inference_config import MODEL_PATH
+from src.config.global_config import IMG_DIR
 from src.inference.custom_functions import f1, iou, dice_bce_loss
 from src.helpers import extract_sort_keys
 
@@ -71,13 +72,11 @@ class CVPipeline:
             logger.exception(f" UNHANDLED EXCEPTION during inference: {e}")
 
     def _segment_components(self, mask: np.ndarray):
-        mask_height, mask_width = mask.shape[:2]
-
         # Connected components
         _, labels = cv2.connectedComponents(mask.astype(np.uint8))
 
         # Filter components
-        labels = self.segmentor.filter_plant_components(labels, mask_height, mask_width)
+        labels = self.segmentor.filter_plant_components(labels)
 
         # Merge and assign zone-based labels
         merged_labels = self.segmentor.merge_components_by_distance(labels, distance_thresh=200)
@@ -123,13 +122,16 @@ class CVPipeline:
 
             mask = self._run_inference(img, img_filename)
 
+            if mask is None:
+                continue
+
             if img.shape[:2] != mask.shape[:2]:
                 logger.error(f"Mask shape differs from image shape. Skipping.")
                 continue
 
             labels = self._segment_components(mask)
 
-            results = get_plant_results(labels)
+            results = analyze_plant_lengths(labels)
             for plant_id, data in results.items():
                 status = f"DETECTED (length={data['length']}px)" if data['detected'] else "MISSING (length=0)"
                 logger.debug(f"  Plant {plant_id}: {status}")
@@ -167,7 +169,7 @@ def cv_pipeline(input_dir: Path | str):
 
 
 if __name__ == "__main__":
-    path = RAW_IMG_DIR
+    path = IMG_DIR
     cv_pipeline(path)
 
 
