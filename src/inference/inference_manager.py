@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 from .custom_functions import f1, iou, dice_bce_loss
 from src.helpers.padder import padder
 from src.helpers.extract_petri_dish import extract_petri_dish
+from src.configs.inference import PATCH_SIZE
 
 class InferenceManager:
     """
@@ -63,7 +64,7 @@ class InferenceManager:
                 logger.exception(f"Model could not be loaded from model checkpoint: {checkpoint_path}. Please make sure this is a .keras or a .h5 file containing a saved Keras model.")
                 raise ImportError
 
-    def patch_image(self, img: np.ndarray, patch_size: int = 256, scaling_factor: float = 1.0, normalize: bool = False) -> np.ndarray:
+    def patch_image(self, img: np.ndarray, patch_size: int = PATCH_SIZE, scaling_factor: float = 1.0, normalize: bool = False) -> np.ndarray:
         """
         Scales, pads, extracts, and patches the image for inference.
 
@@ -198,7 +199,7 @@ class InferenceManager:
             logger.exception(f"UNEXPECTED EXCEPTION DURING PREDICTION/UNPATCHING: {e}")
             return None
     
-    def restore_mask(self, padded_mask: np.ndarray, patch_size: int = 256) -> np.ndarray:
+    def restore_mask(self, padded_mask: np.ndarray, patch_size: int = PATCH_SIZE) -> np.ndarray:
         """
         Reverses the padding and cropping steps to restore the prediction 
         to the original image's shape and coordinate system.
