@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 from pathlib import Path
-from typing import Union, List
+from typing import Union, List, Optional, Tuple
 
 import logging
 logger = logging.getLogger(__name__)
@@ -14,18 +14,35 @@ from src.inference import InferenceManager
 from src.core.segmenation import PlantSegmentor
 from src.core.root_length import analyze_plant_lengths
 
-from src.configs.inference import MODEL_PATH
+from src.configs.inference import MODEL_PATH, SECONDARY_MODEL_PATH, ENSEMBLE_STRATEGY
 from src.configs.segmentation import SEGMENTATION_CONFIG, PLANT_ZONES
 from src.config import IMG_DIR
 from src.inference.custom_functions import f1, iou, dice_bce_loss
 from src.helpers import extract_sort_keys
 
 from src.models import InferenceError, InitializationError, PlantResult
+from src.models.inference_models import MaskCombineStrategy, ModelConfig
+
+
+
 
 class CVPipeline:
+    DEFAULT_PATCH_SIZE = 512
+    SECONDARY_PATCH_SIZE = 256
+    BINARY_THRESHOLD = 0.5
 
-    def __init__(self):
+    def __init__(
+        self,
+        use_ensemble: bool = True,
+        combine_strategy: MaskCombineStrategy = ENSEMBLE_STRATEGY
+    ):
         """Initialize the pipeline with model and segmentation components.
+        
+        Args:
+            use_ensemble: If True, use both primary and secondary models
+                for inference. If False, use only the primary model.
+            combine_strategy: Strategy for combining masks when using
+                ensemble inference.
         
         Raises:
             InitializationError: If the inference manager or segmentor 
@@ -33,28 +50,61 @@ class CVPipeline:
         """
         self._img_files: List[str] = []
         self.results: List[PlantResult] = []
+        self.use_ensemble = use_ensemble
+        self.combine_strategy = combine_strategy
         
         custom_objects = {"f1": f1, "iou": iou, "dice_bce_loss": dice_bce_loss}
-        self._init_inference_manager(str(MODEL_PATH), custom_objects)
+        
+        # Initialize primary model
+        primary_config = ModelConfig(
+            checkpoint=MODEL_PATH,
+            patch_size=self.DEFAULT_PATCH_SIZE,
+            name="primary"
+        )
+        self.primary_manager = self._create_inference_manager(primary_config, custom_objects)
+        
+        # Initialize secondary model for ensemble
+        self.secondary_manager: Optional[InferenceManager] = None
+        if use_ensemble:
+            secondary_config = ModelConfig(
+                checkpoint=SECONDARY_MODEL_PATH,
+                patch_size=self.SECONDARY_PATCH_SIZE,
+                name="secondary"
+            )
+            self.secondary_manager = self._create_inference_manager(secondary_config, custom_objects)
+        
         self._init_plant_segmentor()
 
-    def _init_inference_manager(self, checkpoint: str, custom_objects: dict) -> None:
-        """Initialize the inference manager with model checkpoint.
+    def _create_inference_manager(
+        self, 
+        config: ModelConfig, 
+        custom_objects: dict
+    ) -> InferenceManager:
+        """Create an inference manager for a given model configuration.
         
         Args:
-            checkpoint: Path to the model checkpoint file.
+            config: Model configuration specifying checkpoint and settings.
             custom_objects: Dictionary of custom Keras objects required 
-                for model loading (loss functions, metrics, etc.).
+                for model loading.
+        
+        Returns:
+            Initialized InferenceManager instance.
         
         Raises:
             InitializationError: If the InferenceManager fails to initialize.
         """
         try:
-            self.manager = InferenceManager(checkpoint, custom_objects)
-            logger.info(f"InferenceManager initialized with checkpoint: {checkpoint}")
+            manager = InferenceManager(str(config.checkpoint), custom_objects)
+            logger.info(
+                f"InferenceManager '{config.name}' initialized "
+                f"(checkpoint: {config.checkpoint}, patch_size: {config.patch_size})"
+            )
+            return manager
         except Exception as e:
-            logger.exception("Failed to initialize InferenceManager")
-            raise InitializationError(f"InferenceManager initialization failed: {e}") from e
+            logger.exception(f"Failed to initialize InferenceManager '{config.name}'")
+            raise InitializationError(
+                f"InferenceManager '{config.name}' initialization failed: {e}"
+            ) from e
 
     def _init_plant_segmentor(self) -> None:
         """Initialize the plant segmentation component.
@@ -70,24 +120,109 @@ class CVPipeline:
             raise InitializationError(f"PlantSegmentor initialization failed: {e}") from e
 
     def _load_images(self, input_dir: Union[Path, str]):
-        """
-        Loads the list of image files (ending with .png) from the specified directory.
+        """Load the list of PNG image files from the specified directory.
 
         Args:
-            input_dir (Path | str): The path to the directory containing the image files.
+            input_dir: Path to the directory containing image files.
         """
         files = sorted(os.listdir(input_dir))
         self._img_files = [f for f in files if f.lower().endswith(".png")]
         logger.debug(f"Found {len(self._img_files)} image files.")
 
+    def _run_single_inference(
+        self,
+        manager: InferenceManager,
+        img: np.ndarray,
+        patch_size: int,
+        model_name: str,
+        img_filename: str
+    ) -> np.ndarray:
+        """Run inference using a single model.
+        
+        Args:
+            manager: The InferenceManager to use.
+            img: Input image as a NumPy array (BGR format).
+            patch_size: Size of patches to extract.
+            model_name: Name of the model for logging.
+            img_filename: Filename for logging purposes.
+        
+        Returns:
+            Binary mask as uint8 array with values 0 or 255.
+        
+        Raises:
+            InferenceError: If any step of inference fails.
+        """
+        # Patch extraction
+        try:
+            patches = manager.patch_image(img, patch_size=patch_size, normalize=True)
+            logger.debug(
+                f"  [{model_name}] Created {patches.shape[0]} patches "
+                f"of shape {patches.shape[1:]}"
+            )
+        except Exception as e:
+            raise InferenceError(
+                f"[{model_name}] Failed to patch image {img_filename}: {e}"
+            ) from e
+
+        # Model prediction
+        try:
+            padded_mask = manager.create_root_mask(patches)
+        except Exception as e:
+            raise InferenceError(
+                f"[{model_name}] Prediction failed for {img_filename}: {e}"
+            ) from e
+
+        if padded_mask is None:
+            raise InferenceError(f"[{model_name}] Model returned None for {img_filename}")
+
+        # Mask reconstruction
+        try:
+            corrected_mask = manager.restore_mask(padded_mask, patch_size=patch_size)
+        except Exception as e:
+            raise InferenceError(
+                f"[{model_name}] Mask reconstruction failed for {img_filename}: {e}"
+            ) from e
+
+        binary_mask = (corrected_mask > self.BINARY_THRESHOLD).astype(np.uint8) * 255
+        
+        logger.debug(
+            f"  [{model_name}] Mask shape: {binary_mask.shape}, "
+            f"positive pixels: {np.sum(binary_mask > 0)}"
+        )
+        
+        return binary_mask
+
+    def _combine_masks(
+        self,
+        mask_primary: np.ndarray,
+        mask_secondary: np.ndarray
+    ) -> np.ndarray:
+        """Combine two binary masks using the configured strategy.
+        
+        Args:
+            mask_primary: Binary mask from primary model.
+            mask_secondary: Binary mask from secondary model.
+        
+        Returns:
+            Combined binary mask.
+        """
+        if self.combine_strategy == MaskCombineStrategy.UNION:
+            combined = cv2.bitwise_or(mask_primary, mask_secondary)
+        else:  # INTERSECTION
+            combined = cv2.bitwise_and(mask_primary, mask_secondary)
+        
+        logger.debug(
+            f"  [combined] Strategy: {self.combine_strategy.value}, "
+            f"positive pixels: {np.sum(combined > 0)}"
+        )
+        
+        return combined
+
     def _run_inference(self, img: np.ndarray, img_filename: str) -> np.ndarray:
         """Run model inference on a single image to generate a binary mask.
         
-        The inference process involves:
-            1. Splitting the image into patches
-            2. Running each patch through the segmentation model
-            3. Reconstructing the full-size mask from patch predictions
-            4. Applying binary thresholding (>0.5)
+        Uses ensemble inference if enabled, combining predictions from
+        both primary and secondary models.
         
         Args:
             img: Input image as a NumPy array (BGR format from cv2).
@@ -97,36 +232,35 @@ class CVPipeline:
             Binary mask as uint8 array with values 0 or 255.
         
         Raises:
-            InferenceError: If patching, prediction, or reconstruction fails.
+            InferenceError: If inference fails for any model.
         """
-        try:
-            patches = self.manager.patch_image(img, normalize=True)
-        except Exception as e:
-            raise InferenceError(f"Failed to patch image {img_filename}: {e}") from e
-
-        try:
-            padded_mask = self.manager.create_root_mask(patches)
-        except Exception as e:
-            raise InferenceError(f"Model prediction failed for {img_filename}: {e}") from e
-
-        if padded_mask is None:
-            raise InferenceError(f"Model returned None for {img_filename}")
-
-        try:
-            corrected_mask = self.manager.restore_mask(padded_mask)
-        except Exception as e:
-            raise InferenceError(f"Mask reconstruction failed for {img_filename}: {e}") from e
-
-        binary_mask = (corrected_mask > 0.5).astype(np.uint8) * 255
-        return binary_mask
+        # Primary model inference
+        mask_primary = self._run_single_inference(
+            manager=self.primary_manager,
+            img=img,
+            patch_size=self.DEFAULT_PATCH_SIZE,
+            model_name="primary",
+            img_filename=img_filename
+        )
+        
+        # Single model mode
+        if not self.use_ensemble or self.secondary_manager is None:
+            return mask_primary
+        
+        # Secondary model inference
+        mask_secondary = self._run_single_inference(
+            manager=self.secondary_manager,
+            img=img,
+            patch_size=self.SECONDARY_PATCH_SIZE,
+            model_name="secondary",
+            img_filename=img_filename
+        )
+        
+        # Combine masks
+        return self._combine_masks(mask_primary, mask_secondary)
 
     def _segment_components(self, mask: np.ndarray) -> np.ndarray:
         """Segment and filter connected components from binary mask.
-        
-        Processing steps:
-            1. Find connected components in the binary mask
-            2. Filter out noise and small components
-            3. Merge nearby components that likely belong to the same plant
         
         Args:
             mask: Binary mask (uint8) with plant regions as white pixels.
@@ -159,7 +293,6 @@ class CVPipeline:
                 logger.debug(f"  Plant {plant_id}: detected, length={length}px")
             else:
                 logger.debug(f"  Plant {plant_id}: not detected")
-            
 
             self.results.append(PlantResult(
                 image_name=img_name,
@@ -175,10 +308,6 @@ class CVPipeline:
         
         Returns:
             Path to the created CSV file.
-        
-        Note:
-            Results are sorted using extract_sort_keys for natural ordering
-            of image names and plant IDs.
         """
         csv_rows = [
             {'Plant ID': r.plant_label, 'Length (px)': r.length}
@@ -198,10 +327,6 @@ class CVPipeline:
     def process_directory(self, input_dir: Union[Path, str]) -> Path:
         """Process all images in a directory through the full pipeline.
         
-        Iterates through PNG images in the specified directory, running
-        inference, segmentation, and analysis on each. Results are 
-        accumulated and exported to a CSV file upon completion.
-        
         Args:
             input_dir: Path to folder containing raw plant images.
         
@@ -209,8 +334,7 @@ class CVPipeline:
             Path to the generated CSV results file.
         
         Raises:
-            ValueError: If the input directory does not exist.
-            ValueError: If no PNG images are found in the directory.
+            ValueError: If the input directory does not exist or contains no images.
         """
         input_path = Path(input_dir)
         
@@ -223,13 +347,15 @@ class CVPipeline:
         if not self._img_files:
             raise ValueError(f"No PNG images found in {input_dir}")
 
-        logger.info(f"Starting pipeline processing for {len(self._img_files)} images")
+        mode = "ensemble" if self.use_ensemble else "single-model"
+        logger.info(
+            f"Starting pipeline ({mode}) for {len(self._img_files)} images"
+        )
 
         for img_filename in tqdm(self._img_files, desc="Processing images", unit="img"):
             img_path = input_path / img_filename
             img_name = os.path.splitext(img_filename)[0]
             
-            # Load image
             img = cv2.imread(str(img_path))
             if img is None:
                 logger.warning(f"Failed to read image: {img_path}")
@@ -237,14 +363,12 @@ class CVPipeline:
 
             logger.debug(f"Processing: {img_name}")
 
-            # Run inference
             try:
                 mask = self._run_inference(img, img_filename)
             except InferenceError as e:
                 logger.error(str(e))
                 continue
 
-            # Validate mask dimensions
             if img.shape[:2] != mask.shape[:2]:
                 logger.error(
                     f"Shape mismatch for {img_filename}: "
@@ -252,31 +376,32 @@ class CVPipeline:
                 )
                 continue
 
-            # Segment and analyze
             labels = self._segment_components(mask)
             self._analyze_lengths(labels, img_name)
 
-        # Save results
         output_dir = input_path.parent
         return self._save_results_csv(output_dir)
-    
-def cv_pipeline(input_dir: Union[Path, str]) -> Path:
+
+
+def cv_pipeline(
+    input_dir: Union[Path, str],
+    use_ensemble: bool = True,
+    combine_strategy: MaskCombineStrategy = MaskCombineStrategy.UNION
+) -> Path:
     """Convenience function to run the full CV pipeline.
-    
-    Creates a CVPipeline instance and processes all images in the 
-    specified directory.
     
     Args:
         input_dir: Path to folder containing raw plant images.
+        use_ensemble: Whether to use dual-model ensemble inference.
+        combine_strategy: How to combine masks when using ensemble.
     
     Returns:
         Path to the generated CSV results file.
-    
-    Raises:
-        InitializationError: If pipeline components fail to initialize.
-        ValueError: If the directory is invalid or contains no images.
     """
-    pipeline = CVPipeline()
+    pipeline = CVPipeline(
+        use_ensemble=use_ensemble,
+        combine_strategy=combine_strategy
+    )
     return pipeline.process_directory(input_dir)
 
 
@@ -286,8 +411,3 @@ if __name__ == "__main__":
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     cv_pipeline(IMG_DIR)
-
-
-
-
-    
