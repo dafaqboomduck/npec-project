@@ -1,8 +1,9 @@
 *.DS_Store
+.ipynb_checkpoints
 *.labeling
-__pycache__/
-dataset_patches*/
-dataset/
-kaggle_dataset*/
-saved_models/
-test.ipynb
+__pycache__
+dataset_patches*
+dataset
+kaggle_dataset*
+saved_models
+*test*
