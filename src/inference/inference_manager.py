@@ -173,7 +173,7 @@ class InferenceManager:
         # Unpatch and return the mask
         return unpatchify(preds_reshaped, (H_padded, W_padded))
     
-    def create_root_mask(self, patches: np.ndarray) -> Optional[np.ndarray]:
+    def create_img_mask(self, patches: np.ndarray) -> Optional[np.ndarray]:
         """
         Runs model prediction on the patches and unpatches the results.
 
