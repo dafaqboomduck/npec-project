@@ -1,22 +1,26 @@
-import numpy as np
-import logging
+# import logging
 from typing import Dict, Optional, Tuple
-from scipy.spatial.distance import cdist
-from scipy.ndimage import find_objects
-from scipy.sparse import csr_matrix
-from scipy.sparse.csgraph import connected_components
+
+import cv2
+import numpy as np
+
+# from scipy.ndimage import find_objects
+# from scipy.sparse import csr_matrix
+# from scipy.sparse.csgraph import connected_components
+# from scipy.spatial.distance import cdist
+
 from src.models import SegmentationConfig
 
-# Configure logger
-logger = logging.getLogger(__name__)
 
 class PlantSegmentor:
-    def __init__(self, 
-                 zones: Optional[Dict[int, Tuple[int, int]]] = None, 
-                 config: Optional[SegmentationConfig] = None):
+    def __init__(
+        self,
+        zones: Optional[Dict[int, Tuple[int, int]]] = None,
+        config: Optional[SegmentationConfig] = None,
+    ):
         """
         Initialize the segmentor.
-        
+
         Args:
             zones: Dictionary mapping plant ID to (x_min, x_max) tuples.
             config: SegmentationConfig object with threshold values.
@@ -24,222 +28,191 @@ class PlantSegmentor:
         self.zones = zones
         self.config = config
 
-    def get_plant_position_by_zone(self, x_coord: float) -> Optional[int]:
+    def get_anchors(
+        self, anchor_mask: np.ndarray, min_area: int = None, y_ratio: float = None
+    ) -> list:
+        """Extract anchor info using centroid. Filter by area and y-position."""
+        if min_area is None:
+            min_area = self.config.min_anchor_area
+        if y_ratio is None:
+            y_ratio = self.config.y_ratio
+        self.anchors = []
+
+        num_labels, labels, stats, centroids = cv2.connectedComponenetsWithStats(
+            anchor_mask.astype(np.uint8), connectivity=8
+        )
+
+        max_y = int(anchor_mask.shape[0] * y_ratio)
+
+        # Iterate through the labels starting from 1 (skipping the background)
+        for label_id in range(1, num_labels):
+            # Get the area of the component
+            area = stats[label_id, cv2.CC_STAT_AREA]
+            # Check if area meets the minimum area requirement else continue
+            if area < min_area:
+                continue
+
+            # Get the x and y of the component's centroid
+            centroid_x, centroid_y = int(
+                centroids[label_id][0], int(centroids[label_id][1])
+            )
+            # Check if the y position of the centroid meets the y position requirement else continue
+            if centroid_y > max_y:
+                continue
+
+            # Create binary mask for the component
+            component_mask = (labels == label_id).astype(np.uint8)
+
+            self.anchors.append(
+                {
+                    "label_id": label_id,
+                    "centroid": (centroid_x, centroid_y),
+                    "area": area,
+                    "mask": component_mask,
+                }
+            )
+            return self.anchors
+
+    def get_largest_anchor_by_zone(self, anchors: list = None) -> list:
+        """Keep only the largest anchor in each zone."""
+        if anchors is None:
+            anchors = self.anchors
+        for anchor in anchors:
+            x = anchor["centroid"][0]
+            anchor["zone_id"] = None
+            for zone_id, (x_min, x_max) in self.zones.items():
+                if x_min <= x <= x_max:
+                    anchor["zone_id"] = zone_id
+                    break
+
+        zone_anchors = {}
+        for anchor in anchors:
+            zone_id = anchor["zone_id"]
+            if zone_id is None:
+                continue
+            if (
+                zone_id not in zone_anchors
+                or anchor["area"] > zone_anchors[zone_id]["area"]
+            ):
+                zone_anchors[zone_id] = anchor
+
+        return list(zone_anchors.values())
+
+    def create_anchor_bboxes(
+        self,
+        img_shape: tuple,
+        anchors: list = None,
+        bbox_size: int = None,
+        vertical_offset: int = None,
+    ) -> list:
+        """Create bounding boxes centered on anchor centroid."""
+        if anchors is None:
+            anchors = self.anchors
+        if bbox_size is None:
+            bbox_size = self.config.anchor_bbox_size
+        if vertical_offset is None:
+            vertical_offset = self.config.vertical_offset
+        half_size = bbox_size // 2
+        h, w = img_shape[:2]
+
+        for anchor in anchors:
+            x, y = anchor["centroid"]
+            anchor["bbox"] = (
+                max(0, x - half_size),
+                max(0, y - half_size + vertical_offset),
+                min(w, x + half_size),
+                min(h, y + half_size + vertical_offset),
+            )
+        return anchors
+
+    def process_roots_by_anchor(
+        self,
+        root_mask: np.ndarray,
+        anchors: list = None,
+        min_area: int = None,
+        merge_distance: int = None,
+    ) -> tuple:
         """
-        Determine which plant position a coordinate belongs to.
+        For each anchor zone, find root components and merge nearby fragments.
+        Returns filtered_mask and final_labels.
         """
-        for plant_id, (x_min, x_max) in self.zones.items():
-            if x_min <= x_coord <= x_max:
-                return plant_id
-        return None
+        if anchors is None:
+            anchors = self.anchors
+        if min_area is None:
+            min_area = self.config.min_root_area
+        if merge_distance is None:
+            merge_distance = self.config.root_merge_distance
 
-    def filter_plant_components(self, labels: np.ndarray) -> np.ndarray:
-        """
-        Filter connected components to keep only valid plant roots based on geometric properties.
-        
-        Optimized using scipy.ndimage.find_objects to avoid full-image scans.
-        """
-        if labels.max() == 0:
-            return labels
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats()
 
-        img_height, img_width = labels.shape
-        filtered_labels = labels.copy()
-        
-        # find_objects returns a list of slices (slice_y, slice_x) for labels 1..N
-        # It returns None for missing labels in the sequence
-        slices = find_objects(labels)
-        
-        top_region_height = int(img_height * self.config.top_region_ratio)
-        kept_count = 0
-        rejected_count = 0
+        zone_masks = {}
 
-        for idx, sl in enumerate(slices):
-            if sl is None:
-                continue
-                
-            label_id = idx + 1 # find_objects is 0-indexed for label 1
-            
-            # Extract only the relevant crop for this component
-            # This is significantly faster than (labels == label_id) on the whole image
-            slice_y, slice_x = sl
-            component_crop = labels[slice_y, slice_x]
-            component_mask = (component_crop == label_id)
-            
-            # Calculate geometric properties
-            area = np.sum(component_mask)
-            y_min = slice_y.start
-            # Height/Width comes directly from slice dimensions
-            comp_height = slice_y.stop - slice_y.start
-            comp_width = slice_x.stop - slice_x.start
-
-            # 1. Area Check
-            if area < self.config.min_area:
-                self._reject(filtered_labels, sl, label_id, f"too small ({area}px)")
-                rejected_count += 1
+        for anchor in anchors:
+            zone_id = anchor.get("zone_id")
+            if zone_id in None:
                 continue
 
-            # 2. Height Check
-            if comp_height < img_height * self.config.min_height_ratio:
-                self._reject(filtered_labels, sl, label_id, f"insufficient height ({comp_height}px)")
-                rejected_count += 1
+            x_min, y_min, x_max, y_max = anchor["bbox"]
+            bbox_tolerance = 30
+
+            # Find components starting in anchor bbox
+            zone_componenets = []
+            for label_id in range(1, num_labels):
+                area = stats[label_id, cv2.CC_STAT_AREA]
+                if area < min_area:
+                    continue
+
+                comp_mask = labels == label_id
+                y_coords, x_coords = np.where(comp_mask)
+                if len(y_coords) == 0:
+                    continue
+
+                top_y = y_coords.min()
+                top_x = int(np.mean(x_coords[y_coords == top_y]))
+
+                if (
+                    x_min - bbox_tolerance <= top_x <= x_max + bbox_tolerance
+                    and y_min - bbox_tolerance <= top_y <= y_max + bbox_tolerance * 2
+                ):
+                    zone_componenets.append(
+                        {"label_id": label_id, "mask": comp_mask, "area": area}
+                    )
+
+            if not zone_componenets:
                 continue
 
-            # 3. Top Attachment Check (Relative to the crop, top region is adjusted)
-            # We need to intersect the component's slice with the global top region
-            local_top_limit = max(0, top_region_height - slice_y.start)
-            if local_top_limit > 0:
-                top_pixels = np.sum(component_mask[:local_top_limit, :])
-            else:
-                top_pixels = 0
+            # Start with the largest component
+            largest = max(zone_componenets, key=lambda c: c["area"])
+            merged_mask = largest["mask"].copy()
 
-            if top_pixels < self.config.min_top_pixels:
-                self._reject(filtered_labels, sl, label_id, f"no top attachment ({top_pixels}px)")
-                rejected_count += 1
-                continue
+            # Get bounds of largest for merge distance check
+            ly, lx = np.where(largest["mask"])
+            ly_min, ly_max = ly.min(), ly.max()
+            lx_min, lx_max = lx.min(), lx.max()
 
-            # 4. Aspect Ratio Check
-            aspect_ratio = comp_height / (comp_width + 1e-8)
-            if aspect_ratio < self.config.min_aspect_ratio:
-                self._reject(filtered_labels, sl, label_id, f"too horizontal (AR={aspect_ratio:.2f})")
-                rejected_count += 1
-                continue
+            # Merge nearby components
+            for comp in zone_componenets:
+                if comp["label_id"] == largest["label_id"]:
+                    continue
 
-            # 5. Max Width Check
-            if comp_width > img_width * self.config.max_width_ratio:
-                self._reject(filtered_labels, sl, label_id, f"too wide ({comp_width}px)")
-                rejected_count += 1
-                continue
+                cy, cx = np.where(comp["mask"])
+                cy_min, cy_max = cy.min(), cy.max()
+                cx_min, cx_max = cx.min(), cx.max()
 
-            # 6. Start Position Check
-            if y_min > top_region_height:
-                self._reject(filtered_labels, sl, label_id, f"starts too low (y={y_min})")
-                rejected_count += 1
-                continue
+                y_gap = max(0, max(cy_min - ly_max, ly_min - cy_max))
+                x_gap = max(0, max(cx_min - lx_max, lx_min - cx_max))
 
-            # Accepted
-            logger.debug(f"Component {label_id}: ACCEPTED (area={area}, h={comp_height})")
-            kept_count += 1
+                if y_gap <= merge_distance and x_gap <= merge_distance:
+                    merged_mask = merged_mask | comp["mask"]
 
-        logger.info(f"Filter Summary: Kept {kept_count}, Rejected {rejected_count}")
-        return filtered_labels
+            zone_masks[zone_id] = merged_mask
 
-    def _reject(self, label_arr: np.ndarray, sl: Tuple[slice, slice], label_id: int, reason: str):
-        """Helper to zero out a label efficiently."""
-        logger.debug(f"Component {label_id}: REJECTED - {reason}")
-        # Only modify the specific slice in the array
-        crop = label_arr[sl]
-        crop[crop == label_id] = 0
+        # Create output masks
+        filtered_mask = np.zeros_like(root_mask)
+        final_labels = np.zeros(root_mask.shape, dtype=np.int32)
 
-    def merge_components_by_distance(self, labels: np.ndarray, distance_thresh: float) -> np.ndarray:
-        """
-        Merge connected components based on the distance between their highest points.
-        Uses scipy.sparse.csgraph for efficient connected component analysis.
-        """
-        unique_labels = np.array([l for l in np.unique(labels) if l != 0])
-        n_components = len(unique_labels)
-        
-        logger.debug(f"Merging {n_components} original objects...")
+        for zone_id, mask in zone_masks.items():
+            filtered_mask[mask] = 255
+            final_labels[mask] = zone_id + 1
 
-        if n_components == 0:
-            return labels
-
-        # 1. Find the highest (topmost) point for each component efficiently
-        # We can leverage find_objects again to find the start of the component
-        slices = find_objects(labels)
-        highest_points = []
-        
-        # Map sequential index 0..N back to original label ID
-        idx_to_label = {} 
-
-        valid_idx = 0
-        for original_label in unique_labels:
-            sl = slices[original_label - 1] # find_objects is 0-indexed vs label 1-indexed
-            y_start, x_start = sl[0].start, sl[1].start
-            
-            # Refine x: find the first x pixel in the top row of this component
-            # Extract just the top row relative to the slice
-            crop = labels[sl]
-            mask = (crop == original_label)
-            
-            # Get relative indices of pixels
-            rel_y, rel_x = np.where(mask)
-            
-            # Find the minimum y (which is 0 relative to the slice usually, but not always if shape is complex)
-            min_rel_y = rel_y.min()
-            
-            # Find the min x corresponding to that min y
-            top_row_mask = (rel_y == min_rel_y)
-            min_rel_x = rel_x[top_row_mask].min()
-            
-            # Convert back to absolute coordinates
-            abs_y = y_start + min_rel_y
-            abs_x = x_start + min_rel_x
-            
-            highest_points.append([abs_y, abs_x])
-            idx_to_label[valid_idx] = original_label
-            valid_idx += 1
-
-        highest_points = np.array(highest_points)
-
-        # 2. Compute Distance Matrix
-        dist_matrix = cdist(highest_points, highest_points)
-        
-        # 3. Create Adjacency Matrix
-        # adj[i, j] = 1 if distance <= threshold
-        adjacency = (dist_matrix <= distance_thresh).astype(int)
-        
-        # 4. Connected Components (Union-Find optimization)
-        # scipy's implementation is C-optimized and very fast
-        graph = csr_matrix(adjacency)
-        n_groups, group_labels = connected_components(csgraph=graph, directed=False, return_labels=True)
-        
-        # 5. Process Groups and Assign Zones
-        out = np.zeros_like(labels)
-        assigned_plants_map = {} # Maps group_id -> plant_position_id
-
-        # Group indices by their new group label
-        for group_id in range(n_groups):
-            # Get indices of components in this group
-            component_indices = np.where(group_labels == group_id)[0]
-            
-            # Find the "tip" of the group (min y, then min x) among all components in group
-            # We look at highest_points array we already built
-            group_points = highest_points[component_indices]
-            
-            # Sort by Y (primary) then X (secondary) to find top-most, left-most point
-            # Lexsort keys are provided in reverse order (X then Y)
-            sort_order = np.lexsort((group_points[:, 1], group_points[:, 0]))
-            top_point = group_points[sort_order[0]]
-            tip_x = top_point[1]
-            
-            plant_pos = self.get_plant_position_by_zone(tip_x)
-            
-            if plant_pos is not None:
-                assigned_plants_map[group_id] = plant_pos
-            else:
-                logger.warning(f"Group tip at x={tip_x} outside defined zones.")
-
-        # 6. Reconstruct Output Image
-        # Iterate original labels and map them to new plant IDs
-        # We assume output labels should be (plant_pos + 1) to reserve 0 for background
-        for i, original_label in idx_to_label.items():
-            group_id = group_labels[i]
-            if group_id in assigned_plants_map:
-                new_val = assigned_plants_map[group_id] + 1
-                # Apply change only to the slice of the original component
-                sl = slices[original_label - 1]
-                crop_out = out[sl]
-                crop_lbl = labels[sl]
-                crop_out[crop_lbl == original_label] = new_val
-
-        # Logging Statistics
-        detected = sorted(list(set(assigned_plants_map.values())))
-        # Safely determine expected zones from the keys of the zones dict
-        all_possible_zones = sorted(self.zones.keys())
-        missing = [z for z in all_possible_zones if z not in detected]
-
-        logger.info(f"Merged into {len(assigned_plants_map)} plants. Positions: {detected}")
-        if missing:
-            logger.info(f"Missing positions: {missing}")
-
-        return out
+        return filtered_mask, final_labels
