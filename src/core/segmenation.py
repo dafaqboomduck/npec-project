@@ -38,7 +38,7 @@ class PlantSegmentor:
             y_ratio = self.config.y_ratio
         self.anchors = []
 
-        num_labels, labels, stats, centroids = cv2.connectedComponenetsWithStats(
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
             anchor_mask.astype(np.uint8), connectivity=8
         )
 
@@ -53,8 +53,8 @@ class PlantSegmentor:
                 continue
 
             # Get the x and y of the component's centroid
-            centroid_x, centroid_y = int(
-                centroids[label_id][0], int(centroids[label_id][1])
+            centroid_x, centroid_y = int(centroids[label_id][0]), int(
+                centroids[label_id][1]
             )
             # Check if the y position of the centroid meets the y position requirement else continue
             if centroid_y > max_y:
@@ -113,6 +113,11 @@ class PlantSegmentor:
         if vertical_offset is None:
             vertical_offset = self.config.vertical_offset
         half_size = bbox_size // 2
+
+        if len(img_shape) < 2:
+            raise ValueError(
+                f"Expected img_shape with at least 2 elements, got {len(img_shape)}: {img_shape}"
+            )
         h, w = img_shape[:2]
 
         for anchor in anchors:
@@ -143,13 +148,15 @@ class PlantSegmentor:
         if merge_distance is None:
             merge_distance = self.config.root_merge_distance
 
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats()
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+            root_mask.astype(np.uint8), connectivity=8
+        )
 
         zone_masks = {}
 
         for anchor in anchors:
             zone_id = anchor.get("zone_id")
-            if zone_id in None:
+            if zone_id is None:
                 continue
 
             x_min, y_min, x_max, y_max = anchor["bbox"]
