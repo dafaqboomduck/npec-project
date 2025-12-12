@@ -68,7 +68,8 @@ class PlantSegmentor:
                     "mask": component_mask,
                 }
             )
-            return self.anchors
+            
+        return self.anchors
 
     def get_largest_anchor_by_zone(self, anchors: list = None) -> list:
         """Keep only the largest anchor in each zone."""
