@@ -2,7 +2,7 @@ from .pipeline_errors import InferenceError, InitializationError
 from .pipeline_models import PlantResult
 from .segmentation_models import SegmentationConfig
 from .inference_models import ModelConfig
-from .robotics_models import EnvConfig
+from .robotics_models import EnvConfig, ControllerConfig
 
 __all__ = [
     "InferenceError",
@@ -11,4 +11,5 @@ __all__ = [
     "SegmentationConfig",
     "ModelConfig",
     "EnvConfig",
+    "ControllerConfig",
 ]

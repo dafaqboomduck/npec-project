@@ -7,4 +7,12 @@ PLANT_ZONES = {
     3: (2400, 2900),
     4: (2900, 3400),
 }
-SEGMENTATION_CONFIG = SegmentationConfig(PLANT_ZONES)
+SEGMENTATION_CONFIG = SegmentationConfig(
+    PLANT_ZONES,
+    min_anchor_area=100,
+    min_root_area=50,
+    y_ratio=0.25,
+    anchor_bbox_size=150,
+    vertical_offset=10,
+    root_merge_distance=30,
+)

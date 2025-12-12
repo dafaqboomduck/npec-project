@@ -6,9 +6,9 @@ class SegmentationConfig:
     """Configuration for plant segmentation thresholds."""
 
     plant_zones: dict
-    min_anchor_area: int = 100
-    min_root_area: int = 30
-    y_ratio: float = 0.25
-    anchor_bbox_size: int = 80
-    vertical_offset: int = 10
-    root_merge_distance: int = 10
+    min_anchor_area: int
+    min_root_area: int
+    y_ratio: float
+    anchor_bbox_size: int
+    vertical_offset: int
+    root_merge_distance: int

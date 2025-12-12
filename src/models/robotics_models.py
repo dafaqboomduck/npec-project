@@ -17,3 +17,12 @@ class EnvConfig:
     render_mode: str | None = None
     target: np.ndarray | None = None
     max_steps: int = 1000
+
+
+@dataclass
+class ControllerConfig:
+    max_steps: int = 5000
+    drop_threshold: float = 0.0001
+    drop_cooldown: int = 50
+    dish_size: float = 150.0
+    dt: float = 1.0 / 240.0
