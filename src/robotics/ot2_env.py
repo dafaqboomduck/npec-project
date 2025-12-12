@@ -2,7 +2,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from gymnasium.envs.registration import register
-from sim_class import Simulation
+from .sim_class import Simulation
 
 
 class OT2ENV(gym.Env):
@@ -222,7 +222,7 @@ class OT2ENV(gym.Env):
 
 register(
     id="OT2ENV-v0",
-    entry_point="ot2_env:OT2ENV",
+    entry_point="src.robotics.ot2_env:OT2ENV",
     kwargs={
         "num_agents": 1,
         "render_mode": "human",
