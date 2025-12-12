@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class SegmentationConfig:
     """Configuration for plant segmentation thresholds."""
 
+    plant_zones: dict
     min_anchor_area: int = 100
     min_root_area: int = 30
     y_ratio: float = 0.25

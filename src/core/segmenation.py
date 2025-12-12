@@ -15,17 +15,14 @@ from src.models import SegmentationConfig
 class PlantSegmentor:
     def __init__(
         self,
-        zones: Optional[Dict[int, Tuple[int, int]]] = None,
         config: Optional[SegmentationConfig] = None,
     ):
         """
         Initialize the segmentor.
 
         Args:
-            zones: Dictionary mapping plant ID to (x_min, x_max) tuples.
-            config: SegmentationConfig object with threshold values.
+            config: SegmentationConfig object with plant zones and threshold values.
         """
-        self.zones = zones
         self.config = config
 
     def get_anchors(
@@ -80,7 +77,7 @@ class PlantSegmentor:
         for anchor in anchors:
             x = anchor["centroid"][0]
             anchor["zone_id"] = None
-            for zone_id, (x_min, x_max) in self.zones.items():
+            for zone_id, (x_min, x_max) in self.config.plant_zones.items():
                 if x_min <= x <= x_max:
                     anchor["zone_id"] = zone_id
                     break

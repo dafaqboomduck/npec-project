@@ -7,4 +7,4 @@ PLANT_ZONES = {
     3: (2400, 2900),
     4: (2900, 3400),
 }
-SEGMENTATION_CONFIG = SegmentationConfig()
+SEGMENTATION_CONFIG = SegmentationConfig(PLANT_ZONES)

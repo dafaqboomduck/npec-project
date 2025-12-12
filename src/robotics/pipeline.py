@@ -22,9 +22,8 @@ from typing import Tuple, List, Dict
 from src.inference import InferenceManager
 from src.core.segmenation import PlantSegmentor
 from src.core.root_length import calculate_geodesic_length
-from src.configs.inference import ROOT_MODEL_PATH, ANCHOR_MODEL_PATH
-from src.configs.segmentation import PLANT_ZONES, SEGMENTATION_CONFIG
-from src.inference.custom_functions import f1, iou, dice_bce_loss
+from src.configs.inference import INFERENCE_CONFIG
+from src.configs.segmentation import SEGMENTATION_CONFIG
 from src.helpers.extract_petri_dish import extract_petri_dish
 import src.robotics.ot2_env  # needed to trigger registration
 from src.robotics.pid import PIDController
@@ -32,19 +31,10 @@ from src.models import (
     InferenceError,
     InitializationError,
     SegmentationConfig,
+    ModelConfig,
+    EnvConfig,
 )
 from dataclasses import dataclass
-
-# Robot control constants
-MAX_STEPS = 5000  # Maximum steps per episode
-DROP_THRESHOLD = 0.0001  # Distance threshold (mm) to trigger drop action
-DROP_COOLDOWN = 50  # Steps to wait after dropping before moving to next target
-
-# Custom loss functions and metrics for model loading
-custom_objects = {"f1": f1, "iou": iou, "dice_bce_loss": dice_bce_loss}
-
-# Simulation time step (240 Hz)
-dt = 1.0 / 240.0
 
 # Configure logging
 logging.basicConfig(
@@ -53,114 +43,61 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class EnvConfig:
-    """Configuration for the robotics environment.
-    
-    Attributes:
-        num_agents: Number of robotic agents in the environment
-        render_mode: Rendering mode ('rgb_array', 'human', or None)
-        target: Target coordinates for the robot (if predetermined)
-        max_steps: Maximum steps allowed per episode
-    """
-    num_agents: int = 1
-    render_mode: str | None = None
-    target: np.ndarray | None = None
-    max_steps: int = 1000
-
-
-@dataclass
-class ModelConfig:
-    """Configuration for deep learning model inference.
-    
-    Attributes:
-        checkpoint: Path to the model checkpoint file
-        threshold: Confidence threshold for binary predictions
-        patch_size: Size of image patches for inference (pixels)
-        custom_objects: Dictionary of custom loss/metric functions
-    """
-    checkpoint: str | Path
-    threshold: float
-    patch_size: int
-    custom_objects: dict
-
-
-# Model configurations
-ROOT_MODEL_CONFIG = ModelConfig(
-    checkpoint=str(ROOT_MODEL_PATH),
-    threshold=0.5,  # 50% confidence threshold
-    patch_size=512,
-    custom_objects=custom_objects,
-)
-
-ANCHOR_MODEL_CONFIG = ModelConfig(
-    checkpoint=str(ANCHOR_MODEL_PATH),
-    threshold=0.01,  # Lower threshold for anchor detection
-    patch_size=512,
-    custom_objects=custom_objects,
-)
-
-# Pipeline configurations
-INFERENCE_CONFIG = (ROOT_MODEL_CONFIG, ANCHOR_MODEL_CONFIG)
-SEGMENTOR_CONFIG = (PLANT_ZONES, SEGMENTATION_CONFIG)
-ENV_CONFIG = EnvConfig(render_mode="rgb_array")
-
-
 class RoboticsPipeline:
     """Main pipeline for plant root analysis and robotic manipulation.
-    
+
     This class integrates:
     - Deep learning models for root and anchor detection
     - Plant segmentation for zone-based analysis
     - Gymnasium robotics environment for OT-2 robot control
     - Coordinate conversion between pixel and millimeter spaces
-    
+
     Attributes:
         inference_config: Configuration tuple for root and anchor models
-        segmentor_config: Configuration for plant segmentation
+        segmentation_config: Configuration for plant segmentation
         env_config: Configuration for robotics environment
         root_manager: Inference manager for root detection model
         anchor_manager: Inference manager for anchor detection model
         segmentor: Plant segmentation processor
         env: Gymnasium robotics environment
     """
-    
+
     def __init__(
         self,
         inference_config: Tuple[ModelConfig, ModelConfig],
-        segmentor_config: Tuple[dict, SegmentationConfig],
+        segmentation_config: Tuple[dict, SegmentationConfig],
         env_config: EnvConfig,
     ):
         """Initialize the robotics pipeline.
-        
+
         Args:
             inference_config: Tuple of (root_config, anchor_config)
-            segmentor_config: Tuple of (plant_zones, segmentation_config)
+            segmentation_config: Tuple of (plant_zones, segmentation_config)
             env_config: Environment configuration
         """
         self.inference_config = inference_config
-        self.segmentor_config = segmentor_config
+        self.segmentation_config = segmentation_config
         self.env_config = env_config
         self._init_components(
-            self.inference_config, self.segmentor_config, self.env_config
+            self.inference_config, self.segmentation_config, self.env_config
         )
 
     def _init_components(
         self,
         inference_config: Tuple[ModelConfig, ModelConfig],
-        segmentor_config: Tuple[dict, SegmentationConfig],
+        segmentation_config: Tuple[dict, SegmentationConfig],
         env_config: EnvConfig,
     ):
         """Initialize all pipeline components with error handling.
-        
+
         Loads deep learning models, segmentor, and robotics environment.
         Each component is loaded independently with specific error handling.
-        
+
         Args:
             inference_config: Configuration for inference models
-            segmentor_config: Configuration for plant segmentation
+            segmentation_config: Configuration for plant segmentation
             env_config: Configuration for robotics environment
-            
+
         Raises:
             InitializationError: If any component fails to initialize
         """
@@ -188,9 +125,7 @@ class RoboticsPipeline:
 
             # Initialize plant segmentor
             try:
-                self.segmentor = PlantSegmentor(
-                    segmentor_config[0], segmentor_config[1]
-                )
+                self.segmentor = PlantSegmentor(segmentation_config)
                 logger.debug("✓ Segmentor instance loaded")
             except Exception as e:
                 logger.exception(f"⚠ Failed to load Segmentor. Exception: {e}")
@@ -203,7 +138,7 @@ class RoboticsPipeline:
             except Exception as e:
                 logger.exception(f"⚠ Failed to load Environment. Exception: {e}")
                 raise InitializationError
-            
+
             logger.debug("Pipeline Components initialized successfully!")
         except Exception as e:
             logger.exception(
@@ -213,10 +148,10 @@ class RoboticsPipeline:
 
     def _get_dish_size_px(self, img: np.ndarray) -> int:
         """Extract petri dish from image and return its size in pixels.
-        
+
         Args:
             img: Input image containing petri dish
-            
+
         Returns:
             Size of petri dish in pixels (height dimension)
         """
@@ -230,32 +165,32 @@ class RoboticsPipeline:
         size_mm: float,
     ) -> List[Tuple[float, float]]:
         """Convert coordinates from pixels to millimeters.
-        
+
         Uses the petri dish size as a reference to calculate the conversion factor
         between pixel space and real-world millimeter measurements.
-        
+
         Args:
             img: Image containing the petri dish for scale reference
             points: Single point or list of (x, y) coordinates in pixels
             size_mm: Known size of petri dish in millimeters
-            
+
         Returns:
             List of (x, y) coordinates converted to millimeters
         """
         # Calculate mm per pixel conversion factor
         factor = size_mm / self._get_dish_size_px(img)
-        
+
         # Ensure points is a list
         if not isinstance(points, list):
             points = [points]
-        
+
         # Convert each point from pixels to millimeters
         points_mm = []
         for point in points:
             x_px, y_px = point
             x_mm, y_mm = x_px * factor, y_px * factor
             points_mm.append((x_mm, y_mm))
-        
+
         return points_mm
 
     def _run_inference(
@@ -267,20 +202,20 @@ class RoboticsPipeline:
         threshold: float,
     ) -> np.ndarray:
         """Run model inference on an image using patch-based processing.
-        
+
         Splits the image into patches, runs inference on each patch,
         reassembles the predictions, and applies thresholding.
-        
+
         Args:
             manager: InferenceManager instance with loaded model
             img: Input image to process
             img_filename: Filename for logging purposes
             patch_size: Size of patches to split image into
             threshold: Confidence threshold for binary mask
-            
+
         Returns:
             Binary mask (0 or 255) of predictions
-            
+
         Raises:
             InferenceError: If patching or prediction fails
         """
@@ -309,12 +244,12 @@ class RoboticsPipeline:
 
     def _validate_mask_dimensions(self, img, mask, img_filename):
         """Validate that mask dimensions match the input image.
-        
+
         Args:
             img: Original input image
             mask: Generated prediction mask
             img_filename: Filename for logging
-            
+
         Returns:
             1 if dimensions match, 0 otherwise
         """
@@ -335,21 +270,21 @@ class RoboticsPipeline:
         max_gap: int,
     ) -> Dict[List[tuple, tuple]]:
         """Extract root tip coordinates for all detected plants.
-        
+
         This is the main processing pipeline that:
         1. Detects plant anchors (seed locations)
         2. Segments roots using the root detection model
         3. Associates roots with their anchors
         4. Calculates geodesic paths along each root
         5. Extracts start (anchor) and end (tip) coordinates
-        
+
         Args:
             img: Input image containing plants in petri dishes
             img_filename: Filename for logging and debugging
             root_config: Configuration for root detection model
             anchor_config: Configuration for anchor detection model
             max_gap: Maximum gap (pixels) to bridge in geodesic calculation
-            
+
         Returns:
             Dictionary mapping plant_id to [(start_y, start_x), (end_y, end_x)]
             Returns None if processing fails
@@ -451,19 +386,22 @@ class RoboticsPipeline:
         max_gap: int,
     ) -> Dict[List[tuple, tuple]]:
         """Public method to get root tip coordinates from an image.
-        
+
         Convenience wrapper around _get_root_tip_coordinates.
-        
+
         Args:
             img: Input image containing plants
             img_filename: Filename for logging
             root_config: Root model configuration
             anchor_config: Anchor model configuration
             max_gap: Maximum gap for geodesic calculation
-            
+
         Returns:
             Dictionary mapping plant_id to [(start_coords), (end_coords)]
         """
         return self._get_root_tip_coordinates(
             img, img_filename, root_config, anchor_config, max_gap
         )
+    
+
+    
