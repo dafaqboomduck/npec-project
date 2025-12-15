@@ -1,13 +1,17 @@
 import logging
 import math
-import os
 import random
 import time
+import os
+from pathlib import Path
 
 import pybullet as p
 import pybullet_data
 
 # logging.basicConfig(level=logging.INFO)
+
+# Get the directory where this file is located
+ROBOTICS_DIR = Path(__file__).parent.resolve()
 
 
 class Simulation:
@@ -24,14 +28,28 @@ class Simulation:
         p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
         p.setGravity(0, 0, -10)
         # p.setPhysicsEngineParameter(contactBreakingThreshold=0.000001)
-        # load a texture
-        texture_list = os.listdir("textures")
-        random_texture = random.choice(texture_list[:-1])
-        random_texture_index = texture_list.index(random_texture)
-        self.plate_image_path = (
-            f"textures/_plates/{os.listdir('textures/_plates')[random_texture_index]}"
-        )
-        self.textureId = p.loadTexture(f"textures/{random_texture}")
+        # Load textures
+        # Load textures
+        texture_dir = ROBOTICS_DIR / "textures"
+        plates_dir = ROBOTICS_DIR / "textures/_plates"
+
+        # Sort both lists to ensure consistent ordering
+        texture_list = sorted([f for f in os.listdir(texture_dir) if f.endswith(".png")])
+        plate_list = sorted([f for f in os.listdir(plates_dir) if f.endswith(".png")])
+
+        # Verify they have the same length
+        assert len(texture_list) == len(plate_list), f"Mismatch: {len(texture_list)} textures vs {len(plate_list)} plates"
+
+        # Choose the SAME random index for both
+        random_index = random.randint(0, len(plate_list) - 1)
+
+        # Now these will match: 01.png <-> first plate alphabetically, etc.
+        random_texture = texture_list[random_index]
+        random_plate = plate_list[random_index]
+
+        self.plate_image_path = str(plates_dir / random_plate)
+        self.textureId = p.loadTexture(str(texture_dir / random_texture))
+
         # print(f'textureId: {self.textureId}')
 
         # Set the camera parameters
@@ -99,7 +117,7 @@ class Simulation:
                     # Calculate position for each robot
                     position = [-spacing * i, -spacing * j, 0.03]
                     robotId = p.loadURDF(
-                        "ot_2_simulation_v6.urdf",
+                        str(ROBOTICS_DIR / "ot_2_simulation_v6.urdf"),
                         position,
                         [0, 0, 0, 1],
                         flags=p.URDF_USE_INERTIA_FROM_FILE,
@@ -131,7 +149,9 @@ class Simulation:
                     ]
                     rotate_90 = p.getQuaternionFromEuler([0, 0, -math.pi / 2])
                     planeId = p.loadURDF(
-                        "custom.urdf", position_with_offset, rotate_90
+                        str(ROBOTICS_DIR / "custom.urdf"),
+                        position_with_offset,
+                        rotate_90,
                     )  # start_orientation)
                     # Disable collision between the robot and the specimen
                     p.setCollisionFilterPair(

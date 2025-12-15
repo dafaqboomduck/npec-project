@@ -13,7 +13,6 @@ control to enable automated plant phenotyping and manipulation tasks.
 
 import cv2
 import numpy as np
-from pathlib import Path
 import gymnasium as gym
 import logging
 from typing import Tuple, List, Dict
@@ -24,6 +23,7 @@ from src.core.segmenation import PlantSegmentor
 from src.core.root_length import calculate_geodesic_length
 from src.configs.inference import INFERENCE_CONFIG
 from src.configs.segmentation import SEGMENTATION_CONFIG
+from src.configs.robotics import ENV_CONFIG, CONTROLLER_CONFIG
 from src.helpers.extract_petri_dish import extract_petri_dish
 import src.robotics.ot2_env  # needed to trigger registration
 from src.robotics.pid import PIDController
@@ -33,14 +33,24 @@ from src.models import (
     SegmentationConfig,
     ModelConfig,
     EnvConfig,
+    ControllerConfig,
 )
-from dataclasses import dataclass
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+PLANT_ZONES = {
+    0: (0, 566),
+    1: (566, 1132),
+    2: (1132, 1698),
+    3: (1698, 2264),
+    4: (2264, 2834),
+}
+
+SEGMENTATION_CONFIG.plant_zones = PLANT_ZONES
 
 
 class RoboticsPipeline:
@@ -67,6 +77,7 @@ class RoboticsPipeline:
         inference_config: Tuple[ModelConfig, ModelConfig],
         segmentation_config: Tuple[dict, SegmentationConfig],
         env_config: EnvConfig,
+        controller_config: ControllerConfig,
     ):
         """Initialize the robotics pipeline.
 
@@ -78,6 +89,7 @@ class RoboticsPipeline:
         self.inference_config = inference_config
         self.segmentation_config = segmentation_config
         self.env_config = env_config
+        self.controller_config = controller_config
         self._init_components(
             self.inference_config, self.segmentation_config, self.env_config
         )
@@ -133,7 +145,13 @@ class RoboticsPipeline:
 
             # Initialize robotics environment
             try:
-                self.env = gym.make("OT2ENV-v0", env_config)
+                self.env = gym.make(
+                    "OT2ENV-v0",
+                    num_agents=env_config.num_agents,
+                    render_mode=env_config.render_mode,
+                    target=env_config.target,
+                    max_steps=env_config.max_steps,
+                )
                 logger.debug("✓ Environment loaded")
             except Exception as e:
                 logger.exception(f"⚠ Failed to load Environment. Exception: {e}")
@@ -161,7 +179,7 @@ class RoboticsPipeline:
     def _convert_mm2px(
         self,
         img: np.ndarray,
-        points: List[Tuple[float, float]] | Tuple[float, float],
+        points: List[Tuple[float, float]] | np.ndarray,
         size_mm: float,
     ) -> List[Tuple[float, float]]:
         """Convert coordinates from pixels to millimeters.
@@ -177,21 +195,59 @@ class RoboticsPipeline:
         Returns:
             List of (x, y) coordinates converted to millimeters
         """
+        # Get Petri Dish size in PX
+        dish_px = self._get_dish_size_px(img)
+        if dish_px == 0:
+            logger.error(("Could not detect Petri Dish size."))
+            raise ValueError
+
         # Calculate mm per pixel conversion factor
-        factor = size_mm / self._get_dish_size_px(img)
+        factor = size_mm / dish_px
 
         # Ensure points is a list
         if not isinstance(points, list):
             points = [points]
 
         # Convert each point from pixels to millimeters
-        points_mm = []
-        for point in points:
-            x_px, y_px = point
-            x_mm, y_mm = x_px * factor, y_px * factor
-            points_mm.append((x_mm, y_mm))
+        points_arr = np.array(points)
+        if points_arr.ndim == 1:
+            points_arr = points_arr.reshape(1, 2)
+
+        # Apply scaling
+        points_mm = points_arr * factor
 
         return points_mm
+
+    def _unpadd_mask(
+        self, manager: InferenceManager, padded_mask: np.ndarray, patch_size: int
+    ) -> np.ndarray:
+        if manager.crop_coords is None:
+            raise ValueError(
+                "restore_mask requires self.crop_coords and self.img_shape to be set by patch_image()."
+            )
+        # 1. Unpack coordinates from extract_petri_dish (in original image coordinates)
+        x_start, y_start, x_end, y_end = manager.crop_coords
+
+        # Calculate the dimensions of the crop BEFORE padding
+        h_crop = y_end - y_start
+        w_crop = x_end - x_start
+
+        # 2. Re-calculate the padding that was added
+        # (This logic MUST mirror the 'padder' utility function)
+        height_padding = ((h_crop // patch_size) + 1) * patch_size - h_crop
+        width_padding = ((w_crop // patch_size) + 1) * patch_size - w_crop
+
+        # Calculate exactly how much was added to top and left
+        top_pad = height_padding // 2
+        left_pad = width_padding // 2
+
+        # 3. Remove the padding (Un-pad)
+        # Extract the region starting at top/left pad, with the size of the original crop.
+        unpadded_mask = padded_mask[
+            top_pad : top_pad + h_crop, left_pad : left_pad + w_crop
+        ]
+
+        return unpadded_mask
 
     def _run_inference(
         self,
@@ -238,8 +294,12 @@ class RoboticsPipeline:
             logger.exception(f"Model returned None for {img_filename}")
             raise InferenceError
 
+        unpadded_mask = self._unpadd_mask(
+            manager, padded_mask=padded_mask, patch_size=patch_size
+        )
+
         # Apply threshold to create binary mask
-        binary_mask = (padded_mask > threshold).astype(np.uint8) * 255
+        binary_mask = (unpadded_mask > threshold).astype(np.uint8) * 255
         return binary_mask
 
     def _validate_mask_dimensions(self, img, mask, img_filename):
@@ -265,10 +325,10 @@ class RoboticsPipeline:
         self,
         img: np.ndarray,
         img_filename: str,
-        root_config: ModelConfig,
-        anchor_config: ModelConfig,
-        max_gap: int,
-    ) -> Dict[List[tuple, tuple]]:
+        root_config: ModelConfig | None = None,
+        anchor_config: ModelConfig | None = None,
+        segmentation_config: SegmentationConfig | None = None,
+    ) -> Dict[int, List[Tuple[int, int]]]:
         """Extract root tip coordinates for all detected plants.
 
         This is the main processing pipeline that:
@@ -283,12 +343,22 @@ class RoboticsPipeline:
             img_filename: Filename for logging and debugging
             root_config: Configuration for root detection model
             anchor_config: Configuration for anchor detection model
-            max_gap: Maximum gap (pixels) to bridge in geodesic calculation
+            segmentation_config: Configuration for segmentation algorithm
 
         Returns:
             Dictionary mapping plant_id to [(start_y, start_x), (end_y, end_x)]
             Returns None if processing fails
         """
+        # Set default ModelConfig parameters if not provided
+        if root_config is None:
+            root_config = self.inference_config[0]
+        if anchor_config is None:
+            anchor_config = self.inference_config[1]
+
+        # Set default SegmentationConfig parameters if not provided
+        if segmentation_config is None:
+            segmentation_config = self.segmentation_config
+
         # Step 1: Run anchor detection model
         try:
             anchor_mask = self._run_inference(
@@ -304,15 +374,29 @@ class RoboticsPipeline:
             )
             return None
 
+        dish = extract_petri_dish(img)
+
         # Validate anchor mask dimensions
-        validate = self._validate_mask_dimensions(img, anchor_mask, img_filename)
+        validate = self._validate_mask_dimensions(dish, anchor_mask, img_filename)
         if not bool(validate):
             return None
 
+        # cv2.imwrite(str(debug_dir / "anchors_mask.png"), anchor_mask)
+        # logger.debug(f"Saved captured image to {debug_dir / 'anchors_mask.png'}")
+
         # Step 2: Extract and filter anchors by zone
-        all_anchors = self.segmentor.get_anchors(anchor_mask)
+        all_anchors = self.segmentor.get_anchors(
+            anchor_mask, min_area=segmentation_config.min_anchor_area, y_ratio=0.25
+        )
+
         anchors = self.segmentor.get_largest_anchor_by_zone(all_anchors)
-        anchors = self.segmentor.create_anchor_bboxes(img.shape, anchors)
+
+        anchors = self.segmentor.create_anchor_bboxes(
+            dish.shape,
+            anchors,
+            bbox_size=segmentation_config.anchor_bbox_size,
+            vertical_offset=segmentation_config.vertical_offset,
+        )
         logger.debug((f" Anchors: {len(anchors)}"))
 
         # Step 3: Run root detection model
@@ -331,9 +415,12 @@ class RoboticsPipeline:
             return None
 
         # Validate root mask dimensions
-        validate = self._validate_mask_dimensions(img, root_mask, img_filename)
+        validate = self._validate_mask_dimensions(dish, root_mask, img_filename)
         if not bool(validate):
             return None
+
+        # cv2.imwrite(str(debug_dir / "root_mask.png"), root_mask)
+        # logger.debug(f"Saved captured image to {debug_dir / 'root_mask.png'}")
 
         # Step 4: Associate roots with anchors by spatial regions
         _, labels = self.segmentor.process_roots_by_anchor(root_mask, anchors)
@@ -341,8 +428,8 @@ class RoboticsPipeline:
         # Step 5: Extract root tip coordinates for each plant
         unique = [l for l in np.unique(labels) if l > 0]
         if not unique:
-            logger.error("No plants detected")
-            return None
+            logger.warning("No plants detected")
+            # return None
 
         all_results = {}
 
@@ -364,6 +451,8 @@ class RoboticsPipeline:
             )
             crop = mask[y_min:y_max, x_min:x_max]
 
+            max_gap = segmentation_config.root_merge_distance
+
             # Calculate geodesic path along the root
             result = calculate_geodesic_length(crop > 0, max_gap=max_gap)
             plant_id = label_id - 1
@@ -373,6 +462,11 @@ class RoboticsPipeline:
                 # Extract start point (anchor/seed location) and end point (root tip)
                 sy, sx = int(path[0][0]), int(round(path[0][1]))
                 ey, ex = int(path[-1][0]), int(round(path[-1][1]))
+                # Convert back to full image coordinates
+                sy += y_min
+                ey += y_min
+                sx += x_min
+                ex += x_min
                 all_results[plant_id] = [(sy, sx), (ey, ex)]
 
         return all_results
@@ -381,10 +475,9 @@ class RoboticsPipeline:
         self,
         img: np.ndarray,
         img_filename: str,
-        root_config: ModelConfig,
-        anchor_config: ModelConfig,
-        max_gap: int,
-    ) -> Dict[List[tuple, tuple]]:
+        inference_config: Tuple[ModelConfig, ModelConfig] | None = None,
+        segmentation_config: SegmentationConfig | None = None,
+    ) -> Dict[int, List[Tuple[int, int]]]:
         """Public method to get root tip coordinates from an image.
 
         Convenience wrapper around _get_root_tip_coordinates.
@@ -392,16 +485,236 @@ class RoboticsPipeline:
         Args:
             img: Input image containing plants
             img_filename: Filename for logging
-            root_config: Root model configuration
-            anchor_config: Anchor model configuration
-            max_gap: Maximum gap for geodesic calculation
+            inference_config: Tuple of (root_config, anchor_config)
+            segmentation_config: Configuration for segmentation algorithm
 
         Returns:
             Dictionary mapping plant_id to [(start_coords), (end_coords)]
         """
+        root_config, anchor_config = inference_config
         return self._get_root_tip_coordinates(
-            img, img_filename, root_config, anchor_config, max_gap
+            img, img_filename, root_config, anchor_config, segmentation_config
         )
-    
 
-    
+    def run_robotic_manipulation(
+        self,
+        inference_config: Tuple[ModelConfig, ModelConfig] | None = None,
+        segmentation_config: SegmentationConfig | None = None,
+        controller_config: ControllerConfig | None = None,
+        starting_point: Tuple[float, float] = (0.0, 0.0),
+        pid_params: Dict = None,
+    ):
+        """Run complete robotic manipulation pipeline.
+
+        This method:
+        1. Captures an image from the robot camera
+        2. Detects plant root tips using computer vision
+        3. Converts pixel coordinates to real-world millimeter positions
+        4. Uses PID control to navigate the robot to each target
+        5. Drops at each root tip location
+
+        Args:
+            inference_config: Tuple of (root_config, anchor_config)
+            segmentation_config: Configuration for segmentation algorithm
+            controller_config: Controller configuration with PID and drop parameters
+            starting_point: Starting point of the dish
+            pid_params: Dictionary with PID parameters for x, y, z axes
+                       Format: {'x': {'kp': 9.0, 'ki': 0.048, 'kd': 0.0}, ...}
+
+        Returns:
+            Number of successful drops completed
+        """
+        # Set default InferenceConfig parameters if not provided
+        if inference_config is None:
+            inference_config = self.inference_config
+
+        # Set default ControllerConfig parameters if not provided
+        if controller_config is None:
+            controller_config = self.controller_config
+
+        # Set default PID parameters if not provided
+        if pid_params is None:
+            pid_params = {
+                "x": {"kp": 9.0, "ki": 0.048, "kd": 0.0},
+                "y": {"kp": 9.0, "ki": 0.048, "kd": 0.0},
+                "z": {"kp": 5.0, "ki": 0.024, "kd": 0.0},
+            }
+
+        # Initialize PID controllers for each axis
+        pid_x = PIDController(**pid_params["x"])
+        pid_y = PIDController(**pid_params["y"])
+        pid_z = PIDController(**pid_params["z"])
+
+        # Step 1: Get image from robot camera
+        logger.debug("Capturing image from robot camera...")
+        unwrapped_env = self.env.unwrapped
+        image_path = unwrapped_env.sim.get_plate_image()
+        img = cv2.imread(image_path)
+
+        if img is None:
+            logger.error(f"Failed to load image from {image_path}")
+            return 0
+
+        # # Debug: Save the captured image
+        # debug_dir = Path("debug_output")
+        # debug_dir.mkdir(exist_ok=True)
+        # cv2.imwrite(str(debug_dir / "captured_image.png"), img)
+        # logger.debug(f"Captured image shape: {img.shape}")
+        # logger.debug(f"Saved captured image to {debug_dir / 'captured_image.png'}")
+
+        # Step 2: Detect root tips and get coordinates
+        logger.info("Detecting root tips...")
+        root_tips = self.get_coordinates(
+            img=img,
+            img_filename=image_path,
+            inference_config=inference_config,
+            segmentation_config=segmentation_config,
+        )
+
+        if root_tips is None or len(root_tips) == 0:
+            logger.error("No root tips detected")
+            return 0
+
+        # Step 3: Convert pixel coordinates to millimeter coordinates
+        logger.debug(f"Converting coordinates for {len(root_tips)} plants...")
+        targets = []
+        for plant_id, coords in root_tips.items():
+            # coords = [(start_y, start_x), (end_y, end_x)]
+            # We want the end point (root tip)
+            end_y, end_x = coords[1]
+
+            # Convert to millimeters
+            tip_mm = self._convert_mm2px(
+                img=img,
+                points=[(end_x, end_y)],  # Note: converting (x, y) format
+                size_mm=controller_config.dish_size,
+            )
+
+            x_mm, y_mm = tip_mm[0]
+            # Convert mm to meters, then add starting point (which is in meters)
+            dish_size_mm = controller_config.dish_size  # 150
+
+            # If starting_point is the CENTER of the dish, offset from center
+            x_m = starting_point[0] + ((y_mm) / 1000.0)
+            y_m = starting_point[1] + ((x_mm) / 1000.0)
+            z_m = 0.1215
+
+            targets.append([x_m, y_m, z_m])
+            logger.debug(
+                f"Plant {plant_id}: Root tip at ({x_m:.4f}, {y_m:.4f}, {z_m:.4f})"
+            )
+        # Step 4: Execute robotic manipulation
+        logger.info(f"Starting robotic manipulation for {len(targets)} targets...")
+
+        # Reset environment and set first target
+        obs, _ = self.env.reset(seed=42)
+
+        # Set the first target in the unwrapped environment
+        if len(targets) > 0:
+            unwrapped_env.target = np.array(targets[0], dtype=np.float32)
+
+        target_idx = 0
+        dropped_at_target = False
+        cooldown_counter = 0
+
+        logger.debug(f"Moving to target {target_idx}")
+
+        for step in range(controller_config.max_steps):
+            # Check if we've completed all targets
+            if target_idx >= len(targets):
+                logger.info(f"All targets completed at step {step}!")
+                break
+
+            target = targets[target_idx]
+
+            # Extract current pipette position (indices 6, 7, 8 in observation)
+            x, y, z = obs[6:9]
+            target_x, target_y, target_z = target
+
+            # Calculate error for each axis
+            error_x = target_x - x
+            error_y = target_y - y
+            error_z = target_z - z
+
+            # Calculate distance
+            distance = np.sqrt(error_x**2 + error_y**2 + error_z**2)
+
+            dt = controller_config.dt
+
+            # Compute PID control for each axis
+            control_x = pid_x.compute(error_x, dt, output_limits=(-1.0, 1.0))
+            control_y = pid_y.compute(error_y, dt, output_limits=(-1.0, 1.0))
+            control_z = pid_z.compute(error_z, dt, output_limits=(-1.0, 1.0))
+
+            # State machine logic
+            if not dropped_at_target:
+                # Still approaching or at target, haven't dropped yet
+                if distance <= controller_config.drop_threshold:
+                    # Close enough - drop the droplet
+                    action = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+                    dropped_at_target = True
+                    cooldown_counter = 0
+                    logger.debug(
+                        f"Dropping at target {target_idx} (step {step}), distance: {distance:.6f}"
+                    )
+                    logger.debug(f"Position: ({target_x:.4f}, {target_y:.4f})")
+                else:
+                    # Still approaching - keep moving
+                    action = np.array(
+                        [control_x, control_y, control_z, 0.0], dtype=np.float32
+                    )
+            else:
+                # Already dropped, in cooldown phase
+                cooldown_counter += 1
+                action = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+
+                if cooldown_counter >= controller_config.drop_cooldown:
+                    # Cooldown complete - move to next target
+                    target_idx += 1
+                    dropped_at_target = False
+                    cooldown_counter = 0
+
+                    # Reset PID controllers for the new target
+                    pid_x.reset()
+                    pid_y.reset()
+                    pid_z.reset()
+
+                    if target_idx < len(targets):
+                        logger.debug(f"Moving to target {target_idx}")
+                        # Update the environment's target
+                        unwrapped_env.target = np.array(
+                            targets[target_idx], dtype=np.float32
+                        )
+
+            obs, reward, terminated, truncated, info = self.env.step(action)
+
+            if terminated or truncated:
+                logger.debug(f"Episode ended at step {step}")
+                break
+
+        logger.info(f"Finished! Dropped at {target_idx} targets")
+        return target_idx
+
+
+def main():
+    # Initialize pipeline
+    pipeline = RoboticsPipeline(
+        inference_config=INFERENCE_CONFIG,
+        segmentation_config=SEGMENTATION_CONFIG,
+        env_config=ENV_CONFIG,
+        controller_config=CONTROLLER_CONFIG,
+    )
+
+    # Run the complete pipeline
+    num_drops = pipeline.run_robotic_manipulation(
+        INFERENCE_CONFIG,
+        SEGMENTATION_CONFIG,
+        CONTROLLER_CONFIG,
+        starting_point=(0.10775, 0.062),
+    )
+
+    print(f"Successfully dropped at {num_drops} root tips")
+
+
+if __name__ == "__main__":
+    main()
