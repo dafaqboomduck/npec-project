@@ -1,5 +1,5 @@
 from src.config import BASE_DIR
-from src.models.inference_models import ModelConfig, MaskCombineStrategy
+from src.models.inference import ModelConfig, MaskCombineStrategy
 from src.inference.custom_functions import dice_bce_loss, f1, iou
 
 # Patch size for the model

@@ -14,7 +14,7 @@ from src.configs.lenghts import (
     RETURN_NO_PATH,
     RETURN_SUCCESS,
 )
-from src.models.length_models import LengthCalculatorConfig, LengthResult, PathResult
+from src.models.length import LengthCalculatorConfig, LengthResult, PathResult
 
 logger = logging.getLogger(__name__)
 

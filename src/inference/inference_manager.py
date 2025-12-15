@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 from src.helpers.padder import padder
 from src.helpers.extract_petri_dish import extract_petri_dish
-from src.models.inference_models import ModelConfig
+from src.models.inference import ModelConfig
 from src.exceptions import ConfigurationError
 
 
