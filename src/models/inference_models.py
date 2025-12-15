@@ -11,12 +11,14 @@ class ModelConfig:
         checkpoint: Path to the model checkpoint file
         threshold: Confidence threshold for binary predictions
         patch_size: Size of image patches for inference (pixels)
+        batch_size: Size of the batches used during inference
         custom_objects: Dictionary of custom loss/metric functions
     """
 
     checkpoint: str | Path
     threshold: float
     patch_size: int
+    batch_size: int
     custom_objects: dict
 
 
