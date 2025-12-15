@@ -5,9 +5,14 @@ from src.inference.custom_functions import dice_bce_loss, f1, iou
 # Patch size for the model
 PATCH_SIZE = 512
 
+# # Path to the saved root detection model
+# ROOT_MODEL_PATH = (
+#     BASE_DIR / "src" / "artifacts" / "models" / "root_det_model_512px.keras"
+# )
+
 # Path to the saved root detection model
 ROOT_MODEL_PATH = (
-    BASE_DIR / "src" / "artifacts" / "models" / "root_det_model_512px.keras"
+    BASE_DIR / "src" / "artifacts" / "models" / "distilled_student_model.keras"
 )
 
 # Path to the saved anchor detection model
@@ -26,6 +31,7 @@ ROOT_MODEL_CONFIG = ModelConfig(
     checkpoint=str(ROOT_MODEL_PATH),
     threshold=0.5,  # 50% confidence threshold
     patch_size=512,
+    batch_size=4,
     custom_objects=CUSTOM_OBJECTS,
 )
 
@@ -33,6 +39,7 @@ ANCHOR_MODEL_CONFIG = ModelConfig(
     checkpoint=str(ANCHOR_MODEL_PATH),
     threshold=0.01,  # Lower threshold for anchor detection
     patch_size=512,
+    batch_size=4,
     custom_objects=CUSTOM_OBJECTS,
 )
 
