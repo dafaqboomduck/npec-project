@@ -35,7 +35,7 @@ class PlantSegmentation:
             raise ConfigurationError("plant_zones must be defined in config")
 
         self.config = segmentation_config
-        logger.info(
+        logger.debug(
             f"PlantSegmentation initialized with {len(self.config.plant_zones)} zones"
         )
 
@@ -189,7 +189,7 @@ class PlantSegmentation:
         anchors = self._detect_anchor_components(anchor_mask)
         anchors = self._assign_anchors_to_zones(anchors)
 
-        logger.info(
+        logger.debug(
             f"Extracted {len(anchors)} anchors for zones: {[a.zone_id for a in anchors]}"
         )
         return anchors
@@ -303,7 +303,7 @@ class PlantSegmentation:
             filtered_mask[mask] = 255
             final_labels[mask] = zone_id + 1
 
-        logger.info(f"Segmented roots for {len(zone_masks)} zones")
+        logger.debug(f"Segmented roots for {len(zone_masks)} zones")
 
         return SegmentationResult(
             filtered_mask=filtered_mask,
