@@ -14,7 +14,7 @@ MAX_PATH = 50
 USE_FARTHEST_ENDPOINT = True
 
 LENGTH_CALCULATOR_CONFIG = LengthCalculatorConfig(
-    num_plant=NUM_PLANTS,
+    num_plants=NUM_PLANTS,
     max_gap=MAX_GAP,
     max_path=MAX_PATH,
     use_farthest_endpoint=USE_FARTHEST_ENDPOINT,

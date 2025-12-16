@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 from scipy.spatial import cKDTree
 from skimage.morphology import skeletonize
+from src.exceptions import ConfigurationError
 
 from src.configs.lenghts import (
     EMPTY_RESULT,
@@ -40,6 +41,8 @@ class LengthCalculator:
 
     def __init__(self, config: LengthCalculatorConfig):
         self.config = config
+        if config is None:
+            raise ConfigurationError("config is required")
 
     def _get_neighbors(self, point: Point, pixel_set: PixelSet) -> list[Point]:
         """Get all valid 8-connected neighbors of a point."""

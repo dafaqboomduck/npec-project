@@ -37,7 +37,7 @@ ROOT_MODEL_CONFIG = ModelConfig(
 
 ANCHOR_MODEL_CONFIG = ModelConfig(
     checkpoint=str(ANCHOR_MODEL_PATH),
-    threshold=0.01,  # Lower threshold for anchor detection
+    threshold=0.001,  # Lower threshold for anchor detection
     patch_size=512,
     batch_size=4,
     custom_objects=CUSTOM_OBJECTS,
