@@ -1,7 +1,7 @@
 import os
 import logging
 from pathlib import Path
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict
 
 # Suppress TensorFlow warnings BEFORE importing TF-dependent modules
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # 0=all, 1=no INFO, 2=no WARNING, 3=no ERROR
@@ -70,7 +70,8 @@ class CVPipeline:
             InitializationError: If PlantMaster fails to initialize.
         """
         self._img_files: List[str] = []
-        self.results: List[PlantMeasurement] = []
+        self.measurements: List[PlantMeasurement] = []
+        self.image_results: Dict[str, ImageResult] = {}
 
         # Use defaults if not provided
         inference_config = inference_config or (ROOT_MODEL_CONFIG, ANCHOR_MODEL_CONFIG)
@@ -138,7 +139,11 @@ class CVPipeline:
         logger.info(f"Found {len(self._img_files)} image files")
 
     def _collect_results(self, result: ImageResult, img_name: str) -> None:
-        """Collect plant measurements from processing result."""
+        """Collect plant measurements and store full results."""
+        # Store full result for visualization
+        self.image_results[img_name] = result
+
+        # Collect measurements for CSV
         for plant_id, plant_result in result.plant_results.items():
             if plant_result.detected:
                 logger.debug(
@@ -147,8 +152,7 @@ class CVPipeline:
             else:
                 logger.debug(f"  Plant {plant_id}: not detected")
 
-            # Use PlantMeasurement instead of ImageResult
-            self.results.append(
+            self.measurements.append(
                 PlantMeasurement(
                     image_name=img_name,
                     plant_id=plant_id,
@@ -166,7 +170,7 @@ class CVPipeline:
             Path to the created CSV file.
         """
         csv_rows = [
-            {"Plant ID": r.plant_label, "Length (px)": r.length} for r in self.results
+            {"Plant ID": m.plant_label, "Length (px)": m.length} for m in self.measurements
         ]
 
         df = pd.DataFrame(csv_rows)
