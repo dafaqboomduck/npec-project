@@ -410,7 +410,7 @@ class PlantMaster:
         Returns:
             ImageResult with all detection and measurement data
         """
-        logger.info(f"Processing: {image_name}")
+        logger.debug(f"Processing: {image_name}")
 
         # Initialize result
         result = ImageResult(
@@ -437,7 +437,7 @@ class PlantMaster:
             self.segmentation_config.vertical_offset,
         )
         result.anchors = anchors
-        logger.info(f"  Found {len(anchors)} anchors")
+        logger.debug(f"  Found {len(anchors)} anchors")
 
         # Step 3: Apply shoot penalty (using anchor mask as proxy for shoots)
         logger.debug("Applying shoot penalty...")
@@ -451,7 +451,7 @@ class PlantMaster:
             adjusted_probs, anchors
         )
         result.endpoint_info = endpoint_info
-        logger.info(
+        logger.debug(
             f"  Optimal threshold: {optimal_thresh:.2f}, All found: {all_found}"
         )
 
@@ -495,6 +495,6 @@ class PlantMaster:
             status = "✓" if pr.detected else "✗"
             length_str = f"{pr.length}px" if pr.length else "N/A"
             thresh_str = f" (t={pr.threshold_used:.2f})" if pr.threshold_used else ""
-            logger.info(f"  Plant {pid}: {status} {length_str}{thresh_str}")
+            logger.debug(f"  Plant {pid}: {status} {length_str}{thresh_str}")
 
         return result

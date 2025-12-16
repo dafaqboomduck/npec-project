@@ -1,4 +1,4 @@
-from .pipeline_models import PlantResult
+from .pipeline_models import PlantMeasurement
 from .segmentation import SegmentationConfig, SegmentationResult, Anchor
 from .inference import ModelConfig
 from .robotics import EnvConfig, ControllerConfig
@@ -8,7 +8,7 @@ from .plant_master import PlantMasterConfig, ImageResult, PlantResult
 
 __all__ = [
     "Anchor",
-    "PlantResult",
+    "PlantMeasurement",
     "SegmentationResult",
     "PathResult",
     "LengthResult",

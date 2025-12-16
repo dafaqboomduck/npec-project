@@ -414,7 +414,7 @@ class LengthCalculator:
         Returns:
             Dict mapping plant_id (0 to num_plants-1) to LengthResult.
         """
-        logger.info(f"Starting plant length analysis for {num_plants} plants")
+        logger.debug(f"Starting plant length analysis for {num_plants} plants")
         results: dict[int, LengthResult] = {i: EMPTY_RESULT for i in range(num_plants)}
         stats = {"success": 0, "failed": 0}
 
@@ -439,7 +439,7 @@ class LengthCalculator:
             else:
                 stats["failed"] += 1
 
-        logger.info(
+        logger.debug(
             f"Analysis complete: {stats['success']} successful, {stats['failed']} failed, "
             f"{num_plants - stats['success'] - stats['failed']} not detected"
         )

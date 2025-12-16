@@ -63,7 +63,7 @@ class InferenceManager:
 
         self._init_model()
 
-        logger.info(
+        logger.debug(
             f"InferenceManager initialized with patch_size={self.config.patch_size}, "
             f"batch_size={self.config.batch_size}"
         )
@@ -86,7 +86,7 @@ class InferenceManager:
 
         try:
             self.model = load_model(checkpoint_path, custom_objects=custom_objects)
-            logger.info(f"Model loaded successfully from {checkpoint_path}")
+            logger.debug(f"Model loaded successfully from {checkpoint_path}")
         except Exception as e:
             logger.exception(f"Failed to load model from {checkpoint_path}")
             raise ImportError(
@@ -395,7 +395,7 @@ class InferenceManager:
         Returns:
             Final mask in original image coordinates, or None if inference fails.
         """
-        logger.info(f"Running full inference pipeline on image shape {img.shape}")
+        logger.debug(f"Running full inference pipeline on image shape {img.shape}")
 
         patches = self.patch_image(
             img,
