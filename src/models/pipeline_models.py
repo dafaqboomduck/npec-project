@@ -12,4 +12,4 @@ class PlantMeasurement:
     @property
     def plant_label(self) -> str:
         """Generate label like 'image_name_plant_1'."""
-        return f"{self.image_name}_plant_{self.plant_id}"
+        return f"{self.image_name}_plant_{self.plant_id + 1}"
