@@ -266,7 +266,7 @@ class LengthCalculator:
             RETURN_INSUFFICIENT_PIXELS: f"Plant {plant_id}: Insufficient pixels, estimate={result.length}",
             RETURN_NO_PATH: f"Plant {plant_id}: No path found between {result.start} and {result.end}",
         }
-        level = logging.INFO if return_code == RETURN_SUCCESS else logging.WARNING
+        level = logging.DEBUG if return_code == RETURN_SUCCESS else logging.WARNING
         logger.log(
             level,
             messages.get(return_code, f"Plant {plant_id}: Unknown error {return_code}"),
