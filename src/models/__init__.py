@@ -4,7 +4,7 @@ from .inference import ModelConfig
 from .robotics import EnvConfig, ControllerConfig
 from .length import LengthCalculatorConfig, PathResult, LengthResult
 from .adaptive_theshold import AdaptiveThresholdConfig
-from .plant_master import PlantMasterConfig
+from .plant_master import PlantMasterConfig, ImageResult, PlantResult
 
 __all__ = [
     "Anchor",
@@ -19,4 +19,6 @@ __all__ = [
     "LengthCalculatorConfig",
     "AdaptiveThresholdConfig",
     "PlantMasterConfig",
+    "ImageResult",
+    "PlantResult",
 ]

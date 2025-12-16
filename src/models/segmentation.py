@@ -57,6 +57,7 @@ class SegmentationConfig:
         y_top_ratio: Maximum y-position ratio (0-1) for anchor detection.
         y_bot_ratio: Minimum y-position ratio (0-1) for endpoint detection.
         anchor_bbox_size: Size of square bounding box around anchors (pixels).
+        bbox_tolerance: Tolerance for roots outside the bounding boxes (pixels).
         vertical_offset: Vertical offset to shift anchor bbox down (pixels).
         root_merge_distance: Maximum gap in pixels to merge nearby root fragments.
     """
@@ -67,6 +68,7 @@ class SegmentationConfig:
     y_top_ratio: float
     y_bot_ratio: float
     anchor_bbox_size: int
+    bbox_tolerance: int
     vertical_offset: int
     root_merge_distance: int
 

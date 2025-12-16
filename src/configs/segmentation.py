@@ -15,6 +15,7 @@ SEGMENTATION_CONFIG = SegmentationConfig(
     y_top_ratio=0.35,
     y_bot_ratio=0.5,
     anchor_bbox_size=150,
+    bbox_tolerance=30,
     vertical_offset=10,
     root_merge_distance=30,
 )
