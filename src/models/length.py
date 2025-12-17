@@ -52,3 +52,4 @@ class LengthResult:
     detected: bool
     length: int
     pixel_count: int
+    path_result: Optional[PathResult] = None

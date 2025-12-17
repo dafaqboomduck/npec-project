@@ -39,6 +39,8 @@ class PlantResult:
     end_point: Optional[Tuple[int, int]] = None
     threshold_used: Optional[float] = None
     mask: Optional[np.ndarray] = None
+    skeleton: Optional[np.ndarray] = None
+    path: Optional[List[Tuple[int, int]]] = None
 
 
 @dataclass

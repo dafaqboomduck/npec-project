@@ -482,6 +482,9 @@ class PlantMaster:
                 pr.detected = lr.detected
                 pr.length = lr.length if lr.detected else None
                 pr.pixel_count = lr.pixel_count if lr.detected else None
+                if lr.path_result:
+                    pr.skeleton = lr.path_result.skeleton
+                    pr.path = lr.path_result.path
 
             if pid in endpoint_info and endpoint_info[pid]["detected"]:
                 ep = endpoint_info[pid]

@@ -1,6 +1,6 @@
 from src.models.length import LengthResult, LengthCalculatorConfig
 
-EMPTY_RESULT = LengthResult(detected=False, length=0, pixel_count=0)
+EMPTY_RESULT = LengthResult(detected=False, length=0, pixel_count=0, path_result=None)
 
 # Return ID constants for calculate_geodesic_length
 RETURN_EMPTY_MASK = 0

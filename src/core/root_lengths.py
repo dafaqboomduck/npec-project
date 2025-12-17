@@ -172,6 +172,13 @@ class LengthCalculator:
                 return nearest
         return sorted_by_y[0] if use_top else sorted_by_y[-1]
 
+    def _expand_skeleton(self, skel_crop, full_shape, y_min, y_max, x_min, x_max):
+        if skel_crop is None:
+            return None
+        full = np.zeros(full_shape, dtype=bool)
+        full[y_min : y_max + 1, x_min : x_max + 1] = skel_crop
+        return full
+
     def _find_alternative_endpoint(
         self,
         skeleton: np.ndarray,
@@ -225,6 +232,29 @@ class LengthCalculator:
             max_path=max_path,
         )
 
+        # Convert path_result to full image coordinates
+        full_path_result = PathResult(
+            length=path_result.length,
+            path=(
+                [(y + y_min, x + x_min) for y, x in path_result.path]
+                if path_result.path
+                else []
+            ),
+            skeleton=self._expand_skeleton(
+                path_result.skeleton, labels.shape, y_min, y_max, x_min, x_max
+            ),
+            start=(
+                (path_result.start[0] + y_min, path_result.start[1] + x_min)
+                if path_result.start
+                else None
+            ),
+            end=(
+                (path_result.end[0] + y_min, path_result.end[1] + x_min)
+                if path_result.end
+                else None
+            ),
+        )
+
         self._log_result(plant_id, path_result, return_code)
 
         return (
@@ -232,6 +262,7 @@ class LengthCalculator:
                 detected=True,
                 length=int(path_result.length),
                 pixel_count=pixel_count,
+                path_result=full_path_result,
             ),
             return_code,
         )
