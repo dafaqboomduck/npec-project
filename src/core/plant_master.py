@@ -315,7 +315,7 @@ class PlantMaster:
             (filtered_mask, labels)
         """
         # Create binary mask at final threshold
-        root_mask = (root_probs > self.thresholds_config.root_threshold_final).astype(
+        root_mask = (root_probs > optimal_threshold).astype(
             np.uint8
         ) * 255
 

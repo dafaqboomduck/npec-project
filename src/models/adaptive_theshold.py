@@ -9,7 +9,6 @@ class AdaptiveThresholdConfig:
         adaptive_threshold_start: Initial (high) confidence threshold (0-1).
         adaptive_threshold_end: Final (low) confidence threshold (0-1).
         adaptive_threshold_step: Step size for threshold iteration.
-        root_threshold_final: Threshold for final root mask generation.
         shoot_overlap_penalty: Confidence penalty applied in shoot overlap regions.
         shoot_overlap_min_conf: Minimum confidence required in overlap regions.
     """
@@ -17,6 +16,5 @@ class AdaptiveThresholdConfig:
     adaptive_threshold_start: float
     adaptive_threshold_end: float
     adaptive_threshold_step: float
-    root_threshold_final: float
     shoot_overlap_penalty: float
     shoot_overlap_min_conf: float
