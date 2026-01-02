@@ -12,7 +12,7 @@ PATCH_SIZE = 512
 
 # Path to the saved root detection model
 ROOT_MODEL_PATH = (
-    BASE_DIR / "src" / "artifacts" / "models" / "distilled_student_model.keras"
+    BASE_DIR / "src" / "artifacts" / "models" / "messi.keras"
 )
 
 # Path to the saved anchor detection model
@@ -29,7 +29,7 @@ ENSEMBLE_STRATEGY = MaskCombineStrategy.UNION
 # Model configurations
 ROOT_MODEL_CONFIG = ModelConfig(
     checkpoint=str(ROOT_MODEL_PATH),
-    threshold=0.5,  # 50% confidence threshold
+    threshold=0.01,  # 50% confidence threshold
     patch_size=512,
     batch_size=4,
     custom_objects=CUSTOM_OBJECTS,
