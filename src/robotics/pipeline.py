@@ -22,7 +22,7 @@ from src.configs.segmentation import SEGMENTATION_CONFIG
 from src.configs.robotics import ENV_CONFIG, CONTROLLER_CONFIG
 from src.configs.lenghts import LENGTH_CALCULATOR_CONFIG
 from src.helpers.extract_petri_dish import extract_petri_dish
-import src.robotics.ot2_env
+import src.robotics.ot2_env # Import used for serialization
 from src.robotics.pid import PIDController
 from src.models import (
     SegmentationConfig,
