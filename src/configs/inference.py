@@ -5,14 +5,9 @@ from src.inference.custom_functions import dice_bce_loss, f1, iou
 # Patch size for the model
 PATCH_SIZE = 512
 
-# # Path to the saved root detection model
-# ROOT_MODEL_PATH = (
-#     BASE_DIR / "src" / "artifacts" / "models" / "root_det_model_512px.keras"
-# )
-
 # Path to the saved root detection model
 ROOT_MODEL_PATH = (
-    BASE_DIR / "src" / "artifacts" / "models" / "messi.keras"
+    BASE_DIR / "src" / "artifacts" / "models" / "root_det_model_512px.keras"
 )
 
 # Path to the saved anchor detection model
