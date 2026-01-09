@@ -275,60 +275,43 @@ class RoboticsPipeline:
 
                 if dropped_idx is not None:
                     targets_completed = dropped_idx + 1
-                    target_pos = targets[dropped_idx]
-                    
-                    # Get pipette position at moment of drop
-                    pipette_pos = obs[6:9]
-                    
-                    # Get the actual droplet positions from the sim
-                    droplet_positions = unwrapped_env.sim.droplet_positions
-                    actual_pos = None
-                    for specimen_key, positions in droplet_positions.items():
-                        if positions:
-                            actual_pos = positions[-1]  # Last dropped position
-                    
+                    target = targets[dropped_idx]
+                    pipette = obs[6:9]
+                    dist = np.linalg.norm(np.array(target[:2]) - pipette[:2])
                     logger.debug(
-                        f"DROP {dropped_idx}: "
-                        f"target=({target_pos[0]:.6f}, {target_pos[1]:.6f}, {target_pos[2]:.6f}), "
-                        f"pipette=({pipette_pos[0]:.6f}, {pipette_pos[1]:.6f}, {pipette_pos[2]:.6f}), "
-                        f"actual={actual_pos}, "
-                        f"step={step}"
+                        f"DROP {dropped_idx}: pipette=({pipette[0]:.4f}, {pipette[1]:.4f}), "
+                        f"dist={dist:.6f}"
                     )
 
-                # Update environment target visualization
                 if controller.state.current_target_idx < len(targets):
                     unwrapped_env.target = np.array(
                         targets[controller.state.current_target_idx], dtype=np.float32
                     )
 
-                # Execute action BEFORE checking done
                 obs, reward, terminated, truncated, info = self.env.step(action)
 
                 if done:
-                    # Run extra physics steps to let last droplet land
                     for _ in range(20):
                         self.env.step(np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32))
-                    
-                    logger.info(f"All targets completed at step {step}!")
-                    droplet_count = sum(len(pos) for pos in unwrapped_env.sim.droplet_positions.values())
-                    logger.debug(f"Total droplets on specimen: {droplet_count}, targets: {len(targets)}")
                     break
 
                 if terminated or truncated:
                     logger.debug(f"Episode ended at step {step}")
                     break
 
-            # Final summary of all droplet positions
-            logger.debug("=== DROPLET SUMMARY ===")
-            for i, target in enumerate(targets):
-                logger.debug(f"Target {i}: ({target[0]:.6f}, {target[1]:.6f}, {target[2]:.6f})")
-            
+            # Log final errors
             droplet_positions = unwrapped_env.sim.droplet_positions
-            for specimen_key, positions in droplet_positions.items():
-                for i, pos in enumerate(positions):
-                    logger.debug(f"Actual {i}: ({pos[0]:.6f}, {pos[1]:.6f}, {pos[2]:.6f})")
+            actuals = []
+            for positions in droplet_positions.values():
+                actuals.extend(positions)
+            
+            for i, (target, actual) in enumerate(zip(targets, actuals)):
+                err_x = actual[0] - target[0]
+                err_y = actual[1] - target[1]
+                err_dist = np.sqrt(err_x**2 + err_y**2)
+                logger.debug(f"DROP {i} error: dx={err_x:.4f}, dy={err_y:.4f}, dist={err_dist:.6f}")
 
-            logger.info(f"Finished! Dropped at {targets_completed} targets")
+            logger.info(f"Finished! Dropped at {targets_completed}/{len(targets)} targets")
             return targets_completed
 
 
