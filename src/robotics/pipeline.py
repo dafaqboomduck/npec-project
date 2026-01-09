@@ -28,7 +28,6 @@ from src.models import (
     ControllerConfig,
     AdaptiveThresholdConfig,
     ImageResult,
-    PIDControllerConfig,
 )
 from src.models.length import LengthCalculatorConfig
 from src.exceptions import InitializationError
@@ -261,7 +260,7 @@ class RoboticsPipeline:
         ) -> int:
             """Execute the robotic manipulation loop using the provided controller."""
             unwrapped_env = self.env.unwrapped
-            obs, _ = self.env.reset(seed=42)
+            obs, info = self.env.reset(seed=42)
             controller.reset()
 
             if targets:
@@ -271,15 +270,15 @@ class RoboticsPipeline:
             targets_completed = 0
 
             for step in range(max_steps):
-                action, done, dropped_idx = controller.step(obs, targets, dt)
+                action, done, completed_idx = controller.step(obs, info, targets, dt)
 
-                if dropped_idx is not None:
-                    targets_completed = dropped_idx + 1
-                    target = targets[dropped_idx]
-                    pipette = obs[6:9]
+                if completed_idx is not None:
+                    targets_completed = completed_idx + 1
+                    target = targets[completed_idx]
+                    pipette = controller.get_pipette_position(info)
                     dist = np.linalg.norm(np.array(target[:2]) - pipette[:2])
                     logger.debug(
-                        f"DROP {dropped_idx}: pipette=({pipette[0]:.4f}, {pipette[1]:.4f}), "
+                        f"TARGET {completed_idx}: pipette=({pipette[0]:.4f}, {pipette[1]:.4f}), "
                         f"dist={dist:.6f}"
                     )
 
@@ -292,26 +291,14 @@ class RoboticsPipeline:
 
                 if done:
                     for _ in range(20):
-                        self.env.step(np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32))
+                        self.env.step(np.array([0.0, 0.0, 0.0], dtype=np.float32))
                     break
 
                 if terminated or truncated:
                     logger.debug(f"Episode ended at step {step}")
                     break
 
-            # Log final errors
-            droplet_positions = unwrapped_env.sim.droplet_positions
-            actuals = []
-            for positions in droplet_positions.values():
-                actuals.extend(positions)
-            
-            for i, (target, actual) in enumerate(zip(targets, actuals)):
-                err_x = actual[0] - target[0]
-                err_y = actual[1] - target[1]
-                err_dist = np.sqrt(err_x**2 + err_y**2)
-                logger.debug(f"DROP {i} error: dx={err_x:.4f}, dy={err_y:.4f}, dist={err_dist:.6f}")
-
-            logger.info(f"Finished! Dropped at {targets_completed}/{len(targets)} targets")
+            logger.info(f"Finished! Completed {targets_completed}/{len(targets)} targets")
             return targets_completed
 
 
