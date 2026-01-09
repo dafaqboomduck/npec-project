@@ -2,7 +2,7 @@
 PID-based robot controller implementation.
 """
 
-from typing import Optional
+from typing import Optional, Dict
 import numpy as np
 
 from .base import BaseController
@@ -26,8 +26,8 @@ class PIDRobotController(BaseController):
         self.output_limits = output_limits
 
         super().__init__(
-            drop_threshold=self.config.drop_threshold,
-            drop_cooldown=self.config.drop_cooldown,
+            target_threshold=getattr(self.config, 'target_threshold', None) or getattr(self.config, 'drop_threshold', 0.001),
+            dwell_steps=getattr(self.config, 'dwell_steps', None) or getattr(self.config, 'drop_cooldown', 10),
         )
 
         self._init_pid_controllers()
@@ -65,14 +65,15 @@ class PIDRobotController(BaseController):
     def compute_action(
         self,
         obs: np.ndarray,
+        info: Dict,
         target: np.ndarray,
         dt: float,
     ) -> np.ndarray:
         """Compute PID control action."""
-        error, _ = self.compute_error(obs, target)
+        error, _ = self.compute_error(info, target)
 
         control_x = self.pid_x.compute(error[0], dt, output_limits=self.output_limits)
         control_y = self.pid_y.compute(error[1], dt, output_limits=self.output_limits)
         control_z = self.pid_z.compute(error[2], dt, output_limits=self.output_limits)
 
-        return np.array([control_x, control_y, control_z, 0.0], dtype=np.float32)
+        return np.array([control_x, control_y, control_z], dtype=np.float32)

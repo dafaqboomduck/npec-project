@@ -207,64 +207,82 @@ class RoboticsPipeline:
         return targets
 
     def run_robotic_manipulation(
-        self,
-        starting_point: Tuple[float, float] = (0.0, 0.0),
-        max_steps: Optional[int] = None,
-        controller: Optional[BaseController] = None,
-    ) -> int:
-        """
-        Run complete robotic manipulation pipeline.
+            self,
+            starting_point: Tuple[float, float] = (0.0, 0.0),
+            starting_z: float = 0.1215,
+            max_steps: Optional[int] = None,
+            controller: Optional[BaseController] = None,
+        ) -> int:
+            """
+            Run complete robotic manipulation pipeline.
 
-        Args:
-            starting_point: (x, y) offset in meters for coordinate conversion
-            max_steps: Override max steps (uses controller_config.max_steps if None)
-            controller: Optional controller override for this run only
+            Args:
+                starting_point: (x, y) offset in meters for coordinate conversion
+                starting_z: z coordinate for pipette starting position
+                max_steps: Override max steps (uses controller_config.max_steps if None)
+                controller: Optional controller override for this run only
 
-        Returns:
-            Number of targets successfully reached
-        """
-        active_controller = controller or self.controller
-        max_steps = max_steps or self.controller_config.max_steps
+            Returns:
+                Number of targets successfully reached
+            """
+            active_controller = controller or self.controller
+            max_steps = max_steps or self.controller_config.max_steps
 
-        # Step 1: Get image from robot camera
-        logger.info("Capturing image from robot camera...")
-        unwrapped_env = self.env.unwrapped
-        image_path = unwrapped_env.sim.get_plate_image()
-        img = cv2.imread(image_path)
-        if img is None:
-            logger.error(f"Failed to load image from {image_path}")
-            return 0
+            # Step 1: Get image from robot camera
+            logger.info("Capturing image from robot camera...")
+            unwrapped_env = self.env.unwrapped
+            image_path = unwrapped_env.sim.get_plate_image()
+            img = cv2.imread(image_path)
+            if img is None:
+                logger.error(f"Failed to load image from {image_path}")
+                return 0
 
-        # Step 2: Detect root tips
-        logger.info("Detecting root tips...")
-        root_tips = self.get_coordinates(img=img, img_filename=image_path)
-        if not root_tips:
-            logger.error("No root tips detected")
-            return 0
+            # Step 2: Detect root tips
+            logger.info("Detecting root tips...")
+            root_tips = self.get_coordinates(img=img, img_filename=image_path)
+            if not root_tips:
+                logger.error("No root tips detected")
+                return 0
 
-        # Step 3: Compute targets
-        logger.info(f"Converting coordinates for {len(root_tips)} plants...")
-        targets = self._compute_targets(img, root_tips, starting_point)
-        if not targets:
-            logger.error("Failed to compute targets")
-            return 0
+            # Step 3: Compute targets
+            logger.info(f"Converting coordinates for {len(root_tips)} plants...")
+            targets = self._compute_targets(img, root_tips, starting_point)
+            if not targets:
+                logger.error("Failed to compute targets")
+                return 0
 
-        # Step 4: Execute manipulation loop
-        logger.info(
-            f"Starting manipulation for {len(targets)} targets using {type(active_controller).__name__}"
-        )
-        return self._execute_manipulation(targets, active_controller, max_steps)
+            # Step 4: Execute manipulation loop
+            logger.info(
+                f"Starting manipulation for {len(targets)} targets using {type(active_controller).__name__}"
+            )
+            starting_position = (starting_point[0], starting_point[1], starting_z)
+            return self._execute_manipulation(targets, active_controller, max_steps, starting_position)
 
     def _execute_manipulation(
-            self, targets: List[List[float]], controller: BaseController, max_steps: int
+            self, targets: List[List[float]], controller: BaseController, max_steps: int,
+            starting_position: Tuple[float, float, float] = None,
         ) -> int:
             """Execute the robotic manipulation loop using the provided controller."""
             unwrapped_env = self.env.unwrapped
             obs, info = self.env.reset(seed=42)
             controller.reset()
 
+            # Disable env's single-target termination for multi-target manipulation
+            unwrapped_env.dwell_steps = max_steps + 1
+
+            # Set pipette to starting position
+            if starting_position:
+                unwrapped_env.sim.set_start_position(*starting_position)
+                states = unwrapped_env.sim.get_states()
+                obs = unwrapped_env._get_obs(states)
+                info = unwrapped_env._get_info(states)
+
             if targets:
                 unwrapped_env.target = np.array(targets[0], dtype=np.float32)
+
+            # Debug: Check initial state
+            pipette_pos = controller.get_pipette_position(info)
+            logger.debug(f"Initial pipette position: ({pipette_pos[0]:.4f}, {pipette_pos[1]:.4f}, {pipette_pos[2]:.4f})")
 
             dt = self.controller_config.dt
             targets_completed = 0
@@ -281,6 +299,8 @@ class RoboticsPipeline:
                         f"TARGET {completed_idx}: pipette=({pipette[0]:.4f}, {pipette[1]:.4f}), "
                         f"dist={dist:.6f}"
                     )
+                    # Reset env's dwell counter when moving to next target
+                    unwrapped_env._steps_at_target = {i: 0 for i in range(unwrapped_env.num_agents)}
 
                 if controller.state.current_target_idx < len(targets):
                     unwrapped_env.target = np.array(
@@ -295,7 +315,11 @@ class RoboticsPipeline:
                     break
 
                 if terminated or truncated:
-                    logger.debug(f"Episode ended at step {step}")
+                    pipette_pos = controller.get_pipette_position(info)
+                    logger.debug(
+                        f"Episode ended at step {step}: terminated={terminated}, truncated={truncated}, "
+                        f"pipette=({pipette_pos[0]:.4f}, {pipette_pos[1]:.4f}, {pipette_pos[2]:.4f})"
+                    )
                     break
 
             logger.info(f"Finished! Completed {targets_completed}/{len(targets)} targets")
