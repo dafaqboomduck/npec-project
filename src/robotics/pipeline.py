@@ -36,7 +36,7 @@ from src.exceptions import InitializationError
 from src.robotics.controllers import BaseController, PIDRobotController
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -295,10 +295,15 @@ class RoboticsPipeline:
                     target = targets[completed_idx]
                     pipette = controller.get_pipette_position(info)
                     dist = np.linalg.norm(np.array(target[:2]) - pipette[:2])
+                    
+                    # Drop the droplet
+                    unwrapped_env.sim.drop(unwrapped_env.sim.robotIds[0])
+                    
                     logger.debug(
-                        f"TARGET {completed_idx}: pipette=({pipette[0]:.4f}, {pipette[1]:.4f}), "
+                        f"DROP {completed_idx}: pipette=({pipette[0]:.4f}, {pipette[1]:.4f}), "
                         f"dist={dist:.6f}"
                     )
+                    
                     # Reset env's dwell counter when moving to next target
                     unwrapped_env._steps_at_target = {i: 0 for i in range(unwrapped_env.num_agents)}
 
@@ -310,6 +315,7 @@ class RoboticsPipeline:
                 obs, reward, terminated, truncated, info = self.env.step(action)
 
                 if done:
+                    # Let last droplet settle
                     for _ in range(20):
                         self.env.step(np.array([0.0, 0.0, 0.0], dtype=np.float32))
                     break
@@ -321,6 +327,18 @@ class RoboticsPipeline:
                         f"pipette=({pipette_pos[0]:.4f}, {pipette_pos[1]:.4f}, {pipette_pos[2]:.4f})"
                     )
                     break
+
+            # Log final errors
+            droplet_positions = unwrapped_env.sim.droplet_positions
+            actuals = []
+            for positions in droplet_positions.values():
+                actuals.extend(positions)
+            
+            for i, (target, actual) in enumerate(zip(targets, actuals)):
+                err_x = actual[0] - target[0]
+                err_y = actual[1] - target[1]
+                err_dist = np.sqrt(err_x**2 + err_y**2)
+                logger.debug(f"DROP {i} error: dx={err_x:.4f}, dy={err_y:.4f}, dist={err_dist:.6f}")
 
             logger.info(f"Finished! Completed {targets_completed}/{len(targets)} targets")
             return targets_completed
