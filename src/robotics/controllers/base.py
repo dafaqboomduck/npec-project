@@ -63,53 +63,59 @@ class BaseController(ABC):
         return error, distance
 
     def step(
-        self,
-        obs: np.ndarray,
-        targets: List[np.ndarray],
-        dt: float,
-    ) -> tuple[np.ndarray, bool, Optional[int]]:
-        """
-        Execute one control step.
+            self,
+            obs: np.ndarray,
+            targets: List[np.ndarray],
+            dt: float,
+        ) -> tuple[np.ndarray, bool, Optional[int]]:
+            """
+            Execute one control step.
 
-        Args:
-            obs: Current observation
-            targets: List of target positions
-            dt: Time step
+            Args:
+                obs: Current observation
+                targets: List of target positions
+                dt: Time step
 
-        Returns:
-            Tuple of (action, done, dropped_target_idx)
-            - action: The action to execute
-            - done: Whether all targets are complete
-            - dropped_target_idx: Index of target just dropped at, or None
-        """
-        if self.state.current_target_idx >= len(targets):
-            return np.zeros(4, dtype=np.float32), True, None
+            Returns:
+                Tuple of (action, done, dropped_target_idx)
+                - action: The action to execute
+                - done: Whether all targets are complete
+                - dropped_target_idx: Index of target just dropped at, or None
+            """
+            if self.state.current_target_idx >= len(targets):
+                return np.zeros(4, dtype=np.float32), True, None
 
-        target = np.array(targets[self.state.current_target_idx], dtype=np.float32)
-        error, distance = self.compute_error(obs, target)
-        dropped_target_idx = None
+            target = np.array(targets[self.state.current_target_idx], dtype=np.float32)
+            error, distance = self.compute_error(obs, target)
+            dropped_target_idx = None
 
-        if not self.state.dropped_at_target:
-            if distance <= self.drop_threshold:
-                action = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
-                self.state.dropped_at_target = True
-                self.state.cooldown_counter = 0
-                dropped_target_idx = self.state.current_target_idx
+            if not self.state.dropped_at_target:
+                if distance <= self.drop_threshold:
+                    action = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+                    self.state.dropped_at_target = True
+                    self.state.cooldown_counter = 0
+                    dropped_target_idx = self.state.current_target_idx
+                else:
+                    action = self.compute_action(obs, target, dt)
             else:
-                action = self.compute_action(obs, target, dt)
-        else:
-            self.state.cooldown_counter += 1
-            action = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+                self.state.cooldown_counter += 1
+                action = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
 
-            if self.state.cooldown_counter >= self.drop_cooldown:
-                self.state.current_target_idx += 1
-                self.state.dropped_at_target = False
-                self.state.cooldown_counter = 0
-                self._on_target_complete()
+                if self.state.cooldown_counter >= self.drop_cooldown:
+                    self.state.current_target_idx += 1
+                    self.state.dropped_at_target = False
+                    self.state.cooldown_counter = 0
+                    self._on_target_complete()
 
-        self.state.step += 1
-        done = self.state.current_target_idx >= len(targets)
-        return action, done, dropped_target_idx
+            self.state.step += 1
+            
+            # Only mark done after cooldown completes AND we've moved past all targets
+            # This ensures the last droplet has time to land
+            done = (
+                self.state.current_target_idx >= len(targets) 
+                and not self.state.dropped_at_target
+            )
+            return action, done, dropped_target_idx
 
     def _on_target_complete(self) -> None:
         """Hook called when a target is completed. Override to reset internal state."""
