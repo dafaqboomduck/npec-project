@@ -345,11 +345,39 @@ class RoboticsPipeline:
 
 
 def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Run robotic manipulation pipeline")
+    parser.add_argument(
+        "--controller", 
+        type=str, 
+        default="pid", 
+        choices=["pid", "rl"],
+        help="Controller type: 'pid' or 'rl'"
+    )
+    parser.add_argument(
+        "--model-path",
+        type=str,
+        default=None,
+        help="Path to RL model (only used if --controller=rl)"
+    )
+    args = parser.parse_args()
+
+    # Select controller
+    if args.controller == "rl":
+        from src.robotics.controllers import RLController
+        controller = RLController(model_path=args.model_path)
+        logger.info(f"Using RL controller with model: {args.model_path}")
+    else:
+        controller = PIDRobotController()
+        logger.info("Using PID controller")
+
     pipeline = RoboticsPipeline(
         inference_config=INFERENCE_CONFIG,
         segmentation_config=SEGMENTATION_CONFIG,
         env_config=ENV_CONFIG,
         controller_config=CONTROLLER_CONFIG,
+        controller=controller,
     )
 
     num_drops = pipeline.run_robotic_manipulation(starting_point=(0.10775, 0.062))

@@ -2,11 +2,14 @@
 Reinforcement Learning robot controller implementation.
 """
 
+import logging
 from typing import Optional, Dict
 from pathlib import Path
 import numpy as np
 
 from .base import BaseController
+
+logger = logging.getLogger(__name__)
 
 
 class RLController(BaseController):
@@ -47,10 +50,19 @@ class RLController(BaseController):
         """Load the trained RL model."""
         from stable_baselines3 import PPO
 
+        # Handle relative paths from project root
+        if not self.model_path.is_absolute():
+            # Try relative to current working directory
+            if not self.model_path.exists():
+                # Try relative to this file's location (src/robotics/controllers/)
+                project_root = Path(__file__).parent.parent.parent.parent
+                self.model_path = project_root / self.model_path
+
         if not self.model_path.exists():
             raise FileNotFoundError(f"Model not found: {self.model_path}")
 
         self.model = PPO.load(self.model_path)
+        logger.info(f"Loaded RL model from {self.model_path}")
 
     def _on_reset(self) -> None:
         """No additional reset needed for RL controller."""
