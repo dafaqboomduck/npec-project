@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from src.inference import InferenceManager
 from src.core.plant_segmenation import PlantSegmentation
 from src.core.root_lengths import LengthCalculator
-from src.core.plant_segmenation import PlantSegmentation
+from src.helpers.extract_petri_dish import extract_petri_dish
 from src.models import (
     Anchor,
     ModelConfig,
@@ -34,6 +34,10 @@ class PlantMaster:
     - Adaptive threshold detection
     - Root segmentation and assignment
     - Length calculation
+    
+    Can operate in two modes:
+    - Full image mode (crop_to_dish=False): processes entire image
+    - Dish mode (crop_to_dish=True): extracts and processes petri dish only
     """
 
     def __init__(
@@ -43,6 +47,7 @@ class PlantMaster:
         calculator_config: LengthCalculatorConfig,
         thresholds_config: AdaptiveThresholdConfig,
         plant_zones: Optional[Dict[int, Tuple[int, int]]] = None,
+        crop_to_dish: bool = False,
     ):
         self._deserialize_configs(
             inference_config,
@@ -51,9 +56,13 @@ class PlantMaster:
             thresholds_config,
             plant_zones,
         )
+        self.crop_to_dish = crop_to_dish
         self._init_components()
         self.num_plants = len(self.plant_zones)
-        logger.debug(f"PlantMaster initialized for {self.num_plants} plant zones")
+        logger.debug(
+            f"PlantMaster initialized for {self.num_plants} plant zones "
+            f"(crop_to_dish={crop_to_dish})"
+        )
 
     def _deserialize_configs(
         self,
@@ -72,22 +81,9 @@ class PlantMaster:
         )
 
     def _init_components(self) -> None:
-        """Initialize all pipeline components with error handling.
-
-        Loads deep learning models, segmentor, and robotics environment.
-        Each component is loaded independently with specific error handling.
-
-        Args:
-            inference_config: Configuration for inference models
-            segmentation_config: Configuration for plant segmentation
-            env_config: Configuration for robotics environment
-
-        Raises:
-            ConfigurationError: If any component fails to initialize
-        """
+        """Initialize all pipeline components with error handling."""
         logger.debug("Initializing pipeline components...")
         try:
-            # Load root detection model
             try:
                 self.root_manager = InferenceManager(self.inference_config[0])
                 logger.debug("✓ Root model loaded")
@@ -95,7 +91,6 @@ class PlantMaster:
                 logger.exception(f"⚠ Failed to load Root model. Exception: {e}")
                 raise ConfigurationError
 
-            # Load anchor detection model
             try:
                 self.anchor_manager = InferenceManager(self.inference_config[1])
                 logger.debug("✓ Anchor model loaded")
@@ -103,7 +98,6 @@ class PlantMaster:
                 logger.exception(f"⚠ Failed to load Anchor model. Exception: {e}")
                 raise ConfigurationError
 
-            # Initialize plant segmentor
             try:
                 self.segmentor = PlantSegmentation(self.segmentation_config)
                 logger.debug("✓ Segmentor instance loaded")
@@ -111,7 +105,6 @@ class PlantMaster:
                 logger.exception(f"⚠ Failed to load Segmentor. Exception: {e}")
                 raise ConfigurationError
 
-            # Initialize length calcualtor
             try:
                 self.calculator = LengthCalculator(self.calculator_config)
                 logger.debug("✓ Calculator instance loaded")
@@ -122,9 +115,27 @@ class PlantMaster:
             logger.debug("Pipeline Components initialized successfully!")
         except Exception as e:
             logger.exception(
-                f"UNEXPECTED ERROR: Encountered an unexpected error while initializing the pipeline components. Exception: {e}"
+                f"UNEXPECTED ERROR: Encountered an unexpected error while "
+                f"initializing the pipeline components. Exception: {e}"
             )
             raise ConfigurationError
+
+    def _preprocess_image(self, img: np.ndarray) -> Tuple[np.ndarray, Optional[Tuple[int, int]]]:
+        """
+        Preprocess image based on crop mode.
+        
+        Returns:
+            Tuple of (processed_image, crop_offset)
+            crop_offset is (y_offset, x_offset) if cropped, None otherwise
+        """
+        if self.crop_to_dish:
+            dish = extract_petri_dish(img)
+            # Calculate offset for coordinate mapping if needed later
+            # Note: extract_petri_dish returns just the cropped region
+            # If you need the offset, you may need to modify extract_petri_dish
+            # to return it, or calculate it here
+            return dish, None  # For now, offset tracking not needed since we stay in dish coords
+        return img, None
 
     def _run_inference(self, img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -142,7 +153,7 @@ class PlantMaster:
             root_padded, patch_size=self.inference_config[0].patch_size
         )
 
-        # Anchor inference - binarize
+        # Anchor inference
         anchor_patches = self.anchor_manager.patch_image(
             img, patch_size=self.inference_config[1].patch_size, normalize=True
         )
@@ -151,6 +162,15 @@ class PlantMaster:
             anchor_padded, patch_size=self.inference_config[1].patch_size
         )
 
+        # If in crop mode, extract dish region from restored masks
+        if self.crop_to_dish:
+            if self.root_manager.crop_coords is not None:
+                x1, y1, x2, y2 = self.root_manager.crop_coords
+                root_probs = root_probs[y1:y2, x1:x2]
+            if self.anchor_manager.crop_coords is not None:
+                x1, y1, x2, y2 = self.anchor_manager.crop_coords
+                anchor_probs = anchor_probs[y1:y2, x1:x2]
+
         return root_probs, anchor_probs
 
     def _apply_shoot_penalty(
@@ -158,8 +178,6 @@ class PlantMaster:
     ) -> np.ndarray:
         """
         Apply confidence penalty to root predictions overlapping with shoots.
-
-        In overlap regions, requires higher confidence for root classification.
         """
         adjusted = root_probs.copy()
         overlap = anchor_mask > 0
@@ -167,7 +185,6 @@ class PlantMaster:
         penalty = self.thresholds_config.shoot_overlap_penalty
         min_conf = self.thresholds_config.shoot_overlap_min_conf
 
-        # In overlap regions: subtract penalty if above min_conf, else zero out
         adjusted[overlap] = np.where(
             root_probs[overlap] >= min_conf, root_probs[overlap] - penalty, 0
         )
@@ -185,7 +202,6 @@ class PlantMaster:
             for zid in self.plant_zones.keys()
         }
 
-        # Binarize at threshold
         binary_mask = (probs > threshold).astype(np.uint8) * 255
 
         for anchor in anchors:
@@ -196,7 +212,6 @@ class PlantMaster:
             x_min, y_min, x_max, y_max = anchor.bbox
             zone_x_min, zone_x_max = self.plant_zones[zid]
 
-            # Create zone-restricted mask
             zone_mask = np.zeros_like(binary_mask, dtype=np.uint8)
             zone_mask[:, zone_x_min:zone_x_max] = binary_mask[:, zone_x_min:zone_x_max]
 
@@ -204,7 +219,6 @@ class PlantMaster:
                 zone_mask, connectivity=8
             )
 
-            # Find best component starting near anchor
             best_comp = None
             best_score = -1
             bbox_tol = self.segmentation_config.bbox_tolerance
@@ -217,17 +231,13 @@ class PlantMaster:
                 if len(ys) == 0:
                     continue
 
-                # Get topmost point
                 top_y = ys.min()
                 top_x = int(np.mean(xs[ys == top_y]))
 
-                # Check if in anchor bbox region
                 if (
                     x_min - bbox_tol <= top_x <= x_max + bbox_tol
                     and y_min - bbox_tol <= top_y <= y_max + bbox_tol * 2
                 ):
-
-                    # Score by area and proximity to anchor
                     ax, ay = anchor.centroid
                     dist = np.sqrt((top_x - ax) ** 2 + (top_y - ay) ** 2)
                     score = area / (dist + 1)
@@ -243,7 +253,6 @@ class PlantMaster:
             if best_comp is None:
                 continue
 
-            # Find endpoint (bottommost point)
             ys, xs = np.where(best_comp["mask"])
             y_range = ys.max() - ys.min()
             bottom_thresh = ys.min() + y_range * (
@@ -272,9 +281,6 @@ class PlantMaster:
     ) -> Tuple[float, Dict[int, Dict], bool]:
         """
         Iteratively lower threshold until all plants have endpoints.
-
-        Returns:
-            (optimal_threshold, endpoint_results, all_found)
         """
         cfg = self.thresholds_config
         thresholds = np.arange(
@@ -294,7 +300,6 @@ class PlantMaster:
             if found_count == self.num_plants:
                 return thresh, results, True
 
-        # Final attempt at lowest threshold
         results = self._find_endpoints_at_threshold(
             root_probs, anchors, cfg.adaptive_threshold_end
         )
@@ -310,14 +315,8 @@ class PlantMaster:
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Segment roots using endpoint info and merge components.
-
-        Returns:
-            (filtered_mask, labels)
         """
-        # Create binary mask at final threshold
-        root_mask = (root_probs > optimal_threshold).astype(
-            np.uint8
-        ) * 255
+        root_mask = (root_probs > optimal_threshold).astype(np.uint8) * 255
 
         num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
             root_mask, connectivity=8
@@ -336,7 +335,6 @@ class PlantMaster:
             start_y, start_x = ep_data["start"]
             zone_x_min, zone_x_max = self.plant_zones[zid]
 
-            # Find components connected to start point
             zone_components = []
             for lid in range(1, num_labels):
                 area = stats[lid, cv2.CC_STAT_AREA]
@@ -346,11 +344,9 @@ class PlantMaster:
                 comp_mask = labels == lid
                 ys, xs = np.where(comp_mask)
 
-                # Check zone overlap
                 if not (xs.min() < zone_x_max and xs.max() > zone_x_min):
                     continue
 
-                # Check connection to start region
                 start_region = comp_mask[
                     max(0, start_y - 30) : start_y + 50,
                     max(0, start_x - 30) : min(comp_mask.shape[1], start_x + 30),
@@ -364,12 +360,10 @@ class PlantMaster:
                 else:
                     continue
             else:
-                # Merge all connected components
                 merged = zone_components[0]["mask"].copy()
                 for comp in zone_components[1:]:
                     merged = merged | comp["mask"]
 
-            # Dilate and merge nearby fragments
             kernel = cv2.getStructuringElement(
                 cv2.MORPH_ELLIPSE, (merge_dist // 2, merge_dist // 2)
             )
@@ -385,7 +379,6 @@ class PlantMaster:
             filtered_mask[merged] = 255
             final_labels[merged] = zid + 1
 
-            # Update endpoint with merged mask endpoint
             ys, xs = np.where(merged)
             if len(ys) > 0:
                 end_y = ys.max()
@@ -409,8 +402,15 @@ class PlantMaster:
 
         Returns:
             ImageResult with all detection and measurement data
+            
+        Note:
+            If crop_to_dish=True, all coordinates in the result are 
+            relative to the cropped dish region.
         """
-        logger.debug(f"Processing: {image_name}")
+        logger.debug(f"Processing: {image_name} (crop_to_dish={self.crop_to_dish})")
+
+        # Preprocess (crop if needed)
+        processed_img, _ = self._preprocess_image(img)
 
         # Initialize result
         result = ImageResult(
@@ -420,7 +420,7 @@ class PlantMaster:
 
         # Step 1: Run inference
         logger.debug("Running inference...")
-        root_probs, anchor_probs = self._run_inference(img)
+        root_probs, anchor_probs = self._run_inference(processed_img)
         result.root_probs = root_probs
         anchor_mask = (anchor_probs > self.inference_config[1].threshold).astype(
             np.uint8
@@ -432,14 +432,14 @@ class PlantMaster:
         anchors = self.segmentor.extract_anchors(anchor_mask)
         anchors = self.segmentor.create_anchor_bboxes(
             anchors,
-            img.shape,
+            processed_img.shape,
             self.segmentation_config.anchor_bbox_size,
             self.segmentation_config.vertical_offset,
         )
         result.anchors = anchors
         logger.debug(f"  Found {len(anchors)} anchors")
 
-        # Step 3: Apply shoot penalty (using anchor mask as proxy for shoots)
+        # Step 3: Apply shoot penalty
         logger.debug("Applying shoot penalty...")
         adjusted_probs = self._apply_shoot_penalty(
             root_probs, (anchor_mask > 0).astype(np.uint8)
