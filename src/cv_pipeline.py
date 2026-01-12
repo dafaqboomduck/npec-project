@@ -28,6 +28,7 @@ from src.configs.thresholds import ADAPTIVE_THRESHOLD_CONFIG
 from src.core.plant_master import PlantMaster
 from src.helpers import extract_sort_keys
 from src.models import PlantMeasurement, ImageResult
+from src.exceptions import InitializationError
 
 # Configure logging
 logging.basicConfig(
@@ -35,12 +36,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Keep pipeline logger at DEBUG
-
-
-class InitializationError(Exception):
-    """Raised when pipeline components fail to initialize."""
-
-    pass
 
 
 class CVPipeline:
