@@ -24,7 +24,7 @@ ENSEMBLE_STRATEGY = MaskCombineStrategy.UNION
 # Model configurations
 ROOT_MODEL_CONFIG = ModelConfig(
     checkpoint=str(ROOT_MODEL_PATH),
-    threshold=0.01,  # 50% confidence threshold
+    threshold=0.01,
     patch_size=512,
     batch_size=4,
     custom_objects=CUSTOM_OBJECTS,
@@ -32,7 +32,7 @@ ROOT_MODEL_CONFIG = ModelConfig(
 
 ANCHOR_MODEL_CONFIG = ModelConfig(
     checkpoint=str(ANCHOR_MODEL_PATH),
-    threshold=0.001,  # Lower threshold for anchor detection
+    threshold=0.001,
     patch_size=512,
     batch_size=4,
     custom_objects=CUSTOM_OBJECTS,
