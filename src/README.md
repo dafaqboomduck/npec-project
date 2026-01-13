@@ -403,20 +403,18 @@ python -m src.robotics.pipeline --controller rl --model-path artifacts/models/rl
 ## Dependencies
 
 ### Core
-
 - Python 3.10+
-- TensorFlow / Keras
-- OpenCV
-- NumPy
-- SciPy
-- scikit-image
-- NetworkX
-- Patchify
+- TensorFlow 2.20.0 / Keras 3.12.0
+- OpenCV 4.12.0.88
+- NumPy 2.2.6
+- SciPy 1.15.3
+- scikit-image 0.25.2
+- NetworkX 3.4.2
+- Patchify 0.2.3
 
 ### Robotics
-
-- Gymnasium
-- PyBullet
+- Gymnasium 1.2.2
+- PyBullet 3.2.7
 - Stable Baselines3 (for RL controller)
 
 ---
