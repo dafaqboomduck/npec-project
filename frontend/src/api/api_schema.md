@@ -1,0 +1,1501 @@
+openapi: 3.1.0
+
+info:
+title: CV5 - OpenAPI 3.1
+version: 0.1.0
+description: |-
+REST API for the NPEC plant root segmentation service. Accepts root scan images, runs U-Net inference, and returns segmentation masks, tip locations, and confidence scores. Also exposes endpoints for dataset management, annotation review, model info, training, and monitoring.
+
+    Some useful links:
+    - [CV5 repository](https://github.com/BredaUniversityADSAI/2025-26d-fai2-adsai-group-computervision5)
+
+contact:
+name: Erik Hrina
+email: 230395@buas.nl
+
+servers:
+
+- url: http://localhost:8000/api/v1
+  description: Local development
+- url: https://cv5.internal/api/v1
+  description: On-premise (pending)
+- url: https://api.cv5.ai/api/v1
+  description: Cloud (pending)
+
+# ---------------------------------------------------------------------------
+
+# Tags (for grouping in Swagger UI)
+
+# ---------------------------------------------------------------------------
+
+tags:
+
+- name: Auth
+- name: Health
+- name: Overview
+- name: Dashboard
+- name: Library
+- name: Inference
+- name: Training
+- name: Feedback
+
+# ===========================================================================
+
+# Paths
+
+# ===========================================================================
+
+paths:
+
+# -------------------------------------------------------------------------
+
+# Auth
+
+# -------------------------------------------------------------------------
+
+/auth/token:
+post:
+tags: [Auth]
+summary: Obtain a JWT access token
+description: >
+OAuth2 Password flow. Returns a short-lived access token and a
+long-lived refresh token.
+operationId: authToken
+requestBody:
+required: true
+content:
+application/x-www-form-urlencoded:
+schema:
+$ref: '#/components/schemas/AuthRequest'
+examples:
+standard_login:
+summary: Standard user login
+value:
+username: dr.hrina@npec.nl
+password: secret
+grant_type: password
+responses:
+'200':
+description: Login successful
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/AuthResponse'
+examples:
+user_token:
+summary: Successful login response
+value:
+access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3JfYTFiMmMzZDQiLCJlbWFpbCI6ImRyLmFyaXNha2FAbnBlYy5ubCIsInJvbGUiOiJ1c2VyIiwiZXhwIjoxNzQ1OTE5ODI1LCJpYXQiOjE3NDU5MTYyMjV9.signature
+token_type: bearer
+expires_in: 3600
+refresh_token: dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4tdmVyeS1sb25n
+role: user
+'401':
+description: Invalid credentials
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+'422':
+description: Validation Error (missing fields)
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+
+/auth/refresh:
+post:
+tags: [Auth]
+summary: Refresh access token
+description: >
+Exchange a valid refresh token for a new access token and a rotated
+refresh token. The old refresh token is invalidated immediately.
+operationId: authRefresh
+requestBody:
+required: true
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/TokenRefreshRequest'
+responses:
+'200':
+description: Token refreshed successfully
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/AuthResponse'
+'401':
+description: Refresh token expired or invalid
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+
+/auth/logout:
+post:
+tags: [Auth]
+summary: Invalidate the current session
+description: >
+Invalidates the access token and refresh token for the current session.
+No request body required.
+operationId: authLogout
+security: - BearerAuth: []
+responses:
+'200':
+description: Logged out successfully
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/MessageResponse'
+'401':
+description: Missing or invalid token
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+
+# -------------------------------------------------------------------------
+
+# Health
+
+# -------------------------------------------------------------------------
+
+/health:
+get:
+tags: [Health]
+summary: Service liveness check
+description: Returns API status and version. No authentication required.
+operationId: getHealth
+responses:
+'200':
+description: Service is running
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/HealthResponse'
+
+# -------------------------------------------------------------------------
+
+# Overview
+
+# -------------------------------------------------------------------------
+
+/overview/status:
+get:
+tags: [Overview]
+summary: Lab summary statistics
+description: Returns total experiments, active model count, and data collected.
+operationId: getOverviewStatus
+security: - BearerAuth: []
+responses:
+'200':
+description: Summary statistics
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/OverviewStatusResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+/overview/activity:
+get:
+tags: [Overview]
+summary: Recent activity feed
+description: Paginated feed of recent lab events (retraining, uploads, annotations).
+operationId: getOverviewActivity
+security: - BearerAuth: []
+parameters: - name: page
+in: query
+schema:
+type: integer
+minimum: 1
+default: 1 - name: page_size
+in: query
+schema:
+type: integer
+minimum: 1
+maximum: 100
+default: 20
+responses:
+'200':
+description: Activity feed
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ActivityFeedResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+/overview/model-health:
+get:
+tags: [Overview]
+summary: Active model health summary
+description: Returns current f1, latency, and drift status for the active model.
+operationId: getModelHealth
+security: - BearerAuth: []
+responses:
+'200':
+description: Model health metrics
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ModelHealthResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+/overview/environment:
+get:
+tags: [Overview]
+summary: System environment stats (admin only)
+description: Returns GPU temperature, memory usage, and system status.
+operationId: getEnvironment
+security: - BearerAuth: []
+responses:
+'200':
+description: Environment stats
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/EnvironmentResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'403':
+$ref: '#/components/responses/Forbidden'
+
+# -------------------------------------------------------------------------
+
+# Dashboard
+
+# -------------------------------------------------------------------------
+
+/dashboard/metrics:
+get:
+tags: [Dashboard]
+summary: Top-level KPIs
+operationId: getDashboardMetrics
+security: - BearerAuth: []
+responses:
+'200':
+description: Dashboard KPIs
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/DashboardMetricsResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+/dashboard/f1-history:
+get:
+tags: [Dashboard]
+summary: Validation f1 time-series
+description: Time-series of validation f1 score across training epochs for charting.
+operationId: getF1History
+security: - BearerAuth: []
+responses:
+'200':
+description: F1 score history
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/F1HistoryResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+/dashboard/data-distribution:
+get:
+tags: [Dashboard]
+summary: Sample counts per species
+operationId: getDataDistribution
+security: - BearerAuth: []
+responses:
+'200':
+description: Data distribution by species
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/DataDistributionResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+# -------------------------------------------------------------------------
+
+# Library - Datasets
+
+# -------------------------------------------------------------------------
+
+/datasets:
+get:
+tags: [Library]
+summary: List all datasets
+operationId: listDatasets
+security: - BearerAuth: []
+parameters: - name: species
+in: query
+schema:
+type: string
+example: Arabidopsis thaliana - name: growth_stage
+in: query
+schema:
+type: string
+enum: [seedling, mature]
+responses:
+'200':
+description: Dataset list
+content:
+application/json:
+schema:
+type: array
+items:
+$ref: '#/components/schemas/DatasetSummary'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+/datasets/{dataset_id}:
+get:
+tags: [Library]
+summary: Single dataset detail
+operationId: getDataset
+security: - BearerAuth: []
+parameters: - name: dataset_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Dataset detail
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/DatasetDetail'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+
+# -------------------------------------------------------------------------
+
+# Library — Annotations
+
+# -------------------------------------------------------------------------
+
+/annotations:
+get:
+tags: [Library]
+summary: List all annotations
+operationId: listAnnotations
+security: - BearerAuth: []
+parameters: - name: species
+in: query
+schema:
+type: string - name: growth_stage
+in: query
+schema:
+type: string
+enum: [seedling, mature] - name: page
+in: query
+schema:
+type: integer
+minimum: 1
+default: 1 - name: page_size
+in: query
+schema:
+type: integer
+minimum: 1
+maximum: 100
+default: 20
+responses:
+'200':
+description: Annotation list
+content:
+application/json:
+schema:
+type: array
+items:
+$ref: '#/components/schemas/AnnotationResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+/annotations/{annotation_id}:
+get:
+tags: [Library, Inference]
+summary: Single annotation detail
+operationId: getAnnotation
+security: - BearerAuth: []
+parameters: - name: annotation_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Annotation detail with mask URL
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/AnnotationResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+delete:
+tags: [Inference]
+summary: Delete an annotation
+operationId: deleteAnnotation
+security: - BearerAuth: []
+parameters: - name: annotation_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Annotation deleted
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/MessageResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+
+/annotations/{annotation_id}/confirm:
+post:
+tags: [Inference]
+summary: Submit a corrected annotation mask
+description: >
+Upload a corrected .tiff mask for this annotation. The submitted mask
+becomes ground truth for model retraining.
+operationId: confirmAnnotation
+security: - BearerAuth: []
+parameters: - name: annotation_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+requestBody:
+required: true
+content:
+multipart/form-data:
+schema:
+$ref: '#/components/schemas/AnnotationConfirmRequest'
+responses:
+'200':
+description: Updated annotation object
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/AnnotationResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+'422':
+$ref: '#/components/responses/UnprocessableEntity'
+
+# -------------------------------------------------------------------------
+
+# Library — Models
+
+# -------------------------------------------------------------------------
+
+/models:
+get:
+tags: [Library]
+summary: List all models
+operationId: listModels
+security: - BearerAuth: []
+responses:
+'200':
+description: Model list
+content:
+application/json:
+schema:
+type: array
+items:
+$ref: '#/components/schemas/ModelSummary'
+'401':
+$ref: '#/components/responses/Unauthorized'
+
+/models/{model_id}:
+get:
+tags: [Library]
+summary: Single model detail
+description: >
+Returns model metadata, parameters, and metrics. Admin tokens receive
+additional internal fields filtered server-side.
+operationId: getModel
+security: - BearerAuth: []
+parameters: - name: model_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Model detail
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ModelDetail'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+delete:
+tags: [Library]
+summary: Delete a registered model (admin only)
+operationId: deleteModel
+security: - BearerAuth: []
+parameters: - name: model_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Model deleted
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/MessageResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'403':
+$ref: '#/components/responses/Forbidden'
+'404':
+$ref: '#/components/responses/NotFound'
+
+/models/{model_id}/deploy:
+post:
+tags: [Library]
+summary: Deploy a registered model (admin only)
+operationId: deployModel
+security: - BearerAuth: []
+parameters: - name: model_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Deployment triggered
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/MessageResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'403':
+$ref: '#/components/responses/Forbidden'
+'404':
+$ref: '#/components/responses/NotFound'
+
+# -------------------------------------------------------------------------
+
+# Inference
+
+# -------------------------------------------------------------------------
+
+/predict:
+post:
+tags: [Inference]
+summary: Submit a root scan image for inference
+description: >
+Accepts a root scan image (PNG, TIFF, or JPEG) and runs U-Net
+inference. Returns a prediction ID and the initial result.
+File constraints: max 50 MB, resolution 512×512 to 4096×4096 px,
+single-frame TIFF only.
+operationId: predict
+security: - BearerAuth: []
+requestBody:
+required: true
+content:
+multipart/form-data:
+schema:
+$ref: '#/components/schemas/PredictionRequest'
+examples:
+tiff_upload:
+summary: Upload a TIFF scan with custom confidence threshold
+value:
+confidence_threshold: 0.75
+responses:
+'200':
+description: Inference result
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/PredictionResponse'
+examples:
+successful_prediction:
+summary: Two plants detected with high confidence
+value:
+prediction_id: a3f1c2d4-9e8b-4f2a-b1c3-d4e5f6a7b8c9
+status: ok
+metadata:
+model_version: unet-npec-v1.2.0
+inference_timestamp: '2026-04-17T10:23:45Z'
+processing_time_ms: 843
+input_resolution: [2775, 2048]
+input_channels: 1
+normalisation_applied: true
+scale_factor_mm_per_px: 0.05405
+segmentation_mask_url: 'https://storage.example.com/masks/a3f1c2d4_mask.png?token=abc123'
+plants: - plant_id: 1
+tip_x: 412
+tip_y: 1803
+confidence: 0.94
+root_length_px: 1643.2
+root_length_mm: 88.7 - plant_id: 2
+tip_x: 967
+tip_y: 1765
+confidence: 0.87
+root_length_px: 1501.4
+root_length_mm: 81.1
+overall_confidence: 0.91
+warnings: []
+'401':
+$ref: '#/components/responses/Unauthorized'
+'413':
+description: File exceeds 50 MB limit
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+'415':
+description: Unsupported file format
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+'422':
+$ref: '#/components/responses/UnprocessableEntity'
+
+/predictions/{prediction_id}:
+get:
+tags: [Inference]
+summary: Retrieve a prediction result
+operationId: getPrediction
+security: - BearerAuth: []
+parameters: - name: prediction_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Full prediction result
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/PredictionResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+delete:
+tags: [Inference]
+summary: Discard an unsaved prediction
+operationId: deletePrediction
+security: - BearerAuth: []
+parameters: - name: prediction_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Prediction discarded
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/MessageResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+
+/predictions/{prediction_id}/confirm:
+post:
+tags: [Inference]
+summary: Confirm and save a prediction result
+operationId: confirmPrediction
+security: - BearerAuth: []
+parameters: - name: prediction_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+requestBody:
+required: false
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ConfirmPredictionRequest'
+responses:
+'200':
+description: Prediction confirmed and saved
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ConfirmPredictionResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+'409':
+description: Prediction already confirmed
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+
+# -------------------------------------------------------------------------
+
+# Training
+
+# -------------------------------------------------------------------------
+
+/training/start:
+post:
+tags: [Training]
+summary: Trigger a training run (admin only)
+operationId: startTraining
+security: - BearerAuth: []
+requestBody:
+required: false
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/TrainingStartRequest'
+responses:
+'200':
+description: Training run triggered
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/MessageResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'403':
+$ref: '#/components/responses/Forbidden'
+
+/training/runs:
+get:
+tags: [Training]
+summary: List all training runs (admin only)
+operationId: listTrainingRuns
+security: - BearerAuth: []
+responses:
+'200':
+description: Training run list
+content:
+application/json:
+schema:
+type: array
+items:
+$ref: '#/components/schemas/TrainingRunSummary'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'403':
+$ref: '#/components/responses/Forbidden'
+
+/training/runs/{run_id}:
+get:
+tags: [Training]
+summary: Detail for a single training run (admin only)
+operationId: getTrainingRun
+security: - BearerAuth: []
+parameters: - name: run_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Training run detail
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/TrainingRunDetail'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'403':
+$ref: '#/components/responses/Forbidden'
+'404':
+$ref: '#/components/responses/NotFound'
+delete:
+tags: [Training]
+summary: Stop a running training process (admin only)
+operationId: stopTrainingRun
+security: - BearerAuth: []
+parameters: - name: run_id
+in: path
+required: true
+schema:
+type: string
+format: uuid
+responses:
+'200':
+description: Training run stopped
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/MessageResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'403':
+$ref: '#/components/responses/Forbidden'
+'404':
+$ref: '#/components/responses/NotFound'
+
+# -------------------------------------------------------------------------
+
+# Feedback
+
+# -------------------------------------------------------------------------
+
+/feedback:
+post:
+tags: [Feedback]
+summary: Submit feedback on a prediction
+description: >
+Lightweight thumbs-up / thumbs-down signal on a prediction result.
+For structured mask corrections use POST /annotations/{id}/confirm.
+operationId: submitFeedback
+security: - BearerAuth: []
+requestBody:
+required: true
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/FeedbackRequest'
+responses:
+'200':
+description: Feedback recorded
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/MessageResponse'
+'401':
+$ref: '#/components/responses/Unauthorized'
+'404':
+$ref: '#/components/responses/NotFound'
+
+# ===========================================================================
+
+# Components
+
+# ===========================================================================
+
+components:
+
+# -------------------------------------------------------------------------
+
+# Security schemes
+
+# -------------------------------------------------------------------------
+
+securitySchemes:
+BearerAuth:
+type: http
+scheme: bearer
+bearerFormat: JWT
+description: >
+JWT access token. Obtain via POST /auth/token. Pass
+as Authorization: Bearer <token> on every protected request.
+
+# -------------------------------------------------------------------------
+
+# Reusable responses
+
+# -------------------------------------------------------------------------
+
+responses:
+Unauthorized:
+description: Missing or invalid JWT token
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+Forbidden:
+description: Valid token but insufficient role
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+NotFound:
+description: Resource not found
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+UnprocessableEntity:
+description: Validation error
+content:
+application/json:
+schema:
+$ref: '#/components/schemas/ErrorResponse'
+
+# -------------------------------------------------------------------------
+
+# Schemas
+
+# -------------------------------------------------------------------------
+
+schemas:
+
+    # --- Auth ---------------------------------------------------------------
+
+    AuthRequest:
+      type: object
+      required: [username, password, grant_type]
+      properties:
+        username:
+          type: string
+          maxLength: 254
+          description: User email address
+        password:
+          type: string
+          maxLength: 128
+          description: User password (plaintext over HTTPS)
+        grant_type:
+          type: string
+          enum: [password]
+          description: Fixed value for OAuth2 Password flow
+
+    AuthResponse:
+      type: object
+      required: [access_token, token_type, expires_in, refresh_token, role]
+      properties:
+        access_token:
+          type: string
+          description: Signed JWT access token - short-lived
+        token_type:
+          type: string
+          enum: [bearer]
+        expires_in:
+          type: integer
+          description: Seconds until access token expiry
+        refresh_token:
+          type: string
+          description: Opaque long-lived token - rotated on every use. Expiry 1 day.
+        role:
+          type: string
+          enum: [user, admin]
+          description: Used by the frontend to show or hide admin UI elements
+
+    TokenRefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          minLength: 1
+          description: Refresh token received from POST /auth/token or a previous refresh
+
+    # --- Health -------------------------------------------------------------
+
+    HealthResponse:
+      type: object
+      required: [status, version, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, unavailable]
+        version:
+          type: string
+          description: API version string
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC time of the health check
+
+    # --- Overview -----------------------------------------------------------
+
+    OverviewStatusResponse:
+      type: object
+      required: [total_experiments, active_model_count, data_collected_tb, quota_percent]
+      properties:
+        total_experiments:
+          type: integer
+        active_model_count:
+          type: integer
+        data_collected_tb:
+          type: number
+          format: float
+        quota_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    ActivityItem:
+      type: object
+      required: [event_type, title, description, timestamp]
+      properties:
+        event_type:
+          type: string
+          enum: [retraining, upload, annotation, deployment]
+        title:
+          type: string
+        description:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        resource_url:
+          type: string
+          description: API URI of the related resource, if applicable
+
+    ActivityFeedResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityItem'
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    ModelHealthResponse:
+      type: object
+      required: [f1_score, latency_ms, drift_status]
+      properties:
+        f1_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        latency_ms:
+          type: integer
+        drift_status:
+          type: string
+          enum: [none, low, medium, high]
+
+    EnvironmentResponse:
+      type: object
+      required: [gpu_temp_celsius, memory_percent, system_status]
+      properties:
+        gpu_temp_celsius:
+          type: number
+          format: float
+        memory_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        system_status:
+          type: string
+          enum: [optimal, degraded, critical]
+
+    # --- Dashboard ----------------------------------------------------------
+
+    DashboardMetricsResponse:
+      type: object
+      required: [f1_score, throughput_img_per_s]
+      properties:
+        f1_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        throughput_img_per_s:
+          type: integer
+
+    F1HistoryPoint:
+      type: object
+      required: [epoch, f1_score]
+      properties:
+        epoch:
+          type: integer
+        f1_score:
+          type: number
+          format: float
+
+    F1HistoryResponse:
+      type: object
+      required: [model_version, data_points]
+      properties:
+        model_version:
+          type: string
+        data_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/F1HistoryPoint'
+
+    SpeciesCount:
+      type: object
+      requried: [species, count]
+      properties:
+        species:
+          type: string
+        count:
+          type: integer
+
+    DataDistributionResponse:
+      type: object
+      required: [species_counts]
+      properties:
+        species_counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpeciesCount'
+
+    # --- Library ------------------------------------------------------------
+
+    DatasetSummary:
+      type: object
+      required: [dataset_id, name, created_at, modified_at, count]
+      properties:
+        dataset_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        modified_at:
+          type: string
+          format: date-time
+        count:
+          type: integer
+          description: Number of items in the dataset
+
+    DatasetDetail:
+      allOf:
+        - $ref: '#/components/schemas/DatasetSummary'
+        - type: object
+          properties:
+            description:
+              type: string
+            species:
+              type: string
+
+    ModelSummary:
+      type: object
+      required: [model_id, name, status, created_at]
+      properties:
+        model_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [deployed, registered, archived]
+        created_at:
+          type: string
+          format: date-time
+
+    ModelDetail:
+      allOf:
+        - $ref: '#/components/schemas/ModelSummary'
+        - type: object
+          properties:
+            description:
+              type: string
+            f1_score:
+              type: number
+              format: float
+            precision:
+              type: number
+              format: float
+            recall:
+              type: number
+              format: flaot
+            inference_latency_ms:
+              type: integer
+
+    # --- Prediction ---------------------------------------------------------
+
+    PredictionRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: >
+            Root scan image. Accepted formats: .png, .tiff, .tif, .jpg, .jpeg.
+            Max size: 50MB. Resolution: 512x512 to 4096x4096 px.
+            Single-frame TIFF only.
+          confidence_threshold:
+            type: number
+            format: float
+            minimum: 0.50
+            maximum: 0.99
+            default: 0.50
+            description: Minimum confidence for a detection to be accepted
+
+    PredictionMetadata:
+      type: object
+      required:
+        - model_version
+        - inference_timestamp
+        - processing_time_ms
+        - input_resolution
+        - input_channels
+        - normalisation_applied
+        - scale_factor_mm_per_px
+      properties:
+        model_version:
+          type: string
+        inference_timestamp:
+          type: string
+          format: date-time
+        processing_time_ms:
+          type: integer
+        input_resolution:
+          type: array
+          items:
+            type: integer
+          minItems: 2
+          maxItems: 2
+        input_channels:
+          type: integer
+        normalisation_applied:
+          type: boolean
+        scale_factor_mm_per_px:
+          type: number
+          format: float
+
+    Plant:
+      type: object
+      required: [plant_id, tip_x, tip_y, confidence, root_length_px, root_length_mm]
+      properties:
+        plant_id:
+          type: integer
+          description: 1-indexed, left-to-right across the image
+        tip_x:
+          type: integer
+          description: X coordinate of root tip in input image pixel space
+        tip_y:
+          type: integer
+          description: Y coordinate of root tip in input image pixel space
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        root_length_px:
+          type: number
+          format: float
+        root_length_mm:
+          type: number
+          format: float
+
+    PredictionResponse:
+      type: object
+      required:
+        - prediction_id
+        - status
+        - metadata
+        - plants
+        - overall_confidence
+        - warnings
+      properties:
+        prediction_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [ok, error]
+        metadata:
+          $ref: '#/components/schemas/PredictionMetadata'
+        segmentation_mask_url:
+          type: string
+          description: Presigned URL to the output mask PNG. Null if inference failed.
+        plants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Plant'
+          description: Empty array if no plants detected
+        overall_confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Mean of per-plant confidence scores. 0.0 if no plants detected.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Warning codes. Empty array if none.
+
+    ConfirmPredictionRequest:
+      type: object
+      required: [scan_id]
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+          description: UUID of the scan this prediction belongs to. Links result into library.
+
+    ConfirmPredictionResponse:
+      type: object
+      required: [message, prediction_id]
+      properties:
+        message:
+          type: string
+        prediction_id:
+          type: string
+          format: uuid
+
+    # --- Annotation ---------------------------------------------------------
+
+    AnnotationResponse:
+      type: object
+      required: [annotation_id, scan_id, status, created_at, updated_at]
+      properties:
+        annotation_id:
+          type: string
+          format: uuid
+        scan_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, annotated, review_required]
+        mask_url:
+          type: string
+          description: Presigned URL to the .tiff annotation mask. Null if not yet annotated.
+        species:
+          type: string
+        age_days:
+          type: integer
+        treatment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AnnotationConfirmRequest:
+      type: object
+      required: [mask]
+      properties:
+        mask:
+          type: string
+          format: binary
+          description: Corrected segmentation mask - .tiff format, single-frame only.
+
+    # --- Feedback -----------------------------------------------------------
+
+    FeedbackRequest:
+      type: object
+      required: [prediction_id, signal]
+      properties:
+        prediction_id:
+          type: string
+          format: uuid
+        signal:
+          type: string
+          enum: [correct, incorrect]
+          description: Thumbs up or thumbs down on the prediction
+        comment:
+          type: string
+          maxLength: 500
+          description: Optional free-text note from the user
+
+    # --- Training -----------------------------------------------------------
+
+    TrainingStartRequest:
+      type: object
+      properties:
+        learning_rate:
+          type: number
+          format: float
+        batch_size:
+          type: integer
+        epochs:
+          type: integer
+
+    TrainingRunSummary:
+      type: object
+      required: [run_id, status, started_at]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [running, completed, failed, stopped]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        final_f1:
+          type: integer
+          format: float
+
+    TrainingRunDetail:
+      allOf:
+        - $ref: '#/components/schemas/TrainingRunSummary'
+        - type: object
+          properties:
+            hyperparameters:
+              $ref: '#/components/schemas/TrainingStartRequest'
+            metrics_history:
+              type: array
+              items:
+                $ref: '#/components/schemas/F1HistoryPoint'
+
+    # --- Shared -------------------------------------------------------------
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [status, error_code, message]
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error_code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - FILE_TOO_LARGE
+            - UNSUPPORTED_FORMAT
+            - INVALID_RESOLUTION
+            - CORRUPT_FILE
+            - MULTI_PAGE_TIFF
+            - EMPTY_IMAGE
+            - INVALID_CHANNELS
+            - INTERNAL_ERROR
+        message:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+          description: Additional structured context about the error

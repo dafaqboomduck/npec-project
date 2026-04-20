@@ -1,0 +1,17 @@
+# frontend build output
+dist/
+
+# Dependencies
+node_modules/
+
+# Environment variables (may contain secrets)
+.env.local
+.env.production
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

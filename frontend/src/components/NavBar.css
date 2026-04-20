@@ -1,0 +1,128 @@
+/*
+ * components/NavBar.css
+ *
+ * Sticky top navigation bar — white background, logo left, tabs centre,
+ * icons + avatar right. Matches the Figma design.
+ */
+
+/* ---------------------------------------------------------------------- */
+/* Shell                                                                    */
+/* ---------------------------------------------------------------------- */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: var(--color-bg-white);
+  border-bottom: 1px solid var(--color-border);
+  height: var(--nav-height);
+}
+
+.navbar-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 var(--content-pad);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Logo                                                                     */
+/* ---------------------------------------------------------------------- */
+
+.navbar-logo {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Tabs                                                                     */
+/* ---------------------------------------------------------------------- */
+
+.navbar-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 100%;
+}
+
+.navbar-tab {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  padding: 0 2px;
+  border-bottom: 2px solid transparent;
+  text-decoration: none !important;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.navbar-tab:hover {
+  color: var(--color-primary);
+}
+
+.navbar-tab--active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Right actions                                                            */
+/* ---------------------------------------------------------------------- */
+
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.navbar-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.navbar-icon-btn:hover {
+  background: var(--color-border-subtle);
+  color: var(--color-primary);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Avatar                                                                   */
+/* ---------------------------------------------------------------------- */
+
+.navbar-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-card-dark-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  user-select: none;
+  margin-left: var(--space-1);
+}

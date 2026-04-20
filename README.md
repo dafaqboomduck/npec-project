@@ -17,3 +17,13 @@ If you want GPU acceleration on Linux, first uncomment the NVIDIA package lines 
 ```bash
 pip install -r requirements.txt
 ```
+
+
+## DEV set up
+
+Set up for developers: pre-commit, formatting, linting, and import sorting.
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
