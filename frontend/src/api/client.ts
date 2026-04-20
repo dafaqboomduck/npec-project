@@ -48,6 +48,19 @@ export async function apiClient<T>(endpoint: string, options: ClientOptions = {}
   const response = await fetch(`${BASE_URL}${endpoint}`, config);
 
   if (!response.ok) {
+    // If the token is invalid/expired and this isn't a login attempt itself,
+    // clear the session state and redirect directly to the login page.
+    if (response.status === 401 && endpoint !== '/auth/token') {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('role');
+      localStorage.removeItem('username');
+      window.location.href = '/login';
+      
+      // Delay throw to prevent UI errors while the browser navigates away
+      await new Promise((r) => setTimeout(r, 10000));
+    }
+
     const errorData = (await response.json().catch(() => ({}))) as { message?: string };
     throw new Error(errorData.message ?? `API Error (${response.status})`);
   }
