@@ -1,3 +1,5 @@
+"""Data models for pipeline outputs."""
+
 from dataclasses import dataclass
 
 

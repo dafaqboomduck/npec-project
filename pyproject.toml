@@ -1,12 +1,22 @@
 [tool.black]
-line-length = 88
+line-length = 120
 
 [tool.ruff]
-line-length = 88
+line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
+select = ["E", "F", "W", "I", "D"]
 ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"src/cv_pipeline.py" = ["E402"]
+"src/inference/inference_manager.py" = ["E402"]
+"src/npec_cv/inference/inference_manager.py" = ["E402"]
+"src/npec_cv/pipeline.py" = ["E402"]
 
 [tool.isort]
 profile = "black"
+
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

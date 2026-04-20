@@ -1,3 +1,5 @@
+"""Data models for adaptive thresholding configurations."""
+
 from dataclasses import dataclass
 
 

@@ -1,3 +1,5 @@
+"""Configuration settings for plant segmentation rules."""
+
 from npec_cv.models import SegmentationConfig
 
 PLANT_ZONES = {

@@ -1,6 +1,9 @@
+"""Configuration settings for inference models."""
+
 from pathlib import Path
-from npec_cv.models.inference import ModelConfig, MaskCombineStrategy
+
 from npec_cv.inference.custom_functions import dice_bce_loss, f1, iou
+from npec_cv.models.inference import MaskCombineStrategy, ModelConfig
 
 # Patch size for the model
 PATCH_SIZE = 512

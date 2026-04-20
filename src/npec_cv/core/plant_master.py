@@ -1,32 +1,31 @@
-"""
-plant_master.py - Centralized plant image processing pipeline.
-"""
+"""Centralized plant image processing pipeline."""
 
 import logging
+from typing import Dict, List, Optional, Tuple
+
 import cv2
 import numpy as np
-from typing import Dict, List, Optional, Tuple
-from npec_cv.inference import InferenceManager
+
 from npec_cv.core.plant_segmentation import PlantSegmentation
 from npec_cv.core.root_lengths import LengthCalculator
-from npec_cv.helpers.extract_petri_dish import extract_petri_dish
-from npec_cv.models import (
-    Anchor,
-    ModelConfig,
-    AdaptiveThresholdConfig,
-    SegmentationConfig,
-    LengthCalculatorConfig,
-    PlantResult,
-    ImageResult,
-)
 from npec_cv.exceptions import ConfigurationError
+from npec_cv.helpers.extract_petri_dish import extract_petri_dish
+from npec_cv.inference import InferenceManager
+from npec_cv.models import (
+    AdaptiveThresholdConfig,
+    Anchor,
+    ImageResult,
+    LengthCalculatorConfig,
+    ModelConfig,
+    PlantResult,
+    SegmentationConfig,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class PlantMaster:
-    """
-    Central orchestrator for plant root analysis pipeline.
+    """Central orchestrator for plant root analysis pipeline.
 
     Handles:
     - Inference (root and anchor detection)
@@ -34,7 +33,7 @@ class PlantMaster:
     - Adaptive threshold detection
     - Root segmentation and assignment
     - Length calculation
-    
+
     Can operate in two modes:
     - Full image mode (crop_to_dish=False): processes entire image
     - Dish mode (crop_to_dish=True): extracts and processes petri dish only
@@ -49,6 +48,7 @@ class PlantMaster:
         plant_zones: Optional[Dict[int, Tuple[int, int]]] = None,
         crop_to_dish: bool = False,
     ):
+        """Initialize PlantMaster."""
         self._deserialize_configs(
             inference_config,
             segmentation_config,
@@ -59,10 +59,7 @@ class PlantMaster:
         self.crop_to_dish = crop_to_dish
         self._init_components()
         self.num_plants = len(self.plant_zones)
-        logger.debug(
-            f"PlantMaster initialized for {self.num_plants} plant zones "
-            f"(crop_to_dish={crop_to_dish})"
-        )
+        logger.debug(f"PlantMaster initialized for {self.num_plants} plant zones " f"(crop_to_dish={crop_to_dish})")
 
     def _deserialize_configs(
         self,
@@ -76,9 +73,7 @@ class PlantMaster:
         self.segmentation_config = segmentation_config
         self.calculator_config = calculator_config
         self.thresholds_config = thresholds_config
-        self.plant_zones = (
-            plant_zones if plant_zones is not None else segmentation_config.plant_zones
-        )
+        self.plant_zones = plant_zones if plant_zones is not None else segmentation_config.plant_zones
 
     def _init_components(self) -> None:
         """Initialize all pipeline components with error handling."""
@@ -121,9 +116,8 @@ class PlantMaster:
             raise ConfigurationError
 
     def _preprocess_image(self, img: np.ndarray) -> Tuple[np.ndarray, Optional[Tuple[int, int]]]:
-        """
-        Preprocess image based on crop mode.
-        
+        """Preprocess image based on crop mode.
+
         Returns:
             Tuple of (processed_image, crop_offset)
             crop_offset is (y_offset, x_offset) if cropped, None otherwise
@@ -138,8 +132,7 @@ class PlantMaster:
         return img, None
 
     def _run_inference(self, img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Run both root and anchor inference models.
+        """Run both root and anchor inference models.
 
         Returns:
             Tuple of (root_probabilities, anchor_probabilities)
@@ -149,18 +142,14 @@ class PlantMaster:
             img, patch_size=self.inference_config[0].patch_size, normalize=True
         )
         root_padded = self.root_manager.create_img_mask(root_patches)
-        root_probs = self.root_manager.restore_mask(
-            root_padded, patch_size=self.inference_config[0].patch_size
-        )
+        root_probs = self.root_manager.restore_mask(root_padded, patch_size=self.inference_config[0].patch_size)
 
         # Anchor inference
         anchor_patches = self.anchor_manager.patch_image(
             img, patch_size=self.inference_config[1].patch_size, normalize=True
         )
         anchor_padded = self.anchor_manager.create_img_mask(anchor_patches)
-        anchor_probs = self.anchor_manager.restore_mask(
-            anchor_padded, patch_size=self.inference_config[1].patch_size
-        )
+        anchor_probs = self.anchor_manager.restore_mask(anchor_padded, patch_size=self.inference_config[1].patch_size)
 
         # If in crop mode, extract dish region from restored masks
         if self.crop_to_dish:
@@ -173,21 +162,15 @@ class PlantMaster:
 
         return root_probs, anchor_probs
 
-    def _apply_shoot_penalty(
-        self, root_probs: np.ndarray, anchor_mask: np.ndarray
-    ) -> np.ndarray:
-        """
-        Apply confidence penalty to root predictions overlapping with shoots.
-        """
+    def _apply_shoot_penalty(self, root_probs: np.ndarray, anchor_mask: np.ndarray) -> np.ndarray:
+        """Apply confidence penalty to root predictions overlapping with shoots."""
         adjusted = root_probs.copy()
         overlap = anchor_mask > 0
 
         penalty = self.thresholds_config.shoot_overlap_penalty
         min_conf = self.thresholds_config.shoot_overlap_min_conf
 
-        adjusted[overlap] = np.where(
-            root_probs[overlap] >= min_conf, root_probs[overlap] - penalty, 0
-        )
+        adjusted[overlap] = np.where(root_probs[overlap] >= min_conf, root_probs[overlap] - penalty, 0)
         return np.clip(adjusted, 0, 1)
 
     def _find_endpoints_at_threshold(
@@ -197,10 +180,7 @@ class PlantMaster:
         threshold: float,
     ) -> Dict[int, Dict]:
         """Find root start/end points at a specific threshold."""
-        results = {
-            zid: {"start": None, "end": None, "detected": False}
-            for zid in self.plant_zones.keys()
-        }
+        results = {zid: {"start": None, "end": None, "detected": False} for zid in self.plant_zones.keys()}
 
         binary_mask = (probs > threshold).astype(np.uint8) * 255
 
@@ -215,9 +195,7 @@ class PlantMaster:
             zone_mask = np.zeros_like(binary_mask, dtype=np.uint8)
             zone_mask[:, zone_x_min:zone_x_max] = binary_mask[:, zone_x_min:zone_x_max]
 
-            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
-                zone_mask, connectivity=8
-            )
+            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(zone_mask, connectivity=8)
 
             best_comp = None
             best_score = -1
@@ -234,10 +212,7 @@ class PlantMaster:
                 top_y = ys.min()
                 top_x = int(np.mean(xs[ys == top_y]))
 
-                if (
-                    x_min - bbox_tol <= top_x <= x_max + bbox_tol
-                    and y_min - bbox_tol <= top_y <= y_max + bbox_tol * 2
-                ):
+                if x_min - bbox_tol <= top_x <= x_max + bbox_tol and y_min - bbox_tol <= top_y <= y_max + bbox_tol * 2:
                     ax, ay = anchor.centroid
                     dist = np.sqrt((top_x - ax) ** 2 + (top_y - ay) ** 2)
                     score = area / (dist + 1)
@@ -255,9 +230,7 @@ class PlantMaster:
 
             ys, xs = np.where(best_comp["mask"])
             y_range = ys.max() - ys.min()
-            bottom_thresh = ys.min() + y_range * (
-                1 - self.segmentation_config.y_bot_ratio
-            )
+            bottom_thresh = ys.min() + y_range * (1 - self.segmentation_config.y_bot_ratio)
 
             bottom_ys = ys[ys >= bottom_thresh]
             bottom_xs = xs[ys >= bottom_thresh]
@@ -279,9 +252,7 @@ class PlantMaster:
         root_probs: np.ndarray,
         anchors: List[Anchor],
     ) -> Tuple[float, Dict[int, Dict], bool]:
-        """
-        Iteratively lower threshold until all plants have endpoints.
-        """
+        """Iteratively lower threshold until all plants have endpoints."""
         cfg = self.thresholds_config
         thresholds = np.arange(
             cfg.adaptive_threshold_start,
@@ -293,16 +264,12 @@ class PlantMaster:
             results = self._find_endpoints_at_threshold(root_probs, anchors, thresh)
             found_count = sum(1 for r in results.values() if r["detected"])
 
-            logger.debug(
-                f"Threshold {thresh:.2f}: {found_count}/{self.num_plants} detected"
-            )
+            logger.debug(f"Threshold {thresh:.2f}: {found_count}/{self.num_plants} detected")
 
             if found_count == self.num_plants:
                 return thresh, results, True
 
-        results = self._find_endpoints_at_threshold(
-            root_probs, anchors, cfg.adaptive_threshold_end
-        )
+        results = self._find_endpoints_at_threshold(root_probs, anchors, cfg.adaptive_threshold_end)
         found_count = sum(1 for r in results.values() if r["detected"])
 
         return cfg.adaptive_threshold_end, results, found_count == self.num_plants
@@ -313,14 +280,10 @@ class PlantMaster:
         endpoint_info: Dict[int, Dict],
         optimal_threshold: float,
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Segment roots using endpoint info and merge components.
-        """
+        """Segment roots using endpoint info and merge components."""
         root_mask = (root_probs > optimal_threshold).astype(np.uint8) * 255
 
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
-            root_mask, connectivity=8
-        )
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(root_mask, connectivity=8)
 
         filtered_mask = np.zeros_like(root_mask)
         final_labels = np.zeros(root_mask.shape, dtype=np.int32)
@@ -364,9 +327,7 @@ class PlantMaster:
                 for comp in zone_components[1:]:
                     merged = merged | comp["mask"]
 
-            kernel = cv2.getStructuringElement(
-                cv2.MORPH_ELLIPSE, (merge_dist // 2, merge_dist // 2)
-            )
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (merge_dist // 2, merge_dist // 2))
             dilated = cv2.dilate(merged.astype(np.uint8), kernel, iterations=1)
 
             for lid in range(1, num_labels):
@@ -393,8 +354,7 @@ class PlantMaster:
         img: np.ndarray,
         image_name: str = "unknown",
     ) -> ImageResult:
-        """
-        Process a single image through the complete pipeline.
+        """Process a single image through the complete pipeline.
 
         Args:
             img: BGR image array
@@ -402,9 +362,9 @@ class PlantMaster:
 
         Returns:
             ImageResult with all detection and measurement data
-            
+
         Note:
-            If crop_to_dish=True, all coordinates in the result are 
+            If crop_to_dish=True, all coordinates in the result are
             relative to the cropped dish region.
         """
         logger.debug(f"Processing: {image_name} (crop_to_dish={self.crop_to_dish})")
@@ -422,9 +382,7 @@ class PlantMaster:
         logger.debug("Running inference...")
         root_probs, anchor_probs = self._run_inference(processed_img)
         result.root_probs = root_probs
-        anchor_mask = (anchor_probs > self.inference_config[1].threshold).astype(
-            np.uint8
-        ) * 255
+        anchor_mask = (anchor_probs > self.inference_config[1].threshold).astype(np.uint8) * 255
         result.anchor_mask = anchor_mask
 
         # Step 2: Extract anchors
@@ -441,25 +399,17 @@ class PlantMaster:
 
         # Step 3: Apply shoot penalty
         logger.debug("Applying shoot penalty...")
-        adjusted_probs = self._apply_shoot_penalty(
-            root_probs, (anchor_mask > 0).astype(np.uint8)
-        )
+        adjusted_probs = self._apply_shoot_penalty(root_probs, (anchor_mask > 0).astype(np.uint8))
 
         # Step 4: Adaptive endpoint detection
         logger.debug("Detecting endpoints adaptively...")
-        optimal_thresh, endpoint_info, all_found = self.detect_endpoints_adaptive(
-            adjusted_probs, anchors
-        )
+        optimal_thresh, endpoint_info, all_found = self.detect_endpoints_adaptive(adjusted_probs, anchors)
         result.endpoint_info = endpoint_info
-        logger.debug(
-            f"  Optimal threshold: {optimal_thresh:.2f}, All found: {all_found}"
-        )
+        logger.debug(f"  Optimal threshold: {optimal_thresh:.2f}, All found: {all_found}")
 
         # Step 5: Segment roots
         logger.debug("Segmenting roots...")
-        filtered_mask, labels = self._segment_roots(
-            adjusted_probs, endpoint_info, optimal_thresh
-        )
+        filtered_mask, labels = self._segment_roots(adjusted_probs, endpoint_info, optimal_thresh)
         result.filtered_mask = filtered_mask
         result.labels = labels
 

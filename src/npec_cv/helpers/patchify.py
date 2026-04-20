@@ -1,5 +1,4 @@
-"""
-Vendored from https://github.com/dovahcrow/patchify.py (MIT License).
+"""Vendored from https://github.com/dovahcrow/patchify.py (MIT License).
 
 The upstream package declares numpy<2, which conflicts with tensorflow>=2.16.
 Since patchify works fine with numpy 2.x (the constraint is just stale),
@@ -45,13 +44,13 @@ from typing import Tuple, Union, cast
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 
-
 Imsize = Union[Tuple[int, int], Tuple[int, int, int]]
 
 
 # ---------------------------------------------------------------------------
 # view_as_windows
 # ---------------------------------------------------------------------------
+
 
 def view_as_windows(arr_in, window_shape, step=1):
     """Rolling window view of the input n-dimensional array.
@@ -73,7 +72,7 @@ def view_as_windows(arr_in, window_shape, step=1):
         Indicates step size at which extraction shall be performed.
         If integer is given, then the step is uniform in all dimensions.
 
-    Returns
+    Returns:
     -------
     arr_out : ndarray
         (rolling) window view of the input array.
@@ -109,9 +108,7 @@ def view_as_windows(arr_in, window_shape, step=1):
     window_strides = np.array(arr_in.strides)
     indexing_strides = arr_in[slices].strides
 
-    win_indices_shape = (
-        (np.array(arr_in.shape) - np.array(window_shape)) // np.array(step)
-    ) + 1
+    win_indices_shape = ((np.array(arr_in.shape) - np.array(window_shape)) // np.array(step)) + 1
 
     new_shape = tuple(list(win_indices_shape) + list(window_shape))
     strides = tuple(list(indexing_strides) + list(window_strides))
@@ -124,9 +121,9 @@ def view_as_windows(arr_in, window_shape, step=1):
 # patchify / unpatchify — from dovahcrow/patchify.py (MIT License)
 # ---------------------------------------------------------------------------
 
+
 def patchify(image: np.ndarray, patch_size: Imsize, step: int = 1) -> np.ndarray:
-    """
-    Split a 2D or 3D image into small patches given the patch size.
+    """Split a 2D or 3D image into small patches given the patch size.
 
     Parameters
     ----------
@@ -137,12 +134,12 @@ def patchify(image: np.ndarray, patch_size: Imsize, step: int = 1) -> np.ndarray
     step : int
         The step size between patches.
 
-    Returns
+    Returns:
     -------
     patches : ndarray
         Array of patches.
 
-    Examples
+    Examples:
     --------
     >>> image = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
     >>> patches = patchify(image, (2, 2), step=1)
@@ -154,8 +151,7 @@ def patchify(image: np.ndarray, patch_size: Imsize, step: int = 1) -> np.ndarray
 
 
 def unpatchify(patches: np.ndarray, imsize: Imsize) -> np.ndarray:
-    """
-    Merge patches back into the original image.
+    """Merge patches back into the original image.
 
     Parameters
     ----------
@@ -165,12 +161,12 @@ def unpatchify(patches: np.ndarray, imsize: Imsize) -> np.ndarray:
     imsize : tuple
         The size of the original image or volume.
 
-    Returns
+    Returns:
     -------
     image : ndarray
         Reconstructed image.
 
-    Examples
+    Examples:
     --------
     >>> image = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
     >>> patches = patchify(image, (2, 2), step=1)
@@ -178,9 +174,7 @@ def unpatchify(patches: np.ndarray, imsize: Imsize) -> np.ndarray:
     >>> reconstructed_image = unpatchify(patches, image.shape)
     >>> assert (reconstructed_image == image).all()
     """
-    assert len(patches.shape) / 2 == len(
-        imsize
-    ), "The patches dimension is not equal to the original image size"
+    assert len(patches.shape) / 2 == len(imsize), "The patches dimension is not equal to the original image size"
 
     if len(patches.shape) == 4:
         return _unpatchify2d(patches, cast(Tuple[int, int], imsize))
@@ -193,9 +187,7 @@ def unpatchify(patches: np.ndarray, imsize: Imsize) -> np.ndarray:
         )
 
 
-def _unpatchify2d(
-    patches: np.ndarray, imsize: Tuple[int, int]
-) -> np.ndarray:
+def _unpatchify2d(patches: np.ndarray, imsize: Tuple[int, int]) -> np.ndarray:
     assert len(patches.shape) == 4
 
     i_h, i_w = imsize
@@ -232,9 +224,7 @@ def _unpatchify2d(
     return image
 
 
-def _unpatchify3d(
-    patches: np.ndarray, imsize: Tuple[int, int, int]
-) -> np.ndarray:
+def _unpatchify3d(patches: np.ndarray, imsize: Tuple[int, int, int]) -> np.ndarray:
     assert len(patches.shape) == 6
 
     i_h, i_w, i_c = imsize
@@ -283,9 +273,8 @@ def _unpatchify3d(
 class NonUniformStepSizeError(RuntimeError):
     """Raised when unpatchify cannot reconstruct with a uniform step size."""
 
-    def __init__(
-        self, imsize: int, n_patches: int, patch_size: int, step_size: float
-    ) -> None:
+    def __init__(self, imsize: int, n_patches: int, patch_size: int, step_size: float) -> None:
+        """Initialize NonUniformStepSizeError with details."""
         super().__init__(imsize, n_patches, patch_size, step_size)
         self.n_patches = n_patches
         self.patch_size = patch_size
@@ -293,6 +282,7 @@ class NonUniformStepSizeError(RuntimeError):
         self.step_size = step_size
 
     def __repr__(self) -> str:
+        """Return a detailed string representation of the exception."""
         return (
             f"Unpatchify only supports reconstructing an image with a uniform step "
             f"size for all patches. However, reconstructing {self.n_patches} x "
@@ -301,4 +291,5 @@ class NonUniformStepSizeError(RuntimeError):
         )
 
     def __str__(self) -> str:
+        """Return a string representation of the exception."""
         return self.__repr__()

@@ -1,10 +1,14 @@
+"""Data models for the central plant image processing pipeline."""
+
 from dataclasses import dataclass, field
-from typing import Tuple, Optional, Dict, List
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
-from npec_cv.models.inference import ModelConfig
-from npec_cv.models.segmentation import SegmentationConfig, Anchor
-from npec_cv.models.length import LengthCalculatorConfig
+
 from npec_cv.models.adaptive_threshold import AdaptiveThresholdConfig
+from npec_cv.models.inference import ModelConfig
+from npec_cv.models.length import LengthCalculatorConfig
+from npec_cv.models.segmentation import Anchor, SegmentationConfig
 
 
 @dataclass
@@ -57,8 +61,10 @@ class ImageResult:
 
     @property
     def num_detected(self) -> int:
+        """Returns the total number of plants detected in the image."""
         return sum(1 for p in self.plant_results.values() if p.detected)
 
     @property
     def total_plants(self) -> int:
+        """Returns the total number of expected plants in the image."""
         return len(self.plant_results)

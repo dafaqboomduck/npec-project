@@ -55,11 +55,42 @@ python -m twine upload --repository testpypi dist/*
 ```
 
 
-## DEV set up
+## Dev Setup
 
-Set up for developers: pre-commit, formatting, linting, and import sorting.
+### Backend
+Install dependencies and activate pre-commit hooks. Required once per machine after cloning.
 
-```bash
+​```bash
+pip install -r requirements.txt
 pip install -r requirements-dev.txt
 pre-commit install
-```
+​```
+
+Hooks run automatically on every `git commit` — black, ruff, and isort will fix or flag issues before the commit goes through. To run manually across the whole codebase:
+
+​```bash
+pre-commit run --all-files
+​```
+
+### Frontend
+Install Node dependencies once after cloning:
+
+​```bash
+cd frontend
+npm install
+​```
+
+Before pushing, run lint and formatting checks manually:
+
+​```bash
+npm run lint
+npx prettier --check .
+​```
+
+To auto-fix formatting:
+
+​```bash
+npx prettier --write .
+​```
+
+Frontend linting is also enforced automatically via GitHub Actions on every pull request that touches `frontend/`.

@@ -1,6 +1,8 @@
+"""Exceptions module for the npec_cv package."""
+
 from .exceptions import (
-    CVPipelineError,
     ConfigurationError,
+    CVPipelineError,
     InferenceError,
     InitializationError,
 )

@@ -1,12 +1,10 @@
-"""
-Data models and configuration dataclasses for the plant phenotyping pipeline.
-"""
+"""Data models and configuration dataclasses for segmentation."""
+
 
 from dataclasses import dataclass
-from typing import Tuple, List, Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-
 
 # =============================================================================
 # SEGMENTATION MODELS

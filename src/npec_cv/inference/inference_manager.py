@@ -1,23 +1,25 @@
-import cv2
-import numpy as np
-from pathlib import Path
-from typing import Optional
-from npec_cv.helpers.patchify import patchify, unpatchify
-from keras.models import load_model
+"""Module for managing model inference and mask restoration."""
 
 import logging
+from pathlib import Path
+from typing import Optional
+
+import cv2
+import numpy as np
+from keras.models import load_model
+
+from npec_cv.helpers.patchify import patchify, unpatchify
 
 logger = logging.getLogger(__name__)
 
-from npec_cv.helpers.padder import padder
-from npec_cv.helpers.extract_petri_dish import extract_petri_dish
-from npec_cv.models.inference import ModelConfig
 from npec_cv.exceptions import ConfigurationError
+from npec_cv.helpers.extract_petri_dish import extract_petri_dish
+from npec_cv.helpers.padder import padder
+from npec_cv.models.inference import ModelConfig
 
 
 class InferenceManager:
-    """
-    Manages image patching, model inference, and mask restoration for segmentation.
+    """Manages image patching, model inference, and mask restoration for segmentation.
 
     This class handles the complete pipeline for running inference on images that
     require petri dish extraction and patch-based processing. It maintains state
@@ -33,8 +35,7 @@ class InferenceManager:
     """
 
     def __init__(self, model_config: ModelConfig):
-        """
-        Initialize the InferenceManager and load the model.
+        """Initialize the InferenceManager and load the model.
 
         Args:
             model_config: Configuration object containing:
@@ -69,8 +70,7 @@ class InferenceManager:
         )
 
     def _init_model(self) -> None:
-        """
-        Load the Keras model from checkpoint.
+        """Load the Keras model from checkpoint.
 
         Raises:
             FileNotFoundError: If checkpoint path doesn't exist.
@@ -90,13 +90,11 @@ class InferenceManager:
         except Exception as e:
             logger.exception(f"Failed to load model from {checkpoint_path}")
             raise ImportError(
-                f"Could not load model from {checkpoint_path}. "
-                f"Ensure it's a valid .keras or .h5 file."
+                f"Could not load model from {checkpoint_path}. " f"Ensure it's a valid .keras or .h5 file."
             ) from e
 
     def _get_patch_size(self, patch_size: Optional[int]) -> int:
-        """
-        Resolve patch size from argument or config.
+        """Resolve patch size from argument or config.
 
         Args:
             patch_size: Explicitly provided patch size, or None to use config.
@@ -111,13 +109,10 @@ class InferenceManager:
             return patch_size
         if self.config.patch_size is not None:
             return self.config.patch_size
-        raise ConfigurationError(
-            "patch_size must be provided either as argument or in config"
-        )
+        raise ConfigurationError("patch_size must be provided either as argument or in config")
 
     def _get_batch_size(self, batch_size: Optional[int]) -> int:
-        """
-        Resolve batch size from argument or config.
+        """Resolve batch size from argument or config.
 
         Args:
             batch_size: Explicitly provided batch size, or None to use config.
@@ -132,9 +127,7 @@ class InferenceManager:
             return batch_size
         if self.config.batch_size is not None:
             return self.config.batch_size
-        raise ConfigurationError(
-            "batch_size must be provided either as argument or in config"
-        )
+        raise ConfigurationError("batch_size must be provided either as argument or in config")
 
     def patch_image(
         self,
@@ -143,8 +136,7 @@ class InferenceManager:
         scaling_factor: float = 1.0,
         normalize: bool = False,
     ) -> np.ndarray:
-        """
-        Preprocess image into patches ready for model inference.
+        """Preprocess image into patches ready for model inference.
 
         This method performs the following steps:
         1. Optionally scales the image
@@ -231,16 +223,12 @@ class InferenceManager:
         if normalize:
             patches = patches / 255.0
 
-        logger.debug(
-            f"Created {num_patches} patches "
-            f"(grid: {self.patch_grid_shape[0]}x{self.patch_grid_shape[1]})"
-        )
+        logger.debug(f"Created {num_patches} patches " f"(grid: {self.patch_grid_shape[0]}x{self.patch_grid_shape[1]})")
 
         return patches
 
     def _unpatch_pred_mask(self, preds: np.ndarray) -> np.ndarray:
-        """
-        Reconstruct full mask from patch predictions.
+        """Reconstruct full mask from patch predictions.
 
         Args:
             preds: Model predictions with shape (N_patches, H, W) or (N_patches, H, W, 1).
@@ -253,8 +241,7 @@ class InferenceManager:
         """
         if self.patch_grid_shape is None or self.img_shape is None:
             raise ValueError(
-                "Cannot unpatch: patch_image() must be called first to initialize "
-                "grid shape and image dimensions."
+                "Cannot unpatch: patch_image() must be called first to initialize " "grid shape and image dimensions."
             )
 
         # Remove channel dimension if present
@@ -276,11 +263,8 @@ class InferenceManager:
 
         return unpatchify(preds_reshaped, (H_padded, W_padded))
 
-    def create_img_mask(
-        self, patches: np.ndarray, batch_size: Optional[int] = None
-    ) -> Optional[np.ndarray]:
-        """
-        Run model inference on patches and reconstruct the padded mask.
+    def create_img_mask(self, patches: np.ndarray, batch_size: Optional[int] = None) -> Optional[np.ndarray]:
+        """Run model inference on patches and reconstruct the padded mask.
 
         Args:
             patches: Preprocessed patches from patch_image().
@@ -297,13 +281,9 @@ class InferenceManager:
         batch_size = self._get_batch_size(batch_size)
 
         if self.model is None:
-            raise RuntimeError(
-                "Model not initialized. This should not happen if __init__ succeeded."
-            )
+            raise RuntimeError("Model not initialized. This should not happen if __init__ succeeded.")
 
-        logger.debug(
-            f"Running inference on {len(patches)} patches, batch_size={batch_size}"
-        )
+        logger.debug(f"Running inference on {len(patches)} patches, batch_size={batch_size}")
 
         try:
             preds = self.model.predict(patches, batch_size=batch_size, verbose=0)
@@ -316,11 +296,8 @@ class InferenceManager:
             logger.exception(f"Inference failed: {e}")
             return None
 
-    def restore_mask(
-        self, padded_mask: np.ndarray, patch_size: Optional[int] = None
-    ) -> np.ndarray:
-        """
-        Restore prediction mask to original image dimensions.
+    def restore_mask(self, padded_mask: np.ndarray, patch_size: Optional[int] = None) -> np.ndarray:
+        """Restore prediction mask to original image dimensions.
 
         Reverses the padding and cropping applied during patch_image() to place
         the prediction back into the original image's coordinate space.
@@ -356,9 +333,7 @@ class InferenceManager:
         left_pad = width_padding // 2
 
         # Remove padding
-        unpadded_mask = padded_mask[
-            top_pad : top_pad + h_crop, left_pad : left_pad + w_crop
-        ]
+        unpadded_mask = padded_mask[top_pad : top_pad + h_crop, left_pad : left_pad + w_crop]
 
         # Place into full-size canvas
         final_mask = np.zeros(self.img_shape[:2], dtype=padded_mask.dtype)
@@ -379,8 +354,7 @@ class InferenceManager:
         scaling_factor: float = 1.0,
         normalize: bool = True,
     ) -> Optional[np.ndarray]:
-        """
-        Convenience method to run the full inference pipeline.
+        """Convenience method to run the full inference pipeline.
 
         Combines patch_image(), create_img_mask(), and restore_mask() into
         a single call for simple use cases.

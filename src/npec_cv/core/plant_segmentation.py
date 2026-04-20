@@ -1,18 +1,19 @@
+"""Module for plant root segmentation and anchor extraction."""
+
+import logging
 from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
-import logging
 
-from npec_cv.models import SegmentationConfig, SegmentationResult, Anchor
 from npec_cv.exceptions import ConfigurationError
+from npec_cv.models import Anchor, SegmentationConfig, SegmentationResult
 
 logger = logging.getLogger(__name__)
 
 
 class PlantSegmentation:
-    """
-    Handles anchor detection and root segmentation for plant images.
+    """Handles anchor detection and root segmentation for plant images.
 
     This class processes probability maps from inference to identify
     individual plants based on anchor points (e.g., seed locations)
@@ -20,8 +21,7 @@ class PlantSegmentation:
     """
 
     def __init__(self, segmentation_config: SegmentationConfig):
-        """
-        Initialize the segmentor.
+        """Initialize the segmentor.
 
         Args:
             segmentation_config: Configuration with plant zones and threshold values.
@@ -35,9 +35,7 @@ class PlantSegmentation:
             raise ConfigurationError("plant_zones must be defined in config")
 
         self.config = segmentation_config
-        logger.debug(
-            f"PlantSegmentation initialized with {len(self.config.plant_zones)} zones"
-        )
+        logger.debug(f"PlantSegmentation initialized with {len(self.config.plant_zones)} zones")
 
     def _detect_anchor_components(
         self,
@@ -45,8 +43,7 @@ class PlantSegmentation:
         min_area: Optional[int] = None,
         max_y_ratio: Optional[float] = None,
     ) -> List[Anchor]:
-        """
-        Detect anchor components from binary mask.
+        """Detect anchor components from binary mask.
 
         Finds connected components in the anchor mask and filters by
         minimum area and vertical position (anchors should be near top).
@@ -93,8 +90,7 @@ class PlantSegmentation:
         return anchors
 
     def _assign_anchors_to_zones(self, anchors: List[Anchor]) -> List[Anchor]:
-        """
-        Assign each anchor to a plant zone based on x-coordinate.
+        """Assign each anchor to a plant zone based on x-coordinate.
 
         Each anchor is assigned to the zone containing its centroid.
         Only the largest anchor per zone is kept.
@@ -118,17 +114,11 @@ class PlantSegmentation:
         for anchor in anchors:
             if anchor.zone_id is None:
                 continue
-            if (
-                anchor.zone_id not in zone_anchors
-                or anchor.area > zone_anchors[anchor.zone_id].area
-            ):
+            if anchor.zone_id not in zone_anchors or anchor.area > zone_anchors[anchor.zone_id].area:
                 zone_anchors[anchor.zone_id] = anchor
 
         result = list(zone_anchors.values())
-        logger.debug(
-            f"Assigned anchors to {len(result)} zones: "
-            f"{[a.zone_id for a in result]}"
-        )
+        logger.debug(f"Assigned anchors to {len(result)} zones: " f"{[a.zone_id for a in result]}")
         return result
 
     def create_anchor_bboxes(
@@ -138,8 +128,7 @@ class PlantSegmentation:
         bbox_size: Optional[int] = None,
         vertical_offset: Optional[int] = None,
     ) -> List[Anchor]:
-        """
-        Create bounding boxes centered on anchor centroids.
+        """Create bounding boxes centered on anchor centroids.
 
         Args:
             anchors: List of anchors to add bboxes to.
@@ -176,8 +165,7 @@ class PlantSegmentation:
         self,
         anchor_mask: np.ndarray,
     ) -> List[Anchor]:
-        """
-        Full anchor extraction pipeline: detect, assign zones, create bboxes.
+        """Full anchor extraction pipeline: detect, assign zones, create bboxes.
 
         Args:
             anchor_mask: Binary mask of anchor predictions.
@@ -189,9 +177,7 @@ class PlantSegmentation:
         anchors = self._detect_anchor_components(anchor_mask)
         anchors = self._assign_anchors_to_zones(anchors)
 
-        logger.debug(
-            f"Extracted {len(anchors)} anchors for zones: {[a.zone_id for a in anchors]}"
-        )
+        logger.debug(f"Extracted {len(anchors)} anchors for zones: {[a.zone_id for a in anchors]}")
         return anchors
 
     def segment_roots(
@@ -202,8 +188,7 @@ class PlantSegmentation:
         merge_distance: Optional[int] = None,
         bbox_tolerance: int = 30,
     ) -> SegmentationResult:
-        """
-        Segment roots by assigning components to anchor zones.
+        """Segment roots by assigning components to anchor zones.
 
         For each anchor zone, finds root components that start within the
         anchor's bounding box, then merges nearby fragments.
@@ -221,9 +206,7 @@ class PlantSegmentation:
         min_area = min_area or self.config.min_root_area
         merge_distance = merge_distance or self.config.root_merge_distance
 
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
-            root_mask.astype(np.uint8), connectivity=8
-        )
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(root_mask.astype(np.uint8), connectivity=8)
 
         zone_masks: Dict[int, np.ndarray] = {}
 
@@ -289,9 +272,7 @@ class PlantSegmentation:
 
                 if y_gap <= merge_distance and x_gap <= merge_distance:
                     merged_mask = merged_mask | comp["mask"]
-                    logger.debug(
-                        f"Merged component {comp['label_id']} into zone {anchor.zone_id}"
-                    )
+                    logger.debug(f"Merged component {comp['label_id']} into zone {anchor.zone_id}")
 
             zone_masks[anchor.zone_id] = merged_mask
 

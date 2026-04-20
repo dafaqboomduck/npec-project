@@ -1,11 +1,10 @@
-def extract_petri_dish(img, padding=30, return_coords: bool = False):
-    """
-    Identifies the largest object (assumed to be the petri dish) in an image
-    using Otsu's thresholding and contour finding, and then extracts a
-    padded square region containing it.
+"""Module for extracting the petri dish region from an image."""
 
-    The extracted region is guaranteed to be a square and is clamped to the
-    image boundaries.
+def extract_petri_dish(img, padding=30, return_coords: bool = False):
+    """Identifies the largest object in an image and extracts a padded square region.
+
+    Uses Otsu's thresholding and contour finding to find the petri dish. The extracted
+    region is guaranteed to be a square and is clamped to the image boundaries.
 
     Args:
         img (np.ndarray): The input image (BGR or grayscale).
@@ -23,9 +22,9 @@ def extract_petri_dish(img, padding=30, return_coords: bool = False):
     import cv2
 
     def bgr2gray(img):
-        """
-        Converts a BGR image to grayscale. Returns a copy if the image is
-        already 2-dimensional (grayscale).
+        """Converts a BGR image to grayscale.
+
+        Returns a copy if the image is already 2-dimensional (grayscale).
 
         Args:
             img (np.ndarray): The input image.
@@ -39,10 +38,10 @@ def extract_petri_dish(img, padding=30, return_coords: bool = False):
             gray = img.copy()
 
         return gray
-    
+
     def calculate_square(img, rect, padding):
-        """
-        Calculates the coordinates for a padded square crop based on a bounding box.
+        """Calculates the coordinates for a padded square crop based on a bounding box.
+
         The resulting square is centered on the bounding box and its side length
         is max(width, height) + 2*padding. The coordinates are clamped to the
         image boundaries (0 to img.shape[0/1]).
@@ -77,7 +76,7 @@ def extract_petri_dish(img, padding=30, return_coords: bool = False):
         # Calculate final coordinates, clamping them to the image boundaries
         x_start = max(0, x_new)
         y_start = max(0, y_new)
-        
+
         # Calculate the *desired* bottom-right corner
         x_desired_end = x_new + padded_side
         y_desired_end = y_new + padded_side
@@ -90,17 +89,17 @@ def extract_petri_dish(img, padding=30, return_coords: bool = False):
         # Calculate the actual dimensions after clamping
         actual_w = x_end - x_start
         actual_h = y_end - y_start
-        
+
         # Use the *smaller* of the actual dimensions as the final side length
         final_side = min(actual_w, actual_h)
-        
+
         # Recalculate the end points to form a perfect square using 'final_side'
         # This part adjusts the *start* point if the image boundary cut off the *end* point.
-        
+
         # If the X dimension was cut short, adjust x_start to maintain the square size
         if actual_w < padded_side and x_end == img.shape[1]:
             x_start = max(0, x_end - final_side)
-            
+
         # If the Y dimension was cut short, adjust y_start to maintain the square size
         if actual_h < padded_side and y_end == img.shape[0]:
             y_start = max(0, y_end - final_side)
@@ -112,13 +111,12 @@ def extract_petri_dish(img, padding=30, return_coords: bool = False):
 
         return x_start, y_start, x_end, y_end
 
-    
     # Convert to grayscale for easier processing
     gray = bgr2gray(img)
 
     # Thresholding
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
     # Find Contours
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -132,10 +130,10 @@ def extract_petri_dish(img, padding=30, return_coords: bool = False):
     # Get the Bounding Box
     # x, y are the top-left coordinates, w is width, h is height
     rect = cv2.boundingRect(largest_contour)
-    
+
     # Calculate padded coordinates, ensuring they don't go out of image bounds
     x_start, y_start, x_end, y_end = calculate_square(img, rect, padding)
-    
+
     cropped_image = img[y_start:y_end, x_start:x_end]
     if not return_coords:
         return cropped_image

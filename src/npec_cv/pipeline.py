@@ -1,26 +1,25 @@
+"""Main pipeline module for plant root detection."""
+
 import logging
 from pathlib import Path
-from typing import List, Union, Optional, Dict
-
-import npec_cv._tf_setup  # noqa: F401
+from typing import Dict, List, Optional, Union
 
 import cv2
 import pandas as pd
 from tqdm.auto import tqdm
 
-from npec_cv.configs.inference import ROOT_MODEL_CONFIG, ANCHOR_MODEL_CONFIG
-from npec_cv.configs.segmentation import SEGMENTATION_CONFIG
+import npec_cv._tf_setup  # noqa: F401
+from npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
 from npec_cv.configs.lengths import LENGTH_CALCULATOR_CONFIG
+from npec_cv.configs.segmentation import SEGMENTATION_CONFIG
 from npec_cv.configs.thresholds import ADAPTIVE_THRESHOLD_CONFIG
 from npec_cv.core.plant_master import PlantMaster
-from npec_cv.helpers import extract_sort_keys
-from npec_cv.models import PlantMeasurement, ImageResult
 from npec_cv.exceptions import InitializationError
+from npec_cv.helpers import extract_sort_keys
+from npec_cv.models import ImageResult, PlantMeasurement
 
 # Configure logging
-logging.basicConfig(
-    level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Keep pipeline logger at DEBUG
 
@@ -111,13 +110,7 @@ class CVPipeline:
         input_path = Path(input_dir)
         valid_extensions = {".png", ".jpg", ".jpeg"}
 
-        self._img_files = sorted(
-            [
-                f.name
-                for f in input_path.iterdir()
-                if f.suffix.lower() in valid_extensions
-            ]
-        )
+        self._img_files = sorted([f.name for f in input_path.iterdir() if f.suffix.lower() in valid_extensions])
         logger.info(f"Found {len(self._img_files)} image files")
 
     def _collect_results(self, result: ImageResult, img_name: str) -> None:
@@ -128,9 +121,7 @@ class CVPipeline:
         # Collect measurements for CSV
         for plant_id, plant_result in result.plant_results.items():
             if plant_result.detected:
-                logger.debug(
-                    f"  Plant {plant_id}: detected, length={plant_result.length}px"
-                )
+                logger.debug(f"  Plant {plant_id}: detected, length={plant_result.length}px")
             else:
                 logger.debug(f"  Plant {plant_id}: not detected")
 
@@ -151,16 +142,11 @@ class CVPipeline:
         Returns:
             Path to the created CSV file.
         """
-        csv_rows = [
-            {"Plant ID": m.plant_label, "Length (px)": m.length}
-            for m in self.measurements
-        ]
+        csv_rows = [{"Plant ID": m.plant_label, "Length (px)": m.length} for m in self.measurements]
 
         df = pd.DataFrame(csv_rows)
         df["sort_key"] = df["Plant ID"].apply(extract_sort_keys)
-        df = (
-            df.sort_values("sort_key").drop(columns=["sort_key"]).reset_index(drop=True)
-        )
+        df = df.sort_values("sort_key").drop(columns=["sort_key"]).reset_index(drop=True)
 
         csv_path = output_dir / "plant_lengths.csv"
         df.to_csv(csv_path, index=False)
@@ -206,9 +192,7 @@ class CVPipeline:
         # Disable tqdm when in debug mode to avoid cluttering log output
         disable_tqdm = logger.getEffectiveLevel() <= logging.DEBUG
 
-        for img_filename in tqdm(
-            img_files, desc="Processing images", unit="img", disable=disable_tqdm
-        ):
+        for img_filename in tqdm(img_files, desc="Processing images", unit="img", disable=disable_tqdm):
             img_path = input_path / img_filename
             img_name = img_path.stem
 
@@ -223,9 +207,7 @@ class CVPipeline:
             # Process with PlantMaster
             try:
                 result = self.plant_master.process_image(img, img_name)
-                logger.debug(
-                    f"  {img_name}: {result.num_detected}/{result.total_plants} detected"
-                )
+                logger.debug(f"  {img_name}: {result.num_detected}/{result.total_plants} detected")
                 self._collect_results(result, img_name)
             except Exception as e:
                 logger.error(f"Failed to process {img_name}: {e}")

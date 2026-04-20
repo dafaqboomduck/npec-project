@@ -1,3 +1,5 @@
+"""Calculates geodesic lengths of plant roots."""
+
 import logging
 from collections import deque
 from typing import Optional
@@ -6,7 +8,6 @@ import networkx as nx
 import numpy as np
 from scipy.spatial import cKDTree
 from skimage.morphology import skeletonize
-from npec_cv.exceptions import ConfigurationError
 
 from npec_cv.configs.lengths import (
     EMPTY_RESULT,
@@ -15,6 +16,7 @@ from npec_cv.configs.lengths import (
     RETURN_NO_PATH,
     RETURN_SUCCESS,
 )
+from npec_cv.exceptions import ConfigurationError
 from npec_cv.models.length import LengthCalculatorConfig, LengthResult, PathResult
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ class LengthCalculator:
     ]
 
     def __init__(self, config: LengthCalculatorConfig):
+        """Initialize LengthCalculator with config."""
         self.config = config
         if config is None:
             raise ConfigurationError("config is required")
@@ -47,25 +50,15 @@ class LengthCalculator:
     def _get_neighbors(self, point: Point, pixel_set: PixelSet) -> list[Point]:
         """Get all valid 8-connected neighbors of a point."""
         y, x = point
-        return [
-            (y + dy, x + dx)
-            for dy, dx in self._NEIGHBOR_OFFSETS
-            if (y + dy, x + dx) in pixel_set
-        ]
+        return [(y + dy, x + dx) for dy, dx in self._NEIGHBOR_OFFSETS if (y + dy, x + dx) in pixel_set]
 
     def _find_endpoints(self, skeleton: np.ndarray) -> list[Point]:
         """Find endpoint pixels in a skeleton (pixels with exactly 1 neighbor)."""
         pixels = np.argwhere(skeleton)
         pixel_set: PixelSet = set(map(tuple, pixels))
-        return [
-            (y, x)
-            for y, x in pixels
-            if len(self._get_neighbors((y, x), pixel_set)) == 1
-        ]
+        return [(y, x) for y, x in pixels if len(self._get_neighbors((y, x), pixel_set)) == 1]
 
-    def _are_connected(
-        self, pixel_set: PixelSet, pt1: Point, pt2: Point, max_depth: int
-    ) -> bool:
+    def _are_connected(self, pixel_set: PixelSet, pt1: Point, pt2: Point, max_depth: int) -> bool:
         """Check if two points are connected within max_depth steps using BFS."""
         if pt1 not in pixel_set or pt2 not in pixel_set:
             return False
@@ -111,9 +104,7 @@ class LengthCalculator:
                 y0 += sy
         return img
 
-    def _find_nearest_skeleton_point(
-        self, pixels: np.ndarray, target: Point, max_search: float
-    ) -> Optional[Point]:
+    def _find_nearest_skeleton_point(self, pixels: np.ndarray, target: Point, max_search: float) -> Optional[Point]:
         """Find the nearest skeleton pixel to a target point within max_search radius."""
         if len(pixels) == 0:
             return None
@@ -126,14 +117,10 @@ class LengthCalculator:
             return tuple(pixels[min_idx])
         return None
 
-    def _find_farthest_point_from(
-        self, G: nx.Graph, start_node: Point
-    ) -> tuple[Point, float]:
+    def _find_farthest_point_from(self, G: nx.Graph, start_node: Point) -> tuple[Point, float]:
         """Find the farthest reachable point from start using Dijkstra's algorithm."""
         try:
-            lengths = nx.single_source_dijkstra_path_length(
-                G, start_node, weight="weight"
-            )
+            lengths = nx.single_source_dijkstra_path_length(G, start_node, weight="weight")
             if not lengths:
                 return start_node, 0.0
             farthest_node, distance = max(lengths.items(), key=lambda x: x[1])
@@ -220,9 +207,7 @@ class LengthCalculator:
         mask_crop = labels[y_min : y_max + 1, x_min : x_max + 1] == label_id
 
         # Convert provided endpoints to crop coordinates
-        start_point, end_point = self._get_crop_endpoints(
-            endpoint_info, plant_id, y_min, x_min
-        )
+        start_point, end_point = self._get_crop_endpoints(endpoint_info, plant_id, y_min, x_min)
 
         path_result, return_code = self.calculate_geodesic_length(
             mask_crop,
@@ -235,24 +220,10 @@ class LengthCalculator:
         # Convert path_result to full image coordinates
         full_path_result = PathResult(
             length=path_result.length,
-            path=(
-                [(y + y_min, x + x_min) for y, x in path_result.path]
-                if path_result.path
-                else []
-            ),
-            skeleton=self._expand_skeleton(
-                path_result.skeleton, labels.shape, y_min, y_max, x_min, x_max
-            ),
-            start=(
-                (path_result.start[0] + y_min, path_result.start[1] + x_min)
-                if path_result.start
-                else None
-            ),
-            end=(
-                (path_result.end[0] + y_min, path_result.end[1] + x_min)
-                if path_result.end
-                else None
-            ),
+            path=([(y + y_min, x + x_min) for y, x in path_result.path] if path_result.path else []),
+            skeleton=self._expand_skeleton(path_result.skeleton, labels.shape, y_min, y_max, x_min, x_max),
+            start=((path_result.start[0] + y_min, path_result.start[1] + x_min) if path_result.start else None),
+            end=((path_result.end[0] + y_min, path_result.end[1] + x_min) if path_result.end else None),
         )
 
         self._log_result(plant_id, path_result, return_code)
@@ -303,9 +274,7 @@ class LengthCalculator:
             messages.get(return_code, f"Plant {plant_id}: Unknown error {return_code}"),
         )
 
-    def bridge_skeleton_gaps(
-        self, skeleton: np.ndarray, max_gap: int, max_path: int
-    ) -> np.ndarray:
+    def bridge_skeleton_gaps(self, skeleton: np.ndarray, max_gap: int, max_path: int) -> np.ndarray:
         """Bridge small gaps in a skeleton by connecting nearby endpoints."""
         skeleton = skeleton.copy().astype(bool)
         endpoints = self._find_endpoints(skeleton)
@@ -322,17 +291,13 @@ class LengthCalculator:
         for i, pt in enumerate(endpoints):
             if i in used:
                 continue
-            distances, indices = tree.query(
-                pt, k=min(5, len(endpoints)), distance_upper_bound=max_gap
-            )
+            distances, indices = tree.query(pt, k=min(5, len(endpoints)), distance_upper_bound=max_gap)
 
             for dist, j in zip(distances, indices):
                 if j >= len(endpoints) or i == j or j in used:
                     continue
                 if 0 < dist <= max_gap:
-                    if not self._are_connected(
-                        pixel_set, endpoints[i], endpoints[j], max_path
-                    ):
+                    if not self._are_connected(pixel_set, endpoints[i], endpoints[j], max_path):
                         pairs_to_bridge.append((endpoints[i], endpoints[j], dist))
                         used.update([i, j])
                         break
@@ -352,8 +317,7 @@ class LengthCalculator:
         max_gap: int | None = None,
         max_path: int | None = None,
     ) -> tuple[PathResult, int]:
-        """
-        Calculate the geodesic length of a root by skeletonizing and finding the longest path.
+        """Calculate the geodesic length of a root by skeletonizing and finding the longest path.
 
         Args:
             binary_mask: Binary array where root pixels are True/1.
@@ -390,15 +354,11 @@ class LengthCalculator:
         sorted_by_y = sorted(valid_nodes, key=lambda p: p[0])
 
         # Determine start node
-        start_node = self._resolve_endpoint(
-            pixels, valid_nodes, sorted_by_y, start_point, max_gap, use_top=True
-        )
+        start_node = self._resolve_endpoint(pixels, valid_nodes, sorted_by_y, start_point, max_gap, use_top=True)
 
         # Determine end node
         if end_point is not None:
-            end_node = self._resolve_endpoint(
-                pixels, valid_nodes, sorted_by_y, end_point, max_gap, use_top=False
-            )
+            end_node = self._resolve_endpoint(pixels, valid_nodes, sorted_by_y, end_point, max_gap, use_top=False)
         elif use_farthest_endpoint:
             end_node, _ = self._find_farthest_point_from(G, start_node)
         else:
@@ -406,14 +366,10 @@ class LengthCalculator:
 
         # Ensure start and end differ
         if start_node == end_node:
-            end_node = self._find_alternative_endpoint(
-                skeleton_bridged, valid_nodes, start_node, sorted_by_y
-            )
+            end_node = self._find_alternative_endpoint(skeleton_bridged, valid_nodes, start_node, sorted_by_y)
 
         try:
-            length, path = nx.single_source_dijkstra(
-                G, source=start_node, target=end_node, weight="weight"
-            )
+            length, path = nx.single_source_dijkstra(G, source=start_node, target=end_node, weight="weight")
             return (
                 PathResult(length, path, skeleton_bridged, start_node, end_node),
                 RETURN_SUCCESS,
@@ -432,8 +388,7 @@ class LengthCalculator:
         max_path: int | None = None,
         endpoint_info: Optional[dict] = None,
     ) -> dict[int, LengthResult]:
-        """
-        Calculate lengths for all labeled plant components.
+        """Calculate lengths for all labeled plant components.
 
         Args:
             labels: 2D array with labeled components (0 = background).
@@ -455,9 +410,7 @@ class LengthCalculator:
 
             plant_id = int(label_id) - 1
             if not 0 <= plant_id < num_plants:
-                logger.warning(
-                    f"Label {label_id} maps to invalid plant_id {plant_id}, skipping"
-                )
+                logger.warning(f"Label {label_id} maps to invalid plant_id {plant_id}, skipping")
                 continue
 
             result, return_code = self._process_single_plant(

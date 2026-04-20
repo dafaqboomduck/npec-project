@@ -1,3 +1,5 @@
+"""Custom exceptions for the pipeline."""
+
 class CVPipelineError(Exception):
     """Base exception for pipeline-specific errors."""
 
@@ -17,4 +19,6 @@ class InitializationError(CVPipelineError):
 
 
 class ConfigurationError(Exception):
+    """Raised when configuration is invalid."""
+
     pass

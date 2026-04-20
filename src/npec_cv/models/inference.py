@@ -1,3 +1,5 @@
+"""Data models for inference configurations."""
+
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
