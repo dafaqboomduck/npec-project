@@ -1,0 +1,5 @@
+-r robotics.txt
+black
+flake8
+pylint
+pytest

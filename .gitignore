@@ -10,3 +10,8 @@ saved_models
 *:Zone.Identifier
 *.virtual_documents
 .vscode
+
+# Ignore build files
+build/
+dist/
+*.egg-info/

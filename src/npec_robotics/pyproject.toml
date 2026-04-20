@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "npec_robotics"
+version = "0.2.0"
+description = "NPEC robotics pipeline for OT-2 control built on npec_cv"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "NPEC" }]
+license = "LicenseRef-Proprietary"
+dependencies = [
+  "npec_cv>=0.2.0",
+  "gymnasium~=1.2.0",
+  "pybullet~=3.2.7",
+]
+
+[project.optional-dependencies]
+rl = ["stable-baselines3"]
+
+[tool.setuptools]
+packages = [
+  "npec_robotics",
+  "npec_robotics.configs",
+  "npec_robotics.controllers",
+  "npec_robotics.exceptions",
+  "npec_robotics.models",
+]
+
+[tool.setuptools.package-dir]
+npec_robotics = "."
+"npec_robotics.configs" = "configs"
+"npec_robotics.controllers" = "controllers"
+"npec_robotics.exceptions" = "exceptions"
+"npec_robotics.models" = "models"
+
+[tool.setuptools.package-data]
+npec_robotics = [
+  "*.urdf",
+  "*.png",
+  "meshes/*.stl",
+  "textures/*.png",
+  "textures/_plates/*.png",
+  "artifacts/models/*.zip",
+]
