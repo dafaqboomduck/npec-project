@@ -4,10 +4,8 @@
  * POST /predict and model helpers for the Inference Lab page.
  */
 
-import { authHeader } from './auth';
+import { apiClient } from './client';
 import type { PredictionResponse, ModelSummary } from '../types/api';
-
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 
 /**
  * POST /predict
@@ -22,25 +20,15 @@ export async function predict(
   form.append('file', file);
   form.append('confidence_threshold', confidenceThreshold.toFixed(2));
 
-  const res = await fetch(`${BASE_URL}/predict`, {
+  return apiClient<PredictionResponse>('/predict', {
     method: 'POST',
-    headers: { ...authHeader() },
     body: form,
+  }).catch((err) => {
+    throw new Error(err.message.includes('API Error') ? `Inference failed` : err.message);
   });
-
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new Error(data.message ?? `Inference failed (${res.status})`);
-  }
-
-  return res.json() as Promise<PredictionResponse>;
 }
 
 /** Fetch all models — used in the sidebar "Inference Model" selector. */
 export async function getModelsForInference(): Promise<ModelSummary[]> {
-  const res = await fetch(`${BASE_URL}/models`, {
-    headers: { ...authHeader() },
-  });
-  if (!res.ok) throw new Error(`Failed to load models (${res.status})`);
-  return res.json() as Promise<ModelSummary[]>;
+  return apiClient<ModelSummary[]>('/models');
 }

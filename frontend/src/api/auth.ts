@@ -8,7 +8,7 @@
  * API base: http://localhost:8000/api/v1  (see VITE_API_URL env var)
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+import { apiClient, BASE_URL } from './client';
 
 // ---------------------------------------------------------------------------
 // Types (mirroring api_schema.md AuthResponse)
@@ -40,18 +40,17 @@ export async function login(
     grant_type: 'password',
   });
 
-  const res = await fetch(`${BASE_URL}/auth/token`, {
+  return apiClient<AuthTokens>('/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
+    body,
+  }).catch((err) => {
+    // Auth endpoint has specific fallback error text
+    if (err.message.includes('API Error')) {
+      throw new Error('Invalid credentials. Please try again.');
+    }
+    throw err;
   });
-
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new Error(data.message ?? 'Invalid credentials. Please try again.');
-  }
-
-  return res.json() as Promise<AuthTokens>;
 }
 
 /**
@@ -63,15 +62,13 @@ export async function refreshToken(): Promise<AuthTokens> {
   const token = localStorage.getItem('refresh_token');
   if (!token) throw new Error('No refresh token stored');
 
-  const res = await fetch(`${BASE_URL}/auth/refresh`, {
+  const tokens = await apiClient<AuthTokens>('/auth/refresh', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh_token: token }),
+    body: { refresh_token: token },
+  }).catch(() => {
+    throw new Error('Session expired. Please log in again.');
   });
 
-  if (!res.ok) throw new Error('Session expired. Please log in again.');
-
-  const tokens = (await res.json()) as AuthTokens;
   saveTokens(tokens, getUsername());
   return tokens;
 }
@@ -84,6 +81,7 @@ export async function logout(): Promise<void> {
   const token = getAccessToken();
   if (token) {
     // Fire-and-forget — don't block UI on network errors during logout
+    // Using fetch directly here so we can suppress the error easily
     await fetch(`${BASE_URL}/auth/logout`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },

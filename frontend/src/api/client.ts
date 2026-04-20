@@ -1,0 +1,61 @@
+/**
+ * api/client.ts
+ *
+ * Central API client module that reads VITE_API_URL from the environment
+ * and handles all backend calls. This ensures consistent networking
+ * behavior across local dev, Docker, and Portainer.
+ */
+
+export const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+
+function getAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem('access_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+interface ClientOptions extends RequestInit {
+  body?: any;
+}
+
+/**
+ * Core fetch wrapper that automatically handles the base URL, authentication
+ * headers, and JSON serialization. 
+ */
+export async function apiClient<T>(endpoint: string, options: ClientOptions = {}): Promise<T> {
+  const { headers, ...customOptions } = options;
+
+  const config: RequestInit = {
+    ...customOptions,
+    headers: {
+      ...getAuthHeader(),
+      ...headers,
+    },
+  };
+
+  // Only stringify the body if it's a plain object (not FormData or URLSearchParams)
+  if (
+    config.body &&
+    !(config.body instanceof FormData) &&
+    !(config.body instanceof URLSearchParams)
+  ) {
+    config.body = JSON.stringify(config.body);
+    config.headers = {
+      'Content-Type': 'application/json',
+      ...config.headers,
+    };
+  }
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, config);
+
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new Error(errorData.message ?? `API Error (${response.status})`);
+  }
+
+  // Handle empty responses
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  return response.json() as Promise<T>;
+}
