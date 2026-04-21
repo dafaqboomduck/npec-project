@@ -6,22 +6,26 @@
  * behavior across local dev, Docker, and Portainer.
  */
 
-export const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+export const BASE_URL =
+  import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('access_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-interface ClientOptions extends RequestInit {
-  body?: any;
+interface ClientOptions extends Omit<RequestInit, 'body'> {
+  body?: unknown;
 }
 
 /**
  * Core fetch wrapper that automatically handles the base URL, authentication
- * headers, and JSON serialization. 
+ * headers, and JSON serialization.
  */
-export async function apiClient<T>(endpoint: string, options: ClientOptions = {}): Promise<T> {
+export async function apiClient<T>(
+  endpoint: string,
+  options: ClientOptions = {},
+): Promise<T> {
   const { headers, ...customOptions } = options;
 
   const config: RequestInit = {
@@ -61,7 +65,9 @@ export async function apiClient<T>(endpoint: string, options: ClientOptions = {}
       await new Promise((r) => setTimeout(r, 10000));
     }
 
-    const errorData = (await response.json().catch(() => ({}))) as { message?: string };
+    const errorData = (await response.json().catch(() => ({}))) as {
+      message?: string;
+    };
     throw new Error(errorData.message ?? `API Error (${response.status})`);
   }
 

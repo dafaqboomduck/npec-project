@@ -77,7 +77,6 @@ export default function Inference() {
 
   function handleFileInputChange(e: ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0];
-
     if (picked) acceptFile(picked);
   }
 

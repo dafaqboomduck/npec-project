@@ -24,7 +24,9 @@ export async function predict(
     method: 'POST',
     body: form,
   }).catch((err) => {
-    throw new Error(err.message.includes('API Error') ? `Inference failed` : err.message);
+    throw new Error(
+      err.message.includes('API Error') ? `Inference failed` : err.message,
+    );
   });
 }
 
