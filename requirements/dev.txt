@@ -1,5 +1,5 @@
--r robotics.txt
-black
-flake8
-pylint
 pytest
+pre-commit
+black
+ruff
+isort

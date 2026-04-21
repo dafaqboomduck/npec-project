@@ -54,7 +54,6 @@ Upload each dist directory separately with twine (TestPyPI example):
 python -m twine upload --repository testpypi dist/*
 ```
 
-
 ## Dev Setup
 ## Dev Setup
 
@@ -64,8 +63,7 @@ Install dependencies and activate pre-commit hooks. Required once per machine af
 Install dependencies and activate pre-commit hooks. Required once per machine after cloning.
 
 ```bash
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+pip install -r requirements/dev.txt
 pre-commit install
 ```
 
