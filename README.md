@@ -55,10 +55,7 @@ python -m twine upload --repository testpypi dist/*
 ```
 
 ## Dev Setup
-## Dev Setup
 
-### Backend
-Install dependencies and activate pre-commit hooks. Required once per machine after cloning.
 ### Backend
 Install dependencies and activate pre-commit hooks. Required once per machine after cloning.
 

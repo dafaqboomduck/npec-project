@@ -613,7 +613,7 @@ paths:
       description: >
         Accepts a root scan image (PNG, TIFF, or JPEG) and runs U-Net
         inference. Returns a prediction ID and the initial result.
-        File constraints: max 50 MB, resolution 512×512 to 4096×4096 px,
+        File constraints: max 50 MB, resolution 512×512 to 5000×5000 px,
         single-frame TIFF only.
       operationId: predict
       security:
@@ -1233,7 +1233,7 @@ components:
           format: binary
           description: >
             Root scan image. Accepted formats: .png, .tiff, .tif, .jpg, .jpeg.
-            Max size: 50MB. Resolution: 512x512 to 4096x4096 px.
+            Max size: 50MB. Resolution: 512x512 to 5000x5000 px.
             Single-frame TIFF only.
           confidence_threshold:
             type: number

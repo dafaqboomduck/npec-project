@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from api.routers import health, inference
 from src.api.schemas.common import ErrorCode, ErrorResponse
 
 # Logging
@@ -23,6 +24,7 @@ from src.api.schemas.common import ErrorCode, ErrorResponse
 logging.basicConfig(level=logging.INFO, format="$(asctime)s | %(levelname)-8s | %(name)s | %(message)s")
 logger = logging.getLogger(__name__)
 
+API_VERSION = "0.1.0"
 
 # Lifespan
 
@@ -49,7 +51,7 @@ app = FastAPI(
         "Accepts root scan images, runs U-Net interference, and returns "
         "segmentation masks, tip locations, and confidence scores."
     ),
-    version="0.1.0",
+    version=API_VERSION,
     docs_url="/docs",
     redoc_url="/redocs",
     lifespan=lifespan,
@@ -133,3 +135,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 # Routers - all mounted under /api/v1
 
 API_PREFIX = "/api/v1"
+
+app.include_router(inference.router, prefix=API_PREFIX)
+app.include_router(health.router, prefix=API_PREFIX)
