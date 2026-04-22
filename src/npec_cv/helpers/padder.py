@@ -1,5 +1,6 @@
 """Module for padding images and masks."""
 
+
 def padder(image, patch_size):
     """Pads an image (or mask) so that its dimensions are multiples of patch_size.
 
@@ -13,6 +14,7 @@ def padder(image, patch_size):
         np.ndarray: The padded image/mask.
     """
     import cv2
+
     h, w = image.shape[:2]
 
     # Calculate the required padding to make dimensions a multiple of patch_size

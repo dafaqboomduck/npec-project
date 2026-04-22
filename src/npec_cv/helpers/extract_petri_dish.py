@@ -1,5 +1,6 @@
 """Module for extracting the petri dish region from an image."""
 
+
 def extract_petri_dish(img, padding=30, return_coords: bool = False):
     """Identifies the largest object in an image and extracts a padded square region.
 

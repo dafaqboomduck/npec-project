@@ -1,5 +1,6 @@
 """Custom exceptions for the pipeline."""
 
+
 class CVPipelineError(Exception):
     """Base exception for pipeline-specific errors."""
 

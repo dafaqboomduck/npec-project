@@ -2,6 +2,7 @@
 
 import re
 
+
 def extract_sort_keys(plant_id):
     """Extract image number and plant number for sorting.
 

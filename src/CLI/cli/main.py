@@ -9,7 +9,8 @@ Three commands:
 from __future__ import annotations
 
 import json
-from importlib.metadata import PackageNotFoundError, version as pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Optional
 
@@ -39,6 +40,7 @@ try:
         return json.dumps(obj, indent=2, cls=_NumpyEncoder)
 
 except ImportError:
+
     def _dumps(obj: object) -> str:  # type: ignore[misc]
         return json.dumps(obj, indent=2)
 
@@ -134,7 +136,10 @@ def _build_pipeline(confidence: float):
     `npec-cv info` start fast without loading TensorFlow.
     """
     from npec_cv import CVPipeline  # noqa: PLC0415
-    from npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG  # noqa: PLC0415
+    from npec_cv.configs.inference import (  # noqa: PLC0415
+        ANCHOR_MODEL_CONFIG,
+        ROOT_MODEL_CONFIG,
+    )
     from npec_cv.models.inference import ModelConfig  # noqa: PLC0415
 
     root_cfg = ModelConfig(
@@ -209,7 +214,6 @@ def predict(
         - `pixel_count` — total pixels in the root mask
         - `mask_available` — whether a binary mask was produced
 
-    \b
     Examples:
       # Single image → prints JSON to stdout
       npec-cv predict plant.jpg
@@ -243,8 +247,7 @@ def predict(
         images = sorted(p for p in path.iterdir() if p.suffix.lower() in SUPPORTED_EXTENSIONS)
         if not images:
             typer.echo(
-                f"Error: no supported images ({', '.join(sorted(SUPPORTED_EXTENSIONS))}) "
-                f"found in {path}",
+                f"Error: no supported images ({', '.join(sorted(SUPPORTED_EXTENSIONS))}) " f"found in {path}",
                 err=True,
             )
             raise typer.Exit(code=1)
@@ -280,12 +283,14 @@ def info() -> None:
     - `supported_formats` — file extensions accepted by `predict`
     - `description` — human-readable pipeline summary
 
-    \b
     Example:
       npec-cv info
       npec-cv info | python -m json.tool   # pretty-print with indent
     """
-    from npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG  # noqa: PLC0415
+    from npec_cv.configs.inference import (  # noqa: PLC0415
+        ANCHOR_MODEL_CONFIG,
+        ROOT_MODEL_CONFIG,
+    )
 
     metadata = {
         "package": "npec_cv",
@@ -322,7 +327,6 @@ def version() -> None:
     (set in pyproject.toml). Prints 'unknown' if the package is not
     installed in the current environment.
 
-    \b
     Example:
       npec-cv version
       # 0.2.0
