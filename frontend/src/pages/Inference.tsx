@@ -37,6 +37,7 @@ export default function Inference() {
 
   // ── Modals ──
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   useEffect(() => {
     void getModelsForInference()
@@ -220,16 +221,34 @@ export default function Inference() {
                 <div className="inference-result">
                   <div className="result-header">
                     <h2 className="result-title">Inference Complete</h2>
-                    <button
-                      className="btn-reset"
-                      onClick={() => {
-                        setResult(null);
-                        setFile(null);
-                        setFilePreviewUrl(null);
-                      }}
-                    >
-                      ✕ New scan
-                    </button>
+                    <div className="result-header-actions">
+                      <button
+                        className="btn-result-action btn-result-new"
+                        id="btn-new-scan"
+                        onClick={() => {
+                          setResult(null);
+                          setFile(null);
+                          setFilePreviewUrl(null);
+                        }}
+                      >
+                        ↩ New Scan
+                      </button>
+                      <button
+                        className="btn-result-action btn-result-save"
+                        id="btn-save-result"
+                        onClick={() => setShowComingSoon(true)}
+                      >
+                        ✓ Save
+                      </button>
+                      <button
+                        className="btn-result-action btn-result-discard"
+                        id="btn-discard-result"
+                        aria-label="Discard result"
+                        onClick={() => setShowDiscardConfirm(true)}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
 
                   <div className="result-meta">
@@ -487,6 +506,68 @@ export default function Inference() {
             >
               Got it
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Discard confirmation modal ───────────────────────────────────────── */}
+      {showDiscardConfirm && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-confirm-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowDiscardConfirm(false);
+          }}
+        >
+          <div className="modal-card">
+            <div className="modal-icon modal-icon--danger" aria-hidden="true">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+            </div>
+            <h2 id="discard-confirm-title" className="modal-title">
+              Discard Result?
+            </h2>
+            <p className="modal-body">
+              This will permanently remove the current inference result.
+              <br />
+              You will need to re-run inference to get it back.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="modal-close modal-close--secondary"
+                id="discard-cancel"
+                onClick={() => setShowDiscardConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-close modal-close--danger"
+                id="discard-confirm"
+                onClick={() => {
+                  setResult(null);
+                  setFile(null);
+                  setFilePreviewUrl(null);
+                  setShowDiscardConfirm(false);
+                }}
+              >
+                Discard
+              </button>
+            </div>
           </div>
         </div>
       )}

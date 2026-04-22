@@ -18,7 +18,7 @@ export async function predict(
 ): Promise<PredictionResponse> {
   const form = new FormData();
   form.append('file', file);
-  form.append('confidence_threshold', confidenceThreshold.toFixed(2));
+  form.append('confidence_threshold', String(confidenceThreshold));
 
   return apiClient<PredictionResponse>('/predict', {
     method: 'POST',

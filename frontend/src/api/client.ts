@@ -6,8 +6,7 @@
  * behavior across local dev, Docker, and Portainer.
  */
 
-export const BASE_URL =
-  import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+export const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('access_token');

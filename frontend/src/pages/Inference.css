@@ -555,6 +555,60 @@
   color: var(--color-primary);
 }
 
+/* Result header action buttons */
+.result-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.btn-result-action {
+  border-radius: var(--radius-md);
+  padding: 0.375rem 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1.5px solid transparent;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+  cursor: pointer;
+}
+
+.btn-result-new {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.btn-result-new:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-result-save {
+  background: var(--color-primary);
+  color: var(--color-card-dark-text);
+  border-color: var(--color-primary);
+}
+
+.btn-result-save:hover {
+  opacity: 0.85;
+}
+
+.btn-result-discard {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  padding: 0.375rem 0.625rem;
+}
+
+.btn-result-discard:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
 .result-meta {
   display: flex;
   gap: var(--space-8);
@@ -711,6 +765,41 @@
   align-items: center;
   justify-content: center;
   color: var(--color-primary);
+}
+
+.modal-icon--danger {
+  background: #fef2f2;
+  color: var(--color-danger);
+}
+
+.modal-actions {
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+  margin-top: var(--space-2);
+}
+
+.modal-close--secondary {
+  background: transparent;
+  border: 1.5px solid var(--color-border);
+  color: var(--color-text-secondary);
+  flex: 1;
+}
+
+.modal-close--secondary:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: transparent;
+}
+
+.modal-close--danger {
+  background: var(--color-danger);
+  flex: 1;
+}
+
+.modal-close--danger:hover {
+  opacity: 0.85;
+  background: var(--color-danger);
 }
 
 .modal-title {
