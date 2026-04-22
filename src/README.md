@@ -15,116 +15,134 @@ npec_robotics imports and uses npec_cv; npec_cv does not depend on robotics.
 ## Source Tree
 
 ```
+├── db/                               # Database setup and migrations
+│   ├── alembic/                      # Alembic migrations
+│   ├── seeds/                        # Database seeds
+│   ├── base.py
+│   ├── orm.py
+│   ├── session.py
+│   └── README.md
+├── docs/                             # Project documentation
+│   ├── database/
+│   ├── api_endpoints.md
+│   ├── api_spec.yaml
+│   └── IO specifications.md
+├── frontend/                         # Frontend Application (React/Vite)
+│   ├── public/
+│   ├── src/
+│   │   ├── api/                      # Frontend API integration
+│   │   ├── components/               # Reusable UI components
+│   │   ├── pages/                    # Page components
+│   │   ├── styles/                   # CSS and styling
+│   │   └── types/                    # TypeScript type definitions
+│   ├── wireframe/                    # UI wireframes and designs
+│   ├── package.json
+│   └── vite.config.ts
+├── requirements/                     # Project dependencies
+│   ├── api.txt
+│   ├── cuda.txt
+│   ├── cv.txt
+│   └── dev.txt
+├── scripts/                          # Utility scripts
+│   └── db-migrate.sh
 ├── src/                              # Backend + ML system (monorepo style)
 │   ├── README.md
 │   │
 │   ├── api/                          # FastAPI layer
 │   │   ├── __init__.py
-│   │   ├── main.py
 │   │   ├── dependencies.py
-│   │   │
-│   │   ├── routers/
-│   │   │   ├── __init__.py
-│   │   │   ├── health.py
-│   │   │   ├── inference.py
-│   │   │   └── ...
-│   │   │
-│   │   ├── schemas/
-│   │   │   ├── __init__.py
-│   │   │   ├── common.py
-│   │   │   ├── predictions.py
-│   │   │   └── ...
+│   │   ├── main.py
 │   │   │
 │   │   ├── repositories/
 │   │   │   ├── __init__.py
 │   │   │   ├── base.py
-│   │   │   ├── memory.py
-│   │   │   └── ...
+│   │   │   └── memory.py
+│   │   │
+│   │   ├── routers/
+│   │   │   ├── __init__.py
+│   │   │   ├── health.py
+│   │   │   └── inference.py
+│   │   │
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   ├── common.py
+│   │   │   ├── health.py
+│   │   │   └── predictions.py
 │   │   │
 │   │   └── services/
 │   │       ├── __init__.py
 │   │       ├── base.py
-│   │       ├── mock_interface.py
 │   │       ├── image_validation.py
-│   │       └── ...
+│   │       └── mock_inference.py
 │   │
-│   ├── cli/                        # CLI Interface
+│   ├── CLI/                          # CLI Interface
 │   │   ├── __init__.py
-|   |   |── main.py
-|   |   
+│   │   └── main.py
 │   │
 │   └── npec_cv/                      # Core CV/ML package
-│       ├── pipeline.py
+│       ├── __init__.py
 │       ├── _tf_setup.py
+│       ├── pipeline.py
 │       ├── pyproject.toml
 │       ├── README.md
-│       ├── __init__.py
 │       │
 │       ├── artifacts/
 │       │   └── models/
 │       │       ├── anchor_det_model_512px.keras
+│       │       ├── distilled_student_model.keras
 │       │       ├── root_det_model_512px.keras
-│       │       ├── root_det_model_512px_old.keras
-│       │       └── ...
+│       │       └── root_det_model_512px_old.keras
 │       │
 │       ├── configs/
+│       │   ├── __init__.py
 │       │   ├── inference.py
 │       │   ├── lengths.py
 │       │   ├── segmentation.py
-│       │   ├── thresholds.py
-│       │   └── __init__.py
+│       │   └── thresholds.py
 │       │
 │       ├── core/
+│       │   ├── __init__.py
 │       │   ├── plant_master.py
 │       │   ├── plant_segmentation.py
-│       │   ├── root_lengths.py
-│       │   └── __init__.py
+│       │   └── root_lengths.py
 │       │
-│       ├── models/
-│       │   ├── pipeline.py
-│       │   ├── segmentation.py
-│       │   ├── plant_master.py
-│       │   ├── inference.py
-│       │   ├── adaptive_threshold.py
-│       │   ├── length.py
-│       │   └── __init__.py
-│       │
-│       ├── inference/
-│       │   ├── inference_manager.py
-│       │   ├── custom_functions.py
-│       │   └── __init__.py
+│       ├── exceptions/
+│       │   ├── __init__.py
+│       │   └── exceptions.py
 │       │
 │       ├── helpers/
+│       │   ├── __init__.py
 │       │   ├── dataset_manager.py
 │       │   ├── extract_petri_dish.py
 │       │   ├── padder.py
 │       │   ├── patchify.py
-│       │   ├── sort_keys.py
-│       │   └── __init__.py
+│       │   └── sort_keys.py
 │       │
-│       └── exceptions/
-│           ├── exceptions.py
-│           └── __init__.py
-│        
-├── tests/                      
-│   ├── __init__.py
-│   ├── conftest.py
-│   ├── api/
-│   │   ├── test_health.py
-│   │   ├── test_inference.py
-│   │   └── ...
-│   │
-│   ├── cli/
-│   │   ├── conftest.py
-│   │   ├── test_cli.py
-│   │   └── __init__.py
-│   │
-│   └── npec_cv/
-│       ├── test_configs.py
-│       ├── test_models.py
-│       └── ...
+│       ├── inference/
+│       │   ├── __init__.py
+│       │   ├── custom_functions.py
+│       │   └── inference_manager.py
+│       │
+│       └── models/
+│           ├── __init__.py
+│           ├── adaptive_threshold.py
+│           ├── inference.py
+│           ├── length.py
+│           ├── pipeline.py
+│           ├── plant_master.py
+│           └── segmentation.py
 │
-└── pytest.ini            
+├── tests/                            # Testing scripts
+│   └── cli/
+│       ├── conftest.py
+│       ├── test_cli.py
+│       └── __init__.py
+│
+├── .env.example
+├── docker-compose.yml
+├── project-roadmap.png
+├── Project Diagram.drawio
+└── pyproject.toml
 ```
 
 ## Quick Imports
