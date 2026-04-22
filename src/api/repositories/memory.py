@@ -9,8 +9,13 @@ before a real database is available.
 import logging
 from uuid import UUID
 
-from api.repositories.base import AbstractPredictionRepository
-from api.schemas.predictions import PredictionResponse
+from src.api.repositories.base import AbstractPredictionRepository
+from src.api.schemas.predictions import (
+    Plant,
+    PredictionMetadata,
+    PredictionResponse,
+    PredictionStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +30,25 @@ class InMemoryPredictionRepository(AbstractPredictionRepository):
 
     def __init__(self) -> None:
         """Thread-safe-enough in-memory store backed by a plain `dict`."""
-        self._store: dict[UUID, PredictionResponse] = {}
+        self._store: dict[UUID, PredictionResponse] = {
+            UUID("3fa85f64-5717-4562-b3fc-2c963f66afa6"): PredictionResponse(
+                prediction_id="3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                status=PredictionStatus.OK,
+                metadata=PredictionMetadata(
+                    model_version="string",
+                    inference_timestamp="2026-04-22T13:04:00.034Z",
+                    processing_time_ms=0,
+                    input_resolution=[0, 0],
+                    input_channels=0,
+                    normalisation_applied=True,
+                    scale_factor_mm_per_px=0,
+                ),
+                segmentation_mask_url=None,
+                plants=[Plant(plant_id=0, tip_x=0, tip_y=0, confidence=1, root_length_px=0, root_length_mm=0)],
+                overall_confidence=1,
+                warnings=[],
+            )
+        }
 
     async def save(self, prediction: PredictionResponse) -> PredictionResponse:
         """Store `prediction` under its UUID.

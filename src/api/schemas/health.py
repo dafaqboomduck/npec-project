@@ -1,9 +1,9 @@
 """Service liveness -related Pydantic schemas."""
 
-import datetime
+from datetime import datetime
 from enum import Enum
 
-from pytorch_forecasting import BaseModel
+from pydantic import BaseModel
 
 # Enums
 

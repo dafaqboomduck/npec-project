@@ -5,13 +5,13 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from api.schemas.predictions import (
+from src.api.schemas.predictions import (
     Plant,
     PredictionMetadata,
     PredictionResponse,
     PredictionStatus,
 )
-from api.services.base import AbstractInferenceService
+from src.api.services.base import AbstractInferenceService
 
 logger = logging.getLogger(__name__)
 

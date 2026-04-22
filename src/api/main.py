@@ -3,7 +3,7 @@
 This module creates and configures the FastAPI instance. It is
 the entry point for uvicorn:
 
-    uvicorn api.main:app --reload
+    uvicorn src.api.main:app --reload
 
 All routers are registered here.
 """
@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from api.routers import health, inference
+from src.api.routers import health, inference
 from src.api.schemas.common import ErrorCode, ErrorResponse
 
 # Logging
@@ -102,7 +102,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         HTTP 422 :class:`~fastapi.responses.JSONResponse`.
     """
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=ErrorResponse(
             error_code=ErrorCode.INVALID_REQUEST,
             message="Request validation failed.",
@@ -136,5 +136,5 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 API_PREFIX = "/api/v1"
 
-app.include_router(inference.router, prefix=API_PREFIX)
 app.include_router(health.router, prefix=API_PREFIX)
+app.include_router(inference.router, prefix=API_PREFIX)

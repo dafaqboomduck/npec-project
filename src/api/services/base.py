@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from api.schemas.predictions import PredictionResponse
+from src.api.schemas.predictions import PredictionResponse
 
 
 class AbstractInferenceService(ABC):

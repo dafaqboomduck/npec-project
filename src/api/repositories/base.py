@@ -9,7 +9,7 @@ is therefore a one-line change in dependencies.py.
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from api.schemas.predictions import PredictionResponse
+from src.api.schemas.predictions import PredictionResponse
 
 
 class AbstractPredictionRepository(ABC):

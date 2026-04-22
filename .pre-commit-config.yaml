@@ -8,8 +8,7 @@ repos:
     rev: v0.4.1
     hooks:
       - id: ruff
-        args: [--fix]
-        language: python  # remove dependency on system ruff
+        args: [--fix, --per-file-ignores=tests/*:D]
 
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2

@@ -11,7 +11,7 @@ import logging
 from fastapi import HTTPException, status
 from PIL import Image, UnidentifiedImageError
 
-from api.schemas.common import ErrorCode, ErrorResponse
+from src.api.schemas.common import ErrorCode, ErrorResponse
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def validate_file_size(data: bytes) -> None:
     """
     if len(data) > MAX_FILE_SIZE_BYTES:
         raise _error(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status.HTTP_413_CONTENT_TOO_LARGE,
             ErrorCode.FILE_TOO_LARGE,
             f"File size {len(data):,} bytes exceeds the 50 MB limit.",
         )
@@ -98,14 +98,14 @@ def validate_image(data: bytes, filename: str) -> Image.Image:
         img = Image.open(io.BytesIO(data))
     except UnidentifiedImageError:
         raise _error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.CORRUPT_FILE,
             "The uploaded file could not be decoded as an image.",
         )
     except Exception as exc:
         logger.warning("Unexpected error opening image '%s': '%s", filename, exc)
         raise _error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.CORRUPT_FILE,
             "The uploaded file could not be opened.",
         )
@@ -114,7 +114,7 @@ def validate_image(data: bytes, filename: str) -> Image.Image:
     width, height = img.size
     if width < MIN_RESOLUTION or height < MIN_RESOLUTION or width > MAX_RESOLUTION or height > MAX_RESOLUTION:
         raise _error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.INVALID_RESOLUTION,
             f"Image resolution {width}x{height} is out of the accepted range "
             f"{MIN_RESOLUTION}-{MAX_RESOLUTION} px on each axis.",
@@ -125,7 +125,7 @@ def validate_image(data: bytes, filename: str) -> Image.Image:
         try:
             img.seek(1)
             raise _error(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 ErrorCode.MULTI_PAGE_TIFF,
                 "Only single-frame TIFF files are accepted.",
             )

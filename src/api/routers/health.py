@@ -7,8 +7,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
-from api.main import API_VERSION
-from api.schemas.health import HealthResponse, ServiceStatus
+from src.api.schemas.health import HealthResponse, ServiceStatus
 
 router = APIRouter(tags=["Health"])
 
@@ -22,4 +21,4 @@ router = APIRouter(tags=["Health"])
 )
 async def get_health() -> HealthResponse:
     """Return the current liveness status of the service."""
-    return HealthResponse(status=ServiceStatus.OK, version=API_VERSION, timestamp=datetime.now(timezone.utc))
+    return HealthResponse(status=ServiceStatus.OK, version="0.1.0", timestamp=datetime.now(timezone.utc))

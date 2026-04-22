@@ -5,10 +5,10 @@ to their abstract interfaces. Routers import only the get_* functions
 below. They never import a concrete class directly.
 """
 
-from api.repositories.base import AbstractPredictionRepository
-from api.repositories.memory import InMemoryPredictionRepository
-from api.services.base import AbstractInferenceService
-from api.services.mock_inference import MockInferenceService
+from src.api.repositories.base import AbstractPredictionRepository
+from src.api.repositories.memory import InMemoryPredictionRepository
+from src.api.services.base import AbstractInferenceService
+from src.api.services.mock_inference import MockInferenceService
 
 # Module-level singletons
 

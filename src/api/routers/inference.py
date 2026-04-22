@@ -10,15 +10,16 @@ Exposes the four inference-related endpoints defined in api_spec.yaml:
 """
 
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from api.dependencies import get_inference_service, get_prediction_repo
-from api.repositories.base import AbstractPredictionRepository
-from api.schemas.common import ErrorResponse
-from api.schemas.predictions import PredictionResponse
-from api.services.base import AbstractInferenceService
-from api.services.image_validation import (
+from src.api.dependencies import get_inference_service, get_prediction_repo
+from src.api.repositories.base import AbstractPredictionRepository
+from src.api.schemas.common import ErrorCode, ErrorResponse, MessageResponse
+from src.api.schemas.predictions import PredictionResponse
+from src.api.services.base import AbstractInferenceService
+from src.api.services.image_validation import (
     validate_content_type,
     validate_file_size,
     validate_image,
@@ -27,6 +28,36 @@ from api.services.image_validation import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Inference"])
+
+# Helpers
+
+_NOT_FOUND_DETAIL = ErrorResponse(
+    error_code=ErrorCode.NOT_FOUND,
+    message="Prediction not found.",
+).model_dump()
+
+
+def _prediction_or_404(prediction: PredictionResponse | None, prediction_id: UUID) -> PredictionResponse:
+    """Return `prediction` or raise HTTP 404.
+
+    Args:
+        prediction: Result from the repository. `None` if not found.
+        prediction_id: The UUID that was requested, used in the log message.
+
+    Returns:
+        The prediction if it exists.
+
+    Raises:
+        HTTPException: 404 if `prediction` is `None`.
+    """
+    if prediction is None:
+        logger.debug("Prediction %s not found", prediction_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_NOT_FOUND_DETAIL,
+        )
+    return prediction
+
 
 # Endpoints
 
@@ -96,3 +127,61 @@ async def predict(
 
     await repo.save(prediction)
     return prediction
+
+
+@router.get(
+    "/predictions/{prediction_id}",
+    response_model=PredictionResponse,
+    summary="Retrieve a prediction result",
+    responses={404: {"model": ErrorResponse, "description": "Prediction not found"}},
+)
+async def get_prediction(
+    prediction_id: UUID,
+    repo: AbstractPredictionRepository = Depends(get_prediction_repo),
+) -> PredictionResponse:
+    """Return a previously stored prediction by its UUID.
+
+    Args:
+        prediction_id: UUID of the prediction to retrieve.
+        repo: Injected prediction repository.
+
+    Returns:
+        The stored `PredictionResponse`.
+
+    Raises:
+        HTTPException: 404 if no prediction with `prediction_id` exists.
+    """
+    prediction = await repo.get(prediction_id)
+    return _prediction_or_404(prediction, prediction_id)
+
+
+@router.delete(
+    "/predictions/{prediction_id}",
+    response_model=MessageResponse,
+    summary="Discard an unsaved prediction",
+    responses={404: {"model": ErrorResponse, "description": "Prediction not found"}},
+)
+async def delete_prediction(
+    prediction_id: UUID,
+    repo: AbstractPredictionRepository = Depends(get_prediction_repo),
+) -> MessageResponse:
+    """Remove a prediction from the store.
+
+    Args:
+        prediction_id: UUID of the prediction to discard.
+        repo: Injected prediction repository.
+
+    Returns:
+        MessageResponse confirming deletion.
+
+    Raises:
+        HTTPException: 404 if no prediction with `prediction_id` exists.
+    """
+    deleted = await repo.delete(prediction_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_NOT_FOUND_DETAIL,
+        )
+    logger.info("Discarded prediction %s", prediction_id)
+    return MessageResponse(message=f"Prediction {prediction_id} discarded.")
