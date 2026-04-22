@@ -49,7 +49,14 @@ except ImportError:
 # Constants
 # ---------------------------------------------------------------------------
 
-SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg"})
+MAX_FILE_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
+MIN_RESOLUTION: int = 512
+MAX_RESOLUTION: int = 5000
+ACCEPTED_CONTENT_TYPES: frozenset[str] = frozenset(["image/png", "image/tiff", "image/jpg", "image/jpeg"])
+ACCEPTED_EXTENSIONS: frozenset[str] = frozenset([".png", ".tiff", ".tif", ".jpg", ".jpeg"])
+
+# Keep old name as alias so existing internal references don't break
+SUPPORTED_EXTENSIONS = ACCEPTED_EXTENSIONS
 
 # ---------------------------------------------------------------------------
 # Typer app
@@ -153,6 +160,73 @@ def _build_pipeline(confidence: float):
 
 
 # ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
+
+def _validate_image(path: Path) -> None:
+    """Run all image constraints against a single file.
+
+    Raises typer.Exit(1) with a descriptive error message if any check fails.
+
+    Checks (in order):
+      1. Extension is in ACCEPTED_EXTENSIONS
+      2. File size is within MAX_FILE_SIZE_BYTES
+      3. Image can be opened and resolution is within [MIN_RESOLUTION, MAX_RESOLUTION]
+    """
+    # --- extension ---------------------------------------------------------
+    if path.suffix.lower() not in ACCEPTED_EXTENSIONS:
+        typer.echo(
+            f"Error: unsupported file format '{path.suffix}'. "
+            f"Accepted formats: {', '.join(sorted(ACCEPTED_EXTENSIONS))}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # --- file size ---------------------------------------------------------
+    size = path.stat().st_size
+    if size > MAX_FILE_SIZE_BYTES:
+        mb = size / (1024 * 1024)
+        limit_mb = MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        typer.echo(
+            f"Error: '{path.name}' is {mb:.1f} MB which exceeds the "
+            f"{limit_mb:.0f} MB limit. Please reduce the file size or split the image.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # --- resolution --------------------------------------------------------
+    try:
+        from PIL import Image as _PILImage  # noqa: PLC0415
+
+        with _PILImage.open(path) as img:
+            w, h = img.size
+    except Exception as exc:
+        typer.echo(
+            f"Error: could not read image '{path.name}': {exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if w < MIN_RESOLUTION or h < MIN_RESOLUTION:
+        typer.echo(
+            f"Error: '{path.name}' is {w}x{h} px — both dimensions must be "
+            f"at least {MIN_RESOLUTION} px. "
+            "The model requires a minimum patch size of 512 px.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if w > MAX_RESOLUTION or h > MAX_RESOLUTION:
+        typer.echo(
+            f"Error: '{path.name}' is {w}x{h} px — dimensions must not exceed "
+            f"{MAX_RESOLUTION} px. Please downscale the image before running inference.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
@@ -163,8 +237,11 @@ def predict(
         Path,
         typer.Argument(
             help=(
-                "Image file (.jpg / .jpeg / .png) **or** a directory containing images. "
-                "Directories are processed as a batch and the output becomes a JSON array."
+                "Image file or directory of images. "
+                f"Accepted formats: {', '.join(sorted(ACCEPTED_EXTENSIONS))}. "
+                f"Max file size: {MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB. "
+                f"Resolution: {MIN_RESOLUTION}–{MAX_RESOLUTION} px per side. "
+                "Directories are processed as a batch and output becomes a JSON array."
             ),
         ),
     ],
@@ -232,19 +309,13 @@ def predict(
         raise typer.Exit(code=1)
 
     if path.is_file():
-        if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-            typer.echo(
-                f"Error: unsupported file format '{path.suffix}'. "
-                f"Supported formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
-                err=True,
-            )
-            raise typer.Exit(code=1)
+        _validate_image(path)
         pipeline = _build_pipeline(confidence)
         result = pipeline.process_single_image(path)
         payload = _image_result_to_dict(result)
 
     else:
-        images = sorted(p for p in path.iterdir() if p.suffix.lower() in SUPPORTED_EXTENSIONS)
+        images = sorted(p for p in path.iterdir() if p.suffix.lower() in ACCEPTED_EXTENSIONS)
         if not images:
             typer.echo(
                 f"Error: no supported images ({', '.join(sorted(SUPPORTED_EXTENSIONS))}) " f"found in {path}",
@@ -255,6 +326,7 @@ def predict(
         pipeline = _build_pipeline(confidence)
         payload = []
         for img_path in images:
+            _validate_image(img_path)
             result = pipeline.process_single_image(img_path)
             payload.append(_image_result_to_dict(result))
 
@@ -309,7 +381,13 @@ def info() -> None:
                 "default_threshold": ANCHOR_MODEL_CONFIG.threshold,
             },
         },
-        "supported_formats": sorted(SUPPORTED_EXTENSIONS),
+        "accepted_extensions": sorted(ACCEPTED_EXTENSIONS),
+        "accepted_content_types": sorted(ACCEPTED_CONTENT_TYPES),
+        "constraints": {
+            "max_file_size_mb": MAX_FILE_SIZE_BYTES // (1024 * 1024),
+            "min_resolution_px": MIN_RESOLUTION,
+            "max_resolution_px": MAX_RESOLUTION,
+        },
         "description": (
             "NPEC computer vision pipeline for plant root detection and measurement. "
             "Processes petri-dish images to segment roots, detect anchor points, "
