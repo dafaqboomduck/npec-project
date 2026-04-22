@@ -78,9 +78,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="true"
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -89,15 +87,11 @@ class User(Base):
         onupdate=func.now(),
     )
 
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     predictions: Mapped[list["Prediction"]] = relationship(back_populates="user")
     feedback: Mapped[list["Feedback"]] = relationship(back_populates="user")
 
-    __table_args__ = (
-        CheckConstraint("role IN ('user', 'admin')", name="role_valid"),
-    )
+    __table_args__ = (CheckConstraint("role IN ('user', 'admin')", name="role_valid"),)
 
 
 # ---------------------------------------------------------------------------
@@ -117,12 +111,8 @@ class RefreshToken(Base):
         nullable=False,
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     replaced_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("refresh_tokens.id"),
@@ -161,29 +151,21 @@ class ModelVersion(Base):
     artifact_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = _created_at()
-    deployed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    deployed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    predictions: Mapped[list["Prediction"]] = relationship(
-        back_populates="model_version"
-    )
+    predictions: Mapped[list["Prediction"]] = relationship(back_populates="model_version")
 
     __table_args__ = (
         CheckConstraint(
             "status IN ('deployed', 'registered', 'archived')",
             name="status_valid",
         ),
-        CheckConstraint(
-            "f1_score IS NULL OR (f1_score BETWEEN 0 AND 1)", name="f1_range"
-        ),
+        CheckConstraint("f1_score IS NULL OR (f1_score BETWEEN 0 AND 1)", name="f1_range"),
         CheckConstraint(
             "precision IS NULL OR (precision BETWEEN 0 AND 1)",
             name="precision_range",
         ),
-        CheckConstraint(
-            "recall IS NULL OR (recall BETWEEN 0 AND 1)", name="recall_range"
-        ),
+        CheckConstraint("recall IS NULL OR (recall BETWEEN 0 AND 1)", name="recall_range"),
         Index("ix_model_versions_status", "status"),
         # Partial unique index: at most one row with status='deployed'.
         Index(
@@ -226,27 +208,17 @@ class Prediction(Base):
     input_channels: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
 
     # Inference metadata
-    normalisation_applied: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false"
-    )
-    scale_factor_mm_per_px: Mapped[Optional[float]] = mapped_column(
-        Float, nullable=True
-    )
+    normalisation_applied: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    scale_factor_mm_per_px: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     processing_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Output
     segmentation_mask_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     overall_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    plants: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB_or_JSON, nullable=False, server_default="[]"
-    )
-    warnings: Mapped[list[str]] = mapped_column(
-        JSONB_or_JSON, nullable=False, server_default="[]"
-    )
+    plants: Mapped[list[dict[str, Any]]] = mapped_column(JSONB_or_JSON, nullable=False, server_default="[]")
+    warnings: Mapped[list[str]] = mapped_column(JSONB_or_JSON, nullable=False, server_default="[]")
 
-    confirmed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     inference_timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -256,9 +228,7 @@ class Prediction(Base):
 
     user: Mapped["User"] = relationship(back_populates="predictions")
     model_version: Mapped["ModelVersion"] = relationship(back_populates="predictions")
-    feedback: Mapped[list["Feedback"]] = relationship(
-        back_populates="prediction", cascade="all, delete-orphan"
-    )
+    feedback: Mapped[list["Feedback"]] = relationship(back_populates="prediction", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint("status IN ('ok', 'error')", name="status_valid"),
@@ -306,9 +276,7 @@ class Feedback(Base):
     user: Mapped["User"] = relationship(back_populates="feedback")
 
     __table_args__ = (
-        CheckConstraint(
-            "signal IN ('correct', 'incorrect')", name="signal_valid"
-        ),
+        CheckConstraint("signal IN ('correct', 'incorrect')", name="signal_valid"),
         Index("ix_feedback_prediction_id", "prediction_id"),
         Index("ix_feedback_user_id", "user_id"),
     )
@@ -336,9 +304,7 @@ class MonitoringMetric(Base):
         ForeignKey("model_versions.id", ondelete="SET NULL"),
         nullable=True,
     )
-    labels: Mapped[dict[str, Any]] = mapped_column(
-        JSONB_or_JSON, nullable=False, server_default="{}"
-    )
+    labels: Mapped[dict[str, Any]] = mapped_column(JSONB_or_JSON, nullable=False, server_default="{}")
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

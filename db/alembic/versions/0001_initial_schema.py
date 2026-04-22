@@ -19,6 +19,7 @@ downgrade step can drop them in reverse without FK violations.
 The pgcrypto extension is enabled first because every table uses
 gen_random_uuid() for default primary keys.
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -240,21 +241,15 @@ def upgrade() -> None:
             name="fk_predictions_model_version_id_model_versions",
             ondelete="RESTRICT",
         ),
-        sa.CheckConstraint(
-            "status IN ('ok', 'error')", name="ck_predictions_status_valid"
-        ),
+        sa.CheckConstraint("status IN ('ok', 'error')", name="ck_predictions_status_valid"),
         sa.CheckConstraint(
             "overall_confidence IS NULL OR (overall_confidence BETWEEN 0 AND 1)",
             name="ck_predictions_confidence_range",
         ),
     )
     op.create_index("ix_predictions_user_id", "predictions", ["user_id"])
-    op.create_index(
-        "ix_predictions_model_version_id", "predictions", ["model_version_id"]
-    )
-    op.create_index(
-        "ix_predictions_user_created", "predictions", ["user_id", "created_at"]
-    )
+    op.create_index("ix_predictions_model_version_id", "predictions", ["model_version_id"])
+    op.create_index("ix_predictions_user_created", "predictions", ["user_id", "created_at"])
 
     # -----------------------------------------------------------------------
     # feedback
@@ -290,9 +285,7 @@ def upgrade() -> None:
             name="fk_feedback_user_id_users",
             ondelete="RESTRICT",
         ),
-        sa.CheckConstraint(
-            "signal IN ('correct', 'incorrect')", name="ck_feedback_signal_valid"
-        ),
+        sa.CheckConstraint("signal IN ('correct', 'incorrect')", name="ck_feedback_signal_valid"),
     )
     op.create_index("ix_feedback_prediction_id", "feedback", ["prediction_id"])
     op.create_index("ix_feedback_user_id", "feedback", ["user_id"])
