@@ -60,7 +60,7 @@ export async function apiClient<T>(
       localStorage.removeItem('role');
       localStorage.removeItem('username');
       window.location.href = '/login';
-      
+
       // Delay throw to prevent UI errors while the browser navigates away
       await new Promise((r) => setTimeout(r, 10000));
     }

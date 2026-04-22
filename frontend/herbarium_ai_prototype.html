@@ -1,320 +1,452 @@
-<!DOCTYPE html>
+<!doctype html>
 <html class="light" lang="en">
-<head>
-    <meta charset="utf-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>Herbarium AI Prototype</title>
-    
+
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <!-- Material Symbols Outlined -->
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-    
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+
     <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    "colors": {
-                        "on-error-container": "#93000a",
-                        "primary-fixed": "#c1ecd4",
-                        "primary-container": "#1b4332",
-                        "inverse-primary": "#a5d0b9",
-                        "secondary-fixed-dim": "#b3cf9f",
-                        "surface-container-highest": "#e0e3e1",
-                        "on-primary-fixed": "#002114",
-                        "on-secondary-fixed-variant": "#364d28",
-                        "secondary": "#4d653e",
-                        "on-background": "#181c1b",
-                        "tertiary": "#002d1c",
-                        "secondary-fixed": "#cfebb9",
-                        "inverse-on-surface": "#eef1ef",
-                        "tertiary-container": "#00452e",
-                        "tertiary-fixed": "#b1f0ce",
-                        "on-tertiary-fixed-variant": "#0e5138",
-                        "on-tertiary": "#ffffff",
-                        "primary-fixed-dim": "#a5d0b9",
-                        "error": "#ba1a1a",
-                        "surface-dim": "#d7dbd9",
-                        "inverse-surface": "#2d3130",
-                        "on-secondary-container": "#516942",
-                        "on-primary-container": "#86af99",
-                        "on-error": "#ffffff",
-                        "surface-variant": "#e0e3e1",
-                        "primary": "#012d1d",
-                        "on-surface": "#181c1b",
-                        "on-secondary": "#ffffff",
-                        "surface-container-lowest": "#ffffff",
-                        "on-secondary-fixed": "#0b2003",
-                        "tertiary-fixed-dim": "#95d4b3",
-                        "surface": "#f7faf8",
-                        "on-tertiary-fixed": "#002114",
-                        "surface-tint": "#3f6653",
-                        "outline-variant": "#c1c8c2",
-                        "surface-container": "#ebefed",
-                        "on-surface-variant": "#414844",
-                        "outline": "#717973",
-                        "on-tertiary-container": "#75b393",
-                        "on-primary-fixed-variant": "#274e3d",
-                        "on-primary": "#ffffff",
-                        "secondary-container": "#cce8b7",
-                        "surface-container-high": "#e6e9e7",
-                        "error-container": "#ffdad6",
-                        "surface-container-low": "#f1f4f2",
-                        "surface-bright": "#f7faf8",
-                        "background": "#f7faf8"
-                    },
-                    "borderRadius": {
-                        "DEFAULT": "0.125rem",
-                        "lg": "0.25rem",
-                        "xl": "0.5rem",
-                        "full": "0.75rem"
-                    },
-                    "fontFamily": {
-                        "headline": ["Manrope"],
-                        "body": ["Inter"],
-                        "label": ["Inter"]
-                    }
-                },
-            }
-        }
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'on-error-container': '#93000a',
+              'primary-fixed': '#c1ecd4',
+              'primary-container': '#1b4332',
+              'inverse-primary': '#a5d0b9',
+              'secondary-fixed-dim': '#b3cf9f',
+              'surface-container-highest': '#e0e3e1',
+              'on-primary-fixed': '#002114',
+              'on-secondary-fixed-variant': '#364d28',
+              secondary: '#4d653e',
+              'on-background': '#181c1b',
+              tertiary: '#002d1c',
+              'secondary-fixed': '#cfebb9',
+              'inverse-on-surface': '#eef1ef',
+              'tertiary-container': '#00452e',
+              'tertiary-fixed': '#b1f0ce',
+              'on-tertiary-fixed-variant': '#0e5138',
+              'on-tertiary': '#ffffff',
+              'primary-fixed-dim': '#a5d0b9',
+              error: '#ba1a1a',
+              'surface-dim': '#d7dbd9',
+              'inverse-surface': '#2d3130',
+              'on-secondary-container': '#516942',
+              'on-primary-container': '#86af99',
+              'on-error': '#ffffff',
+              'surface-variant': '#e0e3e1',
+              primary: '#012d1d',
+              'on-surface': '#181c1b',
+              'on-secondary': '#ffffff',
+              'surface-container-lowest': '#ffffff',
+              'on-secondary-fixed': '#0b2003',
+              'tertiary-fixed-dim': '#95d4b3',
+              surface: '#f7faf8',
+              'on-tertiary-fixed': '#002114',
+              'surface-tint': '#3f6653',
+              'outline-variant': '#c1c8c2',
+              'surface-container': '#ebefed',
+              'on-surface-variant': '#414844',
+              outline: '#717973',
+              'on-tertiary-container': '#75b393',
+              'on-primary-fixed-variant': '#274e3d',
+              'on-primary': '#ffffff',
+              'secondary-container': '#cce8b7',
+              'surface-container-high': '#e6e9e7',
+              'error-container': '#ffdad6',
+              'surface-container-low': '#f1f4f2',
+              'surface-bright': '#f7faf8',
+              background: '#f7faf8',
+            },
+            borderRadius: {
+              DEFAULT: '0.125rem',
+              lg: '0.25rem',
+              xl: '0.5rem',
+              full: '0.75rem',
+            },
+            fontFamily: {
+              headline: ['Manrope'],
+              body: ['Inter'],
+              label: ['Inter'],
+            },
+          },
+        },
+      };
     </script>
-    
+
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        h1, h2, h3, .headline, .font-headline { font-family: 'Manrope', sans-serif; }
-        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
-        .glass-panel { background: rgba(247, 250, 248, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-        .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); }
-        .ambient-shadow { box-shadow: 0 12px 40px rgba(24, 28, 27, 0.06); }
-        .signature-gradient { background: linear-gradient(135deg, #012d1d 0%, #1b4332 100%); }
-        .image-overlay-mask { background: linear-gradient(45deg, rgba(204, 232, 183, 0.4) 0%, rgba(1, 45, 29, 0.2) 100%); mix-blend-mode: multiply; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #c1c8c2; border-radius: 10px; }
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      h1,
+      h2,
+      h3,
+      .headline,
+      .font-headline {
+        font-family: 'Manrope', sans-serif;
+      }
+      .material-symbols-outlined {
+        font-variation-settings:
+          'FILL' 0,
+          'wght' 400,
+          'GRAD' 0,
+          'opsz' 24;
+        vertical-align: middle;
+      }
+      .glass-panel {
+        background: rgba(247, 250, 248, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      .glass-card {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(12px);
+      }
+      .ambient-shadow {
+        box-shadow: 0 12px 40px rgba(24, 28, 27, 0.06);
+      }
+      .signature-gradient {
+        background: linear-gradient(135deg, #012d1d 0%, #1b4332 100%);
+      }
+      .image-overlay-mask {
+        background: linear-gradient(
+          45deg,
+          rgba(204, 232, 183, 0.4) 0%,
+          rgba(1, 45, 29, 0.2) 100%
+        );
+        mix-blend-mode: multiply;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #c1c8c2;
+        border-radius: 10px;
+      }
     </style>
 
     <!-- React and Router Scripts -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <script src="https://unpkg.com/history@5/umd/history.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js" crossorigin></script>
+    <script
+      src="https://unpkg.com/react@18/umd/react.development.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/history@5/umd/history.development.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"
+      crossorigin
+    ></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-</head>
-<body class="bg-background text-on-surface">
+  </head>
+  <body class="bg-background text-on-surface">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
-        const { createRoot } = ReactDOM;
-        const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+      const { useState, useEffect } = React;
+      const { createRoot } = ReactDOM;
+      const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } =
+        ReactRouterDOM;
 
-        // Components
-        const Header = () => {
-            const location = useLocation();
-            
-            const navLinks = [
-                { path: '/', label: 'Overview' },
-                { path: '/dashboard', label: 'Dashboard' },
-                { path: '/library', label: 'Library' },
-                { path: '/inference', label: 'Inference' },
-                { path: '/model', label: 'Model Info' }
-            ];
+      // Components
+      const Header = () => {
+        const location = useLocation();
 
-            return (
-                <header className="flex justify-between items-center w-full px-8 py-4 bg-emerald-100/50 dark:bg-emerald-950/80 backdrop-blur-md sticky top-0 z-50 border-b border-emerald-200/30">
-                    <div className="flex items-center space-x-12">
-                        <h1 className="text-xl font-black text-emerald-950 dark:text-emerald-100 font-headline">Herbarium AI</h1>
-                        <nav className="hidden md:flex items-center space-x-8 text-sm font-semibold">
-                            {navLinks.map(link => (
-                                <Link 
-                                    key={link.path}
-                                    to={link.path}
-                                    className={`${location.pathname === link.path ? 'text-emerald-950 dark:text-emerald-50 border-b-2 border-emerald-950 dark:border-emerald-50 pb-1' : 'text-emerald-800/60 dark:text-emerald-200/60 hover:text-emerald-950 transition-colors'}`}
-                                >
-                                    {link.label}
-                                </Link>
-                            ))}
-                        </nav>
-                    </div>
-                    <div className="flex items-center space-x-6">
-                        <div className="relative hidden sm:block">
-                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">search</span>
-                            <input className="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-2 text-sm w-64 focus:ring-1 focus:ring-primary-fixed" placeholder="Search..." type="text"/>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                            <button className="p-2 hover:bg-emerald-200/30 dark:hover:bg-emerald-800/50 rounded-full transition-colors">
-                                <span className="material-symbols-outlined text-emerald-900 dark:text-emerald-50">notifications</span>
-                            </button>
-                            <button className="p-2 hover:bg-emerald-200/30 dark:hover:bg-emerald-800/50 rounded-full transition-colors">
-                                <span className="material-symbols-outlined text-emerald-900 dark:text-emerald-50">settings</span>
-                            </button>
-                            <div className="flex items-center space-x-3 pl-4 border-l border-emerald-200/30">
-                                <img alt="Profile" className="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKD-URXQ576tmA_W_E23pTTIRWNTxZUo2AXY86mgSy7cuI2-sylcFAAqAsaYVYFVmwsNZc456pgSuv3bkUPLDqOIobo9rn7JD66n4ssTJ28PofIG03pvx8AuNEQ6k6a6eyJnR5KIvc-tfPG_kM8sxIbvPpOZNwerPqFEvnEsWX8-I2v77rh0EL4d_3yUmdjKRc0Z2irV48Zz4ydG-uy56BdmN_kmhe4KuSHxN292aZfWMrMfCXV9td5U4ddnaF59iWrwO0JZ-1MO0"/>
-                            </div>
-                        </div>
-                    </div>
-                </header>
-            );
-        };
+        const navLinks = [
+          { path: '/', label: 'Overview' },
+          { path: '/dashboard', label: 'Dashboard' },
+          { path: '/library', label: 'Library' },
+          { path: '/inference', label: 'Inference' },
+          { path: '/model', label: 'Model Info' },
+        ];
 
-        // Screens
-        const OverviewScreen = () => (
-            <div className="min-h-screen relative">
-                <Header />
-                <main className="max-w-[1600px] mx-auto p-6 lg:p-8">
-                    <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
-                        <div>
-                            <h1 className="text-4xl font-extrabold font-headline tracking-tight text-primary mb-2">Rhizome Lab MLOps</h1>
-                            <p className="text-on-surface-variant max-w-2xl font-medium">Monitoring RootNet-V2.4 inference pipelines and botanical annotation fidelity across distributed datasets.</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <button className="bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-opacity ambient-shadow">
-                                <span className="material-symbols-outlined text-sm">refresh</span> Regenerate Report
-                            </button>
-                        </div>
-                    </header>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                        <div className="md:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-6 mb-2">
-                            <div className="bg-surface-container-lowest p-6 rounded-xl ambient-shadow flex flex-col gap-1">
-                                <span className="text-xs font-bold text-on-surface-variant font-headline uppercase tracking-wider">mAP Score</span>
-                                <div className="text-3xl font-extrabold text-primary">0.942</div>
-                            </div>
-                            <div className="bg-surface-container-lowest p-6 rounded-xl ambient-shadow flex flex-col gap-1">
-                                <span className="text-xs font-bold text-on-surface-variant font-headline uppercase tracking-wider">Throughput</span>
-                                <div className="text-3xl font-extrabold text-primary">1.2k</div>
-                            </div>
-                        </div>
-                        
-                        <div className="md:col-span-8 bg-surface-container-lowest rounded-xl p-8 ambient-shadow">
-                            <h3 className="text-lg font-bold font-headline text-primary mb-4">Annotation Accuracy Over Time</h3>
-                            <div className="h-64 bg-surface-container-high rounded flex items-center justify-center text-on-surface-variant">Chart Placeholder</div>
-                        </div>
-                        
-                        <div className="md:col-span-4 bg-surface-container-low rounded-xl p-8">
-                            <h3 className="text-lg font-bold font-headline text-primary mb-6">Compute Node Health</h3>
-                            <div className="space-y-4">
-                                <div className="p-3 bg-surface-container-lowest rounded-lg border-l-4 border-secondary flex justify-between">
-                                    <span className="text-xs font-bold">NODE-A1</span> <span className="text-xs">Nominal</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </main>
-                <div className="fixed top-0 right-0 -z-10 w-1/3 h-1/2 bg-primary-fixed/20 blur-[120px] rounded-full pointer-events-none"></div>
+        return (
+          <header className="flex justify-between items-center w-full px-8 py-4 bg-emerald-100/50 dark:bg-emerald-950/80 backdrop-blur-md sticky top-0 z-50 border-b border-emerald-200/30">
+            <div className="flex items-center space-x-12">
+              <h1 className="text-xl font-black text-emerald-950 dark:text-emerald-100 font-headline">
+                Herbarium AI
+              </h1>
+              <nav className="hidden md:flex items-center space-x-8 text-sm font-semibold">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.path}
+                    to={link.path}
+                    className={`${location.pathname === link.path ? 'text-emerald-950 dark:text-emerald-50 border-b-2 border-emerald-950 dark:border-emerald-50 pb-1' : 'text-emerald-800/60 dark:text-emerald-200/60 hover:text-emerald-950 transition-colors'}`}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
             </div>
-        );
-
-        const DashboardScreen = () => (
-            <div className="min-h-screen bg-background">
-                <Header />
-                <main className="max-w-7xl mx-auto px-6 py-10">
-                    <header className="mb-12">
-                        <h1 className="text-4xl font-extrabold text-primary tracking-tight mb-2">Welcome back, Dr. Arisaka</h1>
-                        <p className="text-on-surface-variant text-lg">Lab status: Active.</p>
-                    </header>
-                    <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 mb-12">
-                        <div className="md:col-span-2 bg-surface-container-lowest p-6 rounded-xl">
-                            <span className="text-sm font-bold uppercase">Total Experiments</span>
-                            <div className="text-5xl font-extrabold text-primary my-4">1,284</div>
-                        </div>
-                        <div className="md:col-span-4 h-64 bg-surface-container-high rounded-xl overflow-hidden relative">
-                             <img alt="Lab" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmtZfpR0K5jg0plEKVeYBwjQ7nkWVbYHqNCArda3hNgZHOUnN5KcMeG-kss8NHvkAL85ltyYieDe_Bcr3Tw3jwQzzQbABDpa_NT3lNhnHPGxgnw4eJHT_zvDd2FV5QXwkriESV4aNz49iE_DK4GNjtNaSaoG7LBusqqy_ONia8BtrFsgQhZ3JTX3D9BN-p75vIaPzTobsiXaUlWvp85UrN2uPVRyuE9fu1OMdEEG80aS5RVclwR9VM2zFtXeoqicqCNcPPkiK9iTc"/>
-                        </div>
-                    </div>
-                </main>
-            </div>
-        );
-
-        const LibraryScreen = () => (
-            <div className="min-h-screen flex flex-col">
-                <Header />
-                <div className="flex flex-1">
-                    <aside className="w-64 bg-[#f1f4f2] p-4 flex flex-col border-r border-outline-variant/20">
-                        <h2 className="font-bold mb-4">Library Admin</h2>
-                        <nav className="space-y-2">
-                            <a href="#" className="block p-2 bg-white rounded font-semibold text-primary">Collections</a>
-                            <a href="#" className="block p-2 hover:bg-white/50 rounded">Datasets</a>
-                        </nav>
-                    </aside>
-                    <main className="flex-1 p-8">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {[1, 2, 3].map(i => (
-                                <div key={i} className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm">
-                                    <div className="h-48 bg-surface-container-high"></div>
-                                    <div className="p-4">
-                                        <h3 className="font-bold">Root Plate {i}00</h3>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </main>
+            <div className="flex items-center space-x-6">
+              <div className="relative hidden sm:block">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
+                  search
+                </span>
+                <input
+                  className="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-2 text-sm w-64 focus:ring-1 focus:ring-primary-fixed"
+                  placeholder="Search..."
+                  type="text"
+                />
+              </div>
+              <div className="flex items-center space-x-3">
+                <button className="p-2 hover:bg-emerald-200/30 dark:hover:bg-emerald-800/50 rounded-full transition-colors">
+                  <span className="material-symbols-outlined text-emerald-900 dark:text-emerald-50">
+                    notifications
+                  </span>
+                </button>
+                <button className="p-2 hover:bg-emerald-200/30 dark:hover:bg-emerald-800/50 rounded-full transition-colors">
+                  <span className="material-symbols-outlined text-emerald-900 dark:text-emerald-50">
+                    settings
+                  </span>
+                </button>
+                <div className="flex items-center space-x-3 pl-4 border-l border-emerald-200/30">
+                  <img
+                    alt="Profile"
+                    className="w-8 h-8 rounded-full object-cover"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKD-URXQ576tmA_W_E23pTTIRWNTxZUo2AXY86mgSy7cuI2-sylcFAAqAsaYVYFVmwsNZc456pgSuv3bkUPLDqOIobo9rn7JD66n4ssTJ28PofIG03pvx8AuNEQ6k6a6eyJnR5KIvc-tfPG_kM8sxIbvPpOZNwerPqFEvnEsWX8-I2v77rh0EL4d_3yUmdjKRc0Z2irV48Zz4ydG-uy56BdmN_kmhe4KuSHxN292aZfWMrMfCXV9td5U4ddnaF59iWrwO0JZ-1MO0"
+                  />
                 </div>
+              </div>
             </div>
+          </header>
         );
+      };
 
-        const InferenceScreen = () => (
-            <div className="min-h-screen">
-                <Header />
-                <main className="max-w-7xl mx-auto px-6 py-10">
-                    <h1 className="text-4xl font-extrabold text-primary mb-8">Inference Lab</h1>
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        <aside className="lg:col-span-3 bg-surface-container-low p-6 rounded-xl">
-                            <h3 className="font-bold mb-4">Parameters</h3>
-                            <input type="range" className="w-full accent-primary" />
-                        </aside>
-                        <div className="lg:col-span-9 grid md:grid-cols-2 gap-8">
-                            <div className="md:col-span-2 bg-surface-container-lowest border-2 border-dashed border-outline-variant rounded-xl p-12 text-center">
-                                <span className="material-symbols-outlined text-4xl mb-4">cloud_upload</span>
-                                <h2>Drop Scans Here</h2>
-                            </div>
-                        </div>
-                    </div>
-                </main>
-            </div>
-        );
+      // Screens
+      const OverviewScreen = () => (
+        <div className="min-h-screen relative">
+          <Header />
+          <main className="max-w-[1600px] mx-auto p-6 lg:p-8">
+            <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div>
+                <h1 className="text-4xl font-extrabold font-headline tracking-tight text-primary mb-2">
+                  Rhizome Lab MLOps
+                </h1>
+                <p className="text-on-surface-variant max-w-2xl font-medium">
+                  Monitoring RootNet-V2.4 inference pipelines and botanical
+                  annotation fidelity across distributed datasets.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button className="bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-opacity ambient-shadow">
+                  <span className="material-symbols-outlined text-sm">
+                    refresh
+                  </span>{' '}
+                  Regenerate Report
+                </button>
+              </div>
+            </header>
 
-        const ModelInfoScreen = () => (
-            <div className="min-h-screen flex flex-col">
-                <Header />
-                <div className="flex flex-1">
-                    <aside className="w-64 bg-[#f1f4f2] p-4 border-r border-outline-variant/20"></aside>
-                    <main className="flex-1 p-8">
-                        <h1 className="text-4xl font-extrabold text-primary mb-8">RootNet-V2</h1>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <div className="bg-surface-container-lowest p-6 rounded-xl shadow-sm">
-                                <h3 className="font-bold mb-4">Performance Metrics</h3>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between"><span className="font-medium">mAP</span><span>0.942</span></div>
-                                </div>
-                            </div>
-                        </div>
-                    </main>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+              <div className="md:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-6 mb-2">
+                <div className="bg-surface-container-lowest p-6 rounded-xl ambient-shadow flex flex-col gap-1">
+                  <span className="text-xs font-bold text-on-surface-variant font-headline uppercase tracking-wider">
+                    mAP Score
+                  </span>
+                  <div className="text-3xl font-extrabold text-primary">
+                    0.942
+                  </div>
                 </div>
+                <div className="bg-surface-container-lowest p-6 rounded-xl ambient-shadow flex flex-col gap-1">
+                  <span className="text-xs font-bold text-on-surface-variant font-headline uppercase tracking-wider">
+                    Throughput
+                  </span>
+                  <div className="text-3xl font-extrabold text-primary">
+                    1.2k
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-8 bg-surface-container-lowest rounded-xl p-8 ambient-shadow">
+                <h3 className="text-lg font-bold font-headline text-primary mb-4">
+                  Annotation Accuracy Over Time
+                </h3>
+                <div className="h-64 bg-surface-container-high rounded flex items-center justify-center text-on-surface-variant">
+                  Chart Placeholder
+                </div>
+              </div>
+
+              <div className="md:col-span-4 bg-surface-container-low rounded-xl p-8">
+                <h3 className="text-lg font-bold font-headline text-primary mb-6">
+                  Compute Node Health
+                </h3>
+                <div className="space-y-4">
+                  <div className="p-3 bg-surface-container-lowest rounded-lg border-l-4 border-secondary flex justify-between">
+                    <span className="text-xs font-bold">NODE-A1</span>{' '}
+                    <span className="text-xs">Nominal</span>
+                  </div>
+                </div>
+              </div>
             </div>
+          </main>
+          <div className="fixed top-0 right-0 -z-10 w-1/3 h-1/2 bg-primary-fixed/20 blur-[120px] rounded-full pointer-events-none"></div>
+        </div>
+      );
+
+      const DashboardScreen = () => (
+        <div className="min-h-screen bg-background">
+          <Header />
+          <main className="max-w-7xl mx-auto px-6 py-10">
+            <header className="mb-12">
+              <h1 className="text-4xl font-extrabold text-primary tracking-tight mb-2">
+                Welcome back, Dr. Arisaka
+              </h1>
+              <p className="text-on-surface-variant text-lg">
+                Lab status: Active.
+              </p>
+            </header>
+            <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 mb-12">
+              <div className="md:col-span-2 bg-surface-container-lowest p-6 rounded-xl">
+                <span className="text-sm font-bold uppercase">
+                  Total Experiments
+                </span>
+                <div className="text-5xl font-extrabold text-primary my-4">
+                  1,284
+                </div>
+              </div>
+              <div className="md:col-span-4 h-64 bg-surface-container-high rounded-xl overflow-hidden relative">
+                <img
+                  alt="Lab"
+                  className="w-full h-full object-cover"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmtZfpR0K5jg0plEKVeYBwjQ7nkWVbYHqNCArda3hNgZHOUnN5KcMeG-kss8NHvkAL85ltyYieDe_Bcr3Tw3jwQzzQbABDpa_NT3lNhnHPGxgnw4eJHT_zvDd2FV5QXwkriESV4aNz49iE_DK4GNjtNaSaoG7LBusqqy_ONia8BtrFsgQhZ3JTX3D9BN-p75vIaPzTobsiXaUlWvp85UrN2uPVRyuE9fu1OMdEEG80aS5RVclwR9VM2zFtXeoqicqCNcPPkiK9iTc"
+                />
+              </div>
+            </div>
+          </main>
+        </div>
+      );
+
+      const LibraryScreen = () => (
+        <div className="min-h-screen flex flex-col">
+          <Header />
+          <div className="flex flex-1">
+            <aside className="w-64 bg-[#f1f4f2] p-4 flex flex-col border-r border-outline-variant/20">
+              <h2 className="font-bold mb-4">Library Admin</h2>
+              <nav className="space-y-2">
+                <a
+                  href="#"
+                  className="block p-2 bg-white rounded font-semibold text-primary"
+                >
+                  Collections
+                </a>
+                <a href="#" className="block p-2 hover:bg-white/50 rounded">
+                  Datasets
+                </a>
+              </nav>
+            </aside>
+            <main className="flex-1 p-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm"
+                  >
+                    <div className="h-48 bg-surface-container-high"></div>
+                    <div className="p-4">
+                      <h3 className="font-bold">Root Plate {i}00</h3>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </main>
+          </div>
+        </div>
+      );
+
+      const InferenceScreen = () => (
+        <div className="min-h-screen">
+          <Header />
+          <main className="max-w-7xl mx-auto px-6 py-10">
+            <h1 className="text-4xl font-extrabold text-primary mb-8">
+              Inference Lab
+            </h1>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <aside className="lg:col-span-3 bg-surface-container-low p-6 rounded-xl">
+                <h3 className="font-bold mb-4">Parameters</h3>
+                <input type="range" className="w-full accent-primary" />
+              </aside>
+              <div className="lg:col-span-9 grid md:grid-cols-2 gap-8">
+                <div className="md:col-span-2 bg-surface-container-lowest border-2 border-dashed border-outline-variant rounded-xl p-12 text-center">
+                  <span className="material-symbols-outlined text-4xl mb-4">
+                    cloud_upload
+                  </span>
+                  <h2>Drop Scans Here</h2>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      );
+
+      const ModelInfoScreen = () => (
+        <div className="min-h-screen flex flex-col">
+          <Header />
+          <div className="flex flex-1">
+            <aside className="w-64 bg-[#f1f4f2] p-4 border-r border-outline-variant/20"></aside>
+            <main className="flex-1 p-8">
+              <h1 className="text-4xl font-extrabold text-primary mb-8">
+                RootNet-V2
+              </h1>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                  <h3 className="font-bold mb-4">Performance Metrics</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="font-medium">mAP</span>
+                      <span>0.942</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      );
+
+      // App Component
+      const App = () => {
+        return (
+          <MemoryRouter>
+            <Routes>
+              <Route path="/" element={<OverviewScreen />} />
+              <Route path="/dashboard" element={<DashboardScreen />} />
+              <Route path="/library" element={<LibraryScreen />} />
+              <Route path="/inference" element={<InferenceScreen />} />
+              <Route path="/model" element={<ModelInfoScreen />} />
+            </Routes>
+          </MemoryRouter>
         );
+      };
 
-        // App Component
-        const App = () => {
-            return (
-                <MemoryRouter>
-                    <Routes>
-                        <Route path="/" element={<OverviewScreen />} />
-                        <Route path="/dashboard" element={<DashboardScreen />} />
-                        <Route path="/library" element={<LibraryScreen />} />
-                        <Route path="/inference" element={<InferenceScreen />} />
-                        <Route path="/model" element={<ModelInfoScreen />} />
-                    </Routes>
-                </MemoryRouter>
-            );
-        };
-
-        const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+      const root = createRoot(document.getElementById('root'));
+      root.render(<App />);
     </script>
-</body>
+  </body>
 </html>
