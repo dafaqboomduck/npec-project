@@ -50,13 +50,8 @@ npec_robotics imports and uses npec_cv; npec_cv does not depend on robotics.
 │   │
 │   ├── cli/                        # CLI Interface
 │   │   ├── __init__.py
-│   │   ├── main.py
-│   │   ├── commands/
-│   │   │   ├── __init__.py
-│   │   │   ├── predict.py
-│   │   │   ├── info.py
-│   │   │   └── version.py
-│   │   └── utils.py
+|   |   |── main.py
+|   |   
 │   │
 │   └── npec_cv/                      # Core CV/ML package
 │       ├── pipeline.py
@@ -120,9 +115,9 @@ npec_robotics imports and uses npec_cv; npec_cv does not depend on robotics.
 │   │   └── ...
 │   │
 │   ├── cli/
-│   │   ├── test_predict.py
-│   │   ├── test_info.py
-│   │   └── ...
+│   │   ├── conftest.py
+│   │   ├── test_cli.py
+│   │   └── __init__.py
 │   │
 │   └── npec_cv/
 │       ├── test_configs.py
