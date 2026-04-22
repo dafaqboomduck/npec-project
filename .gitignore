@@ -15,3 +15,12 @@ saved_models
 build/
 dist/
 *.egg-info/
+# Environment files — NEVER commit these (added for db layer)
+.env
+.env.local
+.env.*.local
+
+# SQLite databases (used in tests / local scratch)
+*.db
+*.sqlite
+*.sqlite3

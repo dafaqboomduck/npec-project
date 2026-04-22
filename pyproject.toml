@@ -1,3 +1,21 @@
+[project]
+name = "npec-cv"
+version = "0.1.0"
+description = "NPEC plant root segmentation service"
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-postgresql>=6.0",
+]
+
+
 [tool.black]
 line-length = 120
 
@@ -13,10 +31,12 @@ ignore = []
 "src/inference/inference_manager.py" = ["E402"]
 "src/npec_cv/inference/inference_manager.py" = ["E402"]
 "src/npec_cv/pipeline.py" = ["E402"]
+# Alembic env.py deliberately manipulates sys.path before importing db, so
+# imports are not at the top of the file. This is the standard alembic pattern.
+"db/alembic/env.py" = ["E402"]
 
 [tool.isort]
 profile = "black"
-
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

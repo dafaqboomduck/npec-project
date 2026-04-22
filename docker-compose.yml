@@ -1,0 +1,73 @@
+# docker-compose.yml — local development stack for the CV5 database layer.
+#
+# Services:
+#   db         Postgres 16 with persistent volume and healthcheck.
+#   migrations One-shot. Runs `alembic upgrade head` and exits. Waits for
+#              `db` to be healthy before starting (prevents race conditions
+#              on cold `docker compose up`).
+#
+# NOT in this file:
+#   - The backend app (separate task)
+#   - The frontend (separate task, has its own repo-root directory)
+#   - Seed data runner (run manually, see docs/database/running.md)
+#
+# Usage:
+#   docker compose up -d db              # start just Postgres
+#   docker compose run --rm migrations   # run migrations, then exit
+#   docker compose down                  # stop everything, keep volume
+#   docker compose down -v               # also delete the volume (wipes data)
+#
+# Environment:
+#   Reads `.env` automatically (Compose feature, no dotenv library needed).
+#   DATABASE_URL inside the compose network uses host `db` (the service name).
+
+services:
+  db:
+    image: postgres:16
+    container_name: cv5-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cv5}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cv5}
+      POSTGRES_DB: ${POSTGRES_DB:-cv5}
+    ports:
+      # Expose 5432 on the host so bare-metal tools (psql, DataGrip, etc.)
+      # can connect to the same database. If port 5432 is taken on your
+      # host, change the left side only: "5433:5432".
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - cv5_pgdata:/var/lib/postgresql/data
+      # Mount the seed SQL so `docker compose exec db psql ... -f /seeds/...`
+      # works without copying the file into the container manually.
+      - ./db/seeds:/seeds:ro
+    healthcheck:
+      # pg_isready exits 0 once Postgres accepts connections. This is what
+      # the migrations service waits on via `depends_on: condition: service_healthy`.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migrations:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    image: cv5-migrations:local
+    container_name: cv5-migrations
+    environment:
+      # Inside the compose network, Postgres is reachable at host `db`.
+      # Note: this deliberately does NOT inherit DATABASE_URL from the host
+      # shell, because the host URL points to `localhost`, not `db`. Leave
+      # it hardcoded to the compose-internal address.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cv5}:${POSTGRES_PASSWORD:-cv5}@db:5432/${POSTGRES_DB:-cv5}
+    depends_on:
+      db:
+        condition: service_healthy
+    # `restart: "no"` is the default but worth being explicit: this is a
+    # one-shot job. If it fails, we want to see the failure, not a loop.
+    restart: "no"
+
+volumes:
+  cv5_pgdata:
+    name: cv5_pgdata
