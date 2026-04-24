@@ -1,9 +1,13 @@
-"""Database engine and session factory for the CV5 database.
+"""Async database engine and session factory for the CV5 database.
 
 Reads ``DATABASE_URL`` from the environment at import time. The URL format is
-standard SQLAlchemy:
+standard SQLAlchemy — we use the async psycopg 3 driver:
 
     postgresql+psycopg://user:pass@host:port/dbname
+
+psycopg 3 supports both sync and async under the same URL scheme; SQLAlchemy
+picks the async path because we use :func:`create_async_engine`. No change to
+the URL string is needed when going from sync to async.
 
 If you need to point at a different database (different env, test fixtures,
 etc.) change the env var, not this file. See ``.env.example`` and
@@ -13,11 +17,14 @@ etc.) change the env var, not this file. See ``.env.example`` and
 from __future__ import annotations
 
 import os
-from typing import Generator
+from typing import AsyncGenerator
 
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 def _get_database_url() -> str:
@@ -45,11 +52,11 @@ def _get_database_url() -> str:
     return url
 
 
-def build_engine(url: str | None = None) -> Engine:
-    """Construct a SQLAlchemy engine.
+def build_engine(url: str | None = None) -> AsyncEngine:
+    """Construct an async SQLAlchemy engine.
 
     Exposed as a function (rather than a module-level constant) so tests can
-    build throwaway engines pointed at SQLite or an ephemeral Postgres.
+    build throwaway engines pointed at an ephemeral Postgres or aiosqlite.
 
     Args:
         url: Optional SQLAlchemy connection URL. If ``None``, the URL is read
@@ -57,9 +64,9 @@ def build_engine(url: str | None = None) -> Engine:
             :func:`_get_database_url`.
 
     Returns:
-        A SQLAlchemy engine with ``pool_pre_ping`` enabled.
+        An async SQLAlchemy engine with ``pool_pre_ping`` enabled.
     """
-    return create_engine(
+    return create_async_engine(
         url or _get_database_url(),
         # pool_pre_ping avoids "connection closed" errors after Postgres
         # restarts or long idle periods — cheap insurance.
@@ -71,15 +78,15 @@ def build_engine(url: str | None = None) -> Engine:
 # Module-level engine and session factory for the backend to import.
 # These are built lazily on first access so that simply importing this module
 # (e.g. for running Alembic) doesn't fail if DATABASE_URL isn't set yet.
-_engine: Engine | None = None
-_SessionLocal: sessionmaker[Session] | None = None
+_engine: AsyncEngine | None = None
+_SessionLocal: async_sessionmaker[AsyncSession] | None = None
 
 
-def get_engine() -> Engine:
-    """Return the process-wide SQLAlchemy engine, building it on first access.
+def get_engine() -> AsyncEngine:
+    """Return the process-wide async SQLAlchemy engine, building it on first access.
 
     Returns:
-        The lazily-initialised SQLAlchemy engine bound to ``DATABASE_URL``.
+        The lazily-initialised async SQLAlchemy engine bound to ``DATABASE_URL``.
     """
     global _engine
     if _engine is None:
@@ -87,15 +94,16 @@ def get_engine() -> Engine:
     return _engine
 
 
-def get_sessionmaker() -> sessionmaker[Session]:
-    """Return the process-wide ``sessionmaker``, building it on first access.
+def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    """Return the process-wide ``async_sessionmaker``, building it on first access.
 
     Returns:
-        A configured ``sessionmaker`` bound to the engine from :func:`get_engine`.
+        A configured ``async_sessionmaker`` bound to the engine from
+        :func:`get_engine`.
     """
     global _SessionLocal
     if _SessionLocal is None:
-        _SessionLocal = sessionmaker(
+        _SessionLocal = async_sessionmaker(
             bind=get_engine(),
             autoflush=False,
             autocommit=False,
@@ -104,24 +112,22 @@ def get_sessionmaker() -> sessionmaker[Session]:
     return _SessionLocal
 
 
-def get_session() -> Generator[Session, None, None]:
-    """Yield a SQLAlchemy session for use as a FastAPI dependency.
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Yield an async SQLAlchemy session for use as a FastAPI dependency.
 
     The session is closed when the generator is exhausted, so callers do not
     need to manage cleanup themselves. Typical use::
 
         @app.get("/predictions/{id}")
-        def read(id: UUID, session: Session = Depends(get_session)):
+        async def read(id: UUID, session: AsyncSession = Depends(get_session)):
             ...
 
     Yields:
-        An open SQLAlchemy ``Session`` bound to the process-wide engine.
+        An open ``AsyncSession`` bound to the process-wide engine.
     """
-    session = get_sessionmaker()()
-    try:
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
         yield session
-    finally:
-        session.close()
 
 
 __all__ = [

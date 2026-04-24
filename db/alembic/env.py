@@ -1,4 +1,4 @@
-"""Alembic environment configuration.
+"""Alembic environment configuration (async).
 
 Wires up Alembic to the SQLAlchemy models. Key points:
 
@@ -9,17 +9,23 @@ Wires up Alembic to the SQLAlchemy models. Key points:
 - Importing ``db`` also imports ``db.orm``, which registers every model class
   on ``Base.metadata`` — that metadata is what Alembic compares against the
   live database when autogenerating migrations.
+- The online migration path uses ``create_async_engine`` and runs the
+  (synchronous) Alembic migration routine via ``connection.run_sync(...)``.
+  Alembic's migration API itself is sync; ``run_sync`` bridges it to the
+  async engine so we don't maintain two connection URLs.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # ---------------------------------------------------------------------------
 # Make `db` importable regardless of where alembic is invoked from.
@@ -59,6 +65,7 @@ def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode — emits SQL to stdout instead of executing it.
 
     Useful for generating a SQL file to apply manually (e.g. via a DBA).
+    Offline mode doesn't actually connect, so there's no async work here.
     """
     context.configure(
         url=database_url,
@@ -75,24 +82,52 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def run_migrations_online() -> None:
-    """Run migrations in 'online' mode — executes against the target database."""
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
+def do_run_migrations(connection: Connection) -> None:
+    """Configure Alembic against a live sync connection and run migrations.
+
+    Called from :func:`run_async_migrations` via ``connection.run_sync(...)``.
+    The connection object passed in is a synchronous SQLAlchemy ``Connection``
+    proxy that ``AsyncConnection.run_sync`` hands to us — Alembic's migration
+    machinery is sync and this is the documented way to drive it from an
+    async engine.
+    """
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        compare_server_default=True,
     )
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            compare_server_default=True,
-        )
+    with context.begin_transaction():
+        context.run_migrations()
 
-        with context.begin_transaction():
-            context.run_migrations()
+
+async def run_async_migrations() -> None:
+    """Build an async engine and run migrations over it."""
+    # NullPool: migrations are a one-shot process. We don't want a pool hanging
+    # around after the script exits, and pooling connections across a DDL run
+    # can interact badly with some drivers.
+    from sqlalchemy.pool import NullPool
+
+    connectable = async_engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=NullPool,
+    )
+
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+
+    await connectable.dispose()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode — executes against the target database.
+
+    Alembic expects a plain sync entrypoint, so we kick off the async
+    migration coroutine with :func:`asyncio.run` here.
+    """
+    asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():
