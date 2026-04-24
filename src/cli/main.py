@@ -136,27 +136,26 @@ def _image_result_to_dict(result) -> dict:
     }
 
 
-def _build_pipeline(confidence: float):
+def _build_pipeline(confidence: float, artifact_dir: Path):
     """Construct a CVPipeline with a custom root-detection threshold.
 
     Heavy imports are deferred here so that `npec-cv version` and
     `npec-cv info` start fast without loading TensorFlow.
     """
     from npec_cv import CVPipeline  # noqa: PLC0415
-    from npec_cv.configs.inference import (  # noqa: PLC0415
-        ANCHOR_MODEL_CONFIG,
-        ROOT_MODEL_CONFIG,
-    )
+    from npec_cv.configs.inference import build_inference_config  # noqa: PLC0415
     from npec_cv.models.inference import ModelConfig  # noqa: PLC0415
 
+    root_base_cfg, anchor_cfg = build_inference_config(artifact_dir)
+
     root_cfg = ModelConfig(
-        checkpoint=ROOT_MODEL_CONFIG.checkpoint,
+        checkpoint=root_base_cfg.checkpoint,
         threshold=confidence,
-        patch_size=ROOT_MODEL_CONFIG.patch_size,
-        batch_size=ROOT_MODEL_CONFIG.batch_size,
-        custom_objects=ROOT_MODEL_CONFIG.custom_objects,
+        patch_size=root_base_cfg.patch_size,
+        batch_size=root_base_cfg.batch_size,
+        custom_objects=root_base_cfg.custom_objects,
     )
-    return CVPipeline(inference_config=(root_cfg, ANCHOR_MODEL_CONFIG))
+    return CVPipeline(inference_config=(root_cfg, anchor_cfg))
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +244,23 @@ def predict(
             ),
         ),
     ],
+    artifact_dir: Annotated[
+        Path,
+        typer.Option(
+            "--artifact-dir",
+            "-a",
+            help=(
+                "Directory containing model files. Required files are either "
+                "root_det_model_512px.keras + anchor_det_model_512px.keras "
+                "or legacy names root_model(.keras) + anchor_model(.keras)."
+            ),
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+            readable=True,
+        ),
+    ],
     confidence: Annotated[
         float,
         typer.Option(
@@ -293,16 +309,16 @@ def predict(
 
     Examples:
       # Single image → prints JSON to stdout
-      npec-cv predict plant.jpg
+            npec-cv predict plant.jpg --artifact-dir ./models
 
       # Batch process a directory
-      npec-cv predict images/
+            npec-cv predict images/ -a ./models
 
       # Lower threshold for faint roots, save to file
-      npec-cv predict images/ --confidence 0.005 --output results.json
+            npec-cv predict images/ -a ./models --confidence 0.005 --output results.json
 
       # Raise threshold to reduce false positives
-      npec-cv predict plant.jpg -c 0.3
+            npec-cv predict plant.jpg -a ./models -c 0.3
     """
     if not path.exists():
         typer.echo(f"Error: path does not exist: {path}", err=True)
@@ -310,7 +326,11 @@ def predict(
 
     if path.is_file():
         _validate_image(path)
-        pipeline = _build_pipeline(confidence)
+        try:
+            pipeline = _build_pipeline(confidence, artifact_dir)
+        except (FileNotFoundError, ValueError) as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1)
         result = pipeline.process_single_image(path)
         payload = _image_result_to_dict(result)
 
@@ -323,7 +343,11 @@ def predict(
             )
             raise typer.Exit(code=1)
 
-        pipeline = _build_pipeline(confidence)
+        try:
+            pipeline = _build_pipeline(confidence, artifact_dir)
+        except (FileNotFoundError, ValueError) as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1)
         payload = []
         for img_path in images:
             _validate_image(img_path)
@@ -340,7 +364,24 @@ def predict(
 
 
 @app.command()
-def info() -> None:
+def info(
+    artifact_dir: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--artifact-dir",
+            "-a",
+            help=(
+                "Optional model directory used to resolve checkpoint paths. "
+                "If omitted, info reports default expected model filenames."
+            ),
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+            readable=True,
+        ),
+    ] = None,
+) -> None:
     """Print model metadata and pipeline configuration as JSON.
 
     Useful for verifying which model checkpoints are loaded, confirming
@@ -361,24 +402,36 @@ def info() -> None:
     """
     from npec_cv.configs.inference import (  # noqa: PLC0415
         ANCHOR_MODEL_CONFIG,
+        ANCHOR_MODEL_FILENAME,
+        ANCHOR_MODEL_LEGACY_FILENAMES,
         ROOT_MODEL_CONFIG,
+        ROOT_MODEL_FILENAME,
+        ROOT_MODEL_LEGACY_FILENAMES,
+        build_inference_config,
     )
+
+    root_cfg = ROOT_MODEL_CONFIG
+    anchor_cfg = ANCHOR_MODEL_CONFIG
+    if artifact_dir is not None:
+        root_cfg, anchor_cfg = build_inference_config(artifact_dir)
 
     metadata = {
         "package": "npec_cv",
         "version": _get_version(),
         "models": {
             "root_detection": {
-                "checkpoint": str(ROOT_MODEL_CONFIG.checkpoint),
-                "patch_size": ROOT_MODEL_CONFIG.patch_size,
-                "batch_size": ROOT_MODEL_CONFIG.batch_size,
-                "default_threshold": ROOT_MODEL_CONFIG.threshold,
+                "checkpoint": str(root_cfg.checkpoint),
+                "patch_size": root_cfg.patch_size,
+                "batch_size": root_cfg.batch_size,
+                "default_threshold": root_cfg.threshold,
+                "accepted_filenames": [ROOT_MODEL_FILENAME, *ROOT_MODEL_LEGACY_FILENAMES],
             },
             "anchor_detection": {
-                "checkpoint": str(ANCHOR_MODEL_CONFIG.checkpoint),
-                "patch_size": ANCHOR_MODEL_CONFIG.patch_size,
-                "batch_size": ANCHOR_MODEL_CONFIG.batch_size,
-                "default_threshold": ANCHOR_MODEL_CONFIG.threshold,
+                "checkpoint": str(anchor_cfg.checkpoint),
+                "patch_size": anchor_cfg.patch_size,
+                "batch_size": anchor_cfg.batch_size,
+                "default_threshold": anchor_cfg.threshold,
+                "accepted_filenames": [ANCHOR_MODEL_FILENAME, *ANCHOR_MODEL_LEGACY_FILENAMES],
             },
         },
         "accepted_extensions": sorted(ACCEPTED_EXTENSIONS),

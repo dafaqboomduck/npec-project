@@ -81,8 +81,18 @@ def _make_pipeline(image_result: Any = None) -> MagicMock:
 def mock_pipeline(monkeypatch) -> MagicMock:
     """Patch _build_pipeline so no TensorFlow models are loaded during tests."""
     pipeline = _make_pipeline()
-    monkeypatch.setattr("npec_cv_cli.main._build_pipeline", lambda confidence: pipeline)
+    monkeypatch.setattr("src.cli.main._build_pipeline", lambda confidence, artifact_dir: pipeline)
     return pipeline
+
+
+@pytest.fixture()
+def artifact_dir(tmp_path: Path) -> Path:
+    """Create a model directory accepted by the CLI --artifact-dir option."""
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "root_det_model_512px.keras").write_text("", encoding="utf-8")
+    (models / "anchor_det_model_512px.keras").write_text("", encoding="utf-8")
+    return models
 
 
 @pytest.fixture()
