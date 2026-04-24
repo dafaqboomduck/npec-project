@@ -1,0 +1,25 @@
+name: Lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.18"
+
+      - name: Install linters
+        run: pip install ruff==v0.4.1 black==24.3.0
+
+      - name: Ruff check
+        run: ruff check . --config pyproject.toml
+
+      - name: Black check
+        run: black --check .

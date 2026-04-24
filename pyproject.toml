@@ -30,10 +30,9 @@ select = ["E", "F", "W", "I", "D"]
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-"src/cv_pipeline.py" = ["E402"]
-"src/inference/inference_manager.py" = ["E402"]
-"src/npec_cv/inference/inference_manager.py" = ["E402"]
-"src/npec_cv/pipeline.py" = ["E402"]
+"**/inference_manager.py" = ["E402"]
+"**/_tf_setup.py" = ["E402"]
+"tests/*" = ["D"]
 # Alembic env.py deliberately manipulates sys.path before importing db, so
 # imports are not at the top of the file. This is the standard alembic pattern.
 "db/alembic/env.py" = ["E402"]

@@ -1,0 +1,3 @@
+# ruff.toml
+[lint.per-file-ignores]
+"tests/*" = ["D"]
