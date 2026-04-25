@@ -1,12 +1,26 @@
+# OS and notebook artifacts
 *.DS_Store
 .ipynb_checkpoints
+
+# Labeling outputs
 *.labeling
+
+# Python cache directories
 __pycache__
+
+# Ruff cache directory
+.ruff_cache
+
+# Local dataset artifacts
 dataset_patches*
 dataset
 kaggle_dataset*
 saved_models
+
+# Windows alternate data streams
 *:Zone.Identifier
+
+# VS Code generated files
 *.virtual_documents
 .vscode
 
@@ -14,6 +28,7 @@ saved_models
 build/
 dist/
 *.egg-info/
+
 # Environment files — NEVER commit these (added for db layer)
 .env
 .env.local
@@ -24,4 +39,6 @@ dist/
 *.sqlite
 *.sqlite3
 
+# PyPI configuration file (contains credentials, should not be committed)
 .pypirc
+

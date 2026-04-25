@@ -28,10 +28,8 @@ dependencies = [
 ]
 
 [project.scripts]
-# Entry point uses npec_cv_cli (not npec_cv.cli) so the CLI starts without
-# triggering npec_cv/__init__.py → CVPipeline → TensorFlow on every invocation.
-# TF is only imported inside the predict command body when actually needed.
-npec-cv = "npec_cv_cli.main:app"
+# CLI module is provided by the sibling src/cli package.
+npec-cv = "cli.main:app"
 
 [project.optional-dependencies]
 cuda = [
@@ -52,8 +50,7 @@ cuda = [
 [tool.setuptools]
 packages = [
   "npec_cv",
-  "npec_cv.cli",
-  "npec_cv_cli",
+  "cli",
   "npec_cv.configs",
   "npec_cv.core",
   "npec_cv.exceptions",
@@ -64,14 +61,10 @@ packages = [
 
 [tool.setuptools.package-dir]
 npec_cv = "."
-"npec_cv.cli" = "../CLI/cli"
-"npec_cv_cli" = "../CLI/cli"
+cli = "../cli"
 "npec_cv.configs" = "configs"
 "npec_cv.core" = "core"
 "npec_cv.exceptions" = "exceptions"
 "npec_cv.helpers" = "helpers"
 "npec_cv.inference" = "inference"
 "npec_cv.models" = "models"
-
-[tool.setuptools.package-data]
-npec_cv = ["artifacts/models/*.keras"]
