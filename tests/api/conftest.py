@@ -6,11 +6,13 @@ a fresh in-memory repository, preventing state leakage.
 """
 
 import io
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from db.session import get_session
 from src.api.dependencies import get_inference_service, get_prediction_repo
 from src.api.main import app
 from src.api.repositories.memory import InMemoryPredictionRepository
@@ -27,9 +29,11 @@ def client() -> TestClient:
     Returns:
         A configured `TestClient`.
     """
+    mock_db = AsyncMock()
     repo = InMemoryPredictionRepository()
     service = MockInferenceService()
 
+    app.dependency_overrides[get_session] = lambda: mock_db
     app.dependency_overrides[get_prediction_repo] = lambda: repo
     app.dependency_overrides[get_inference_service] = lambda: service
 

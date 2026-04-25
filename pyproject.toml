@@ -36,6 +36,7 @@ ignore = []
 # Alembic env.py deliberately manipulates sys.path before importing db, so
 # imports are not at the top of the file. This is the standard alembic pattern.
 "db/alembic/env.py" = ["E402"]
+"db/session.py" = ["E402"]
 
 [tool.isort]
 profile = "black"

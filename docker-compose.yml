@@ -40,10 +40,11 @@ services:
       # Mount the seed SQL so `docker compose exec db psql ... -f /seeds/...`
       # works without copying the file into the container manually.
       - ./db/seeds:/seeds:ro
+      - ./db/seeds/dev_seed.sql:/docker-entrypoint-initdb.d/dev_seed.sql:ro
     healthcheck:
       # pg_isready exits 0 once Postgres accepts connections. This is what
       # the migrations service waits on via `depends_on: condition: service_healthy`.
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5}" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -67,6 +68,17 @@ services:
     # `restart: "no"` is the default but worth being explicit: this is a
     # one-shot job. If it fails, we want to see the failure, not a loop.
     restart: "no"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   cv5_pgdata:

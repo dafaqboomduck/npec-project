@@ -26,18 +26,15 @@
 BEGIN;
 
 -- ---------------------------------------------------------------------------
--- Admin user
+-- Users
 -- ---------------------------------------------------------------------------
 -- password: devpassword
 -- hash: bcrypt, 12 rounds
-INSERT INTO users (id, email, password_hash, role, is_active)
-VALUES (
-    gen_random_uuid(),
-    'admin@dev.local',
-    '$2b$12$oXtl.c0V36nmpJ.ED1Nah.U59sw3Pc31R84OfV9NZnC2AMxQI.QP.',
-    'admin',
-    TRUE
-)
+INSERT INTO users (id, email, password_hash, role, is_active, created_at)
+VALUES
+    (gen_random_uuid(), 'dr.hrina@cv5.nl', '$2b$12$Dsj1l3KtdxYFUHtq1/6awetOfHejcIRxC4zvj45GXyi1uGGmwtl3C', 'admin', true, now()),
+    (gen_random_uuid(), 'dr.sarik@cv5.nl', '$2b$12$fWIX03wGKKI.5K6oX68k2uO779tj3pTl/.nNic0GHzKJ6U2VvI9Dy', 'admin', true, now()),
+    (gen_random_uuid(), 'intern@cv5.nl',  '$2b$12$HuJwxfFEUM3FBQiJ2Whwf.o7GYTnOpqOqk9PqPtTaT0JsHTcj6gy2', 'user',  true, now())
 ON CONFLICT (email) DO NOTHING;
 
 -- ---------------------------------------------------------------------------

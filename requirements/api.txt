@@ -1,6 +1,13 @@
 fastapi
 uvicorn
 pydantic
+pydantic_settings
 pillow
 python-multipart
 httpx
+python-jose[cryptography]
+passlib[bcrypt]
+asyncpg
+bcrypt==4.0.1
+sqlalchemy
+psycopg
