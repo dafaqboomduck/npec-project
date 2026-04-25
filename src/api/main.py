@@ -73,17 +73,17 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
     Args:
         request: The incoming request.
-        exc: The raised :class:`~fastapi.HTTPException`.
+        exc: The raised `HTTPException`.
 
     Returns:
-        :class:`~fastapi.responses.JSONResponse` whose body is the
+        `responses.JSONResponse` whose body is the
         `detail` dict.
     """
     if isinstance(exc.detail, dict):
         content = exc.detail
     else:
         content = ErrorResponse(
-            error_code=ErrorCode.INTERNAL_ERROR,
+            error_code=ErrorCode.UNAUTHORIZED if exc.status_code == 401 else ErrorCode.INTERNAL_ERROR,
             message=str(exc.detail),
         ).model_dump()
 
@@ -99,7 +99,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         exc: The validation error raised by Pydantic/FastAPI.
 
     Returns:
-        HTTP 422 :class:`~fastapi.responses.JSONResponse`.
+        HTTP 422 `responses.JSONResponse`.
     """
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -120,7 +120,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         exc: The unhandled exception.
 
     Returns:
-        HTTP 500 :class:`~fastapi.responses.JSONResponse`.
+        HTTP 500 `responses.JSONResponse`.
     """
     logger.exception("Unhandled exception on %s %s", request.method, request.url)
     return JSONResponse(

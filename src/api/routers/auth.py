@@ -164,25 +164,24 @@ async def refresh(
 )
 async def logout(
     user: Annotated[TokenData, Depends(get_current_user)],
-    body: TokenRefreshRequest | None = None,
+    body: TokenRefreshRequest,
     db: AsyncSession = Depends(get_session),
 ) -> MessageResponse:
     """Revoke the refresh token and end the session.
 
-    Requires a valid Bearer token. If a refresh token is provided in the
-    body it is also revoked so it cannot be used again.
+    Requires a valid Bearer token and a refresh token in the
+    body which is going to be revoked so it cannot be used again.
 
     Args:
         user: Authenticated user from the Bearer token.
-        body: Optional body containing the refresh token to revoke.
+        body: Body containing the refresh token to revoke.
         db: Injected database session.
 
     Returns:
         MessageResponse confirming logout.
     """
-    if body and body.refresh_token:
-        repo = UserRepository(db)
-        await repo.revoke_refresh_token(body.refresh_token)
+    repo = UserRepository(db)
+    await repo.revoke_refresh_token(body.refresh_token)
 
     logger.info("User '%s' logged out", user.sub)
     return MessageResponse(message="Logged out successfully.")

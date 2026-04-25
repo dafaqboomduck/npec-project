@@ -23,7 +23,7 @@ class AbstractInferenceService(ABC):
             confidence_threshold: Minimum per-plant confidence to include in results.
 
         Returns:
-            A fully populated :class:`~api.schemas.predictions.PredictionResponse`.
+            A fully populated `PredictionResponse`.
 
         Raises:
             ValueError: If the image cannot be decoded or is otherwise invalid.

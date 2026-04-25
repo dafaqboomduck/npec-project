@@ -125,11 +125,19 @@ paths:
       tags: [Auth]
       summary: Invalidate the current session
       description: >
-        Invalidates the access token and refresh token for the current session.
-        No request body required.
+        Ends the current session. Requires a valid Bearer token for authentication.
+        The refresh token must be provided in the request body and is immediately
+        revoked server-side so it cannot be used to mint new access tokens.
+        The access token expires naturally (TTL ~1 h); clients should discard it locally.
       operationId: authLogout
       security:
         - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
       responses:
         '200':
           description: Logged out successfully

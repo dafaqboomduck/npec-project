@@ -20,7 +20,7 @@ def get_prediction_repo() -> AbstractPredictionRepository:
     """Yield the active prediction repository.
 
     Returns:
-        The currently configured :class:`~api.repositoriess.base.AbstractPredictionRepository`.
+        The currently configured `AbstractPredictionRepository`.
     """
     return _prediction_repo
 
@@ -29,6 +29,6 @@ def get_inference_service() -> AbstractInferenceService:
     """Yield the active inference service.
 
     Returns:
-        The currently configured :class:`~api.repositories.base.AbstractInferenceService`.
+        The currently configured `AbstractInferenceService`.
     """
     return _inference_service

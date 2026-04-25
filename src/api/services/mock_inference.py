@@ -41,7 +41,7 @@ class MockInferenceService(AbstractInferenceService):
             confidence_threshold: Plants below this threshold are excluded.
 
         Returns:
-            A mock :class:`~api.schemas.predictions.PredictionResponse`.
+            A mock `PredictionResponse`.
         """
         start = time.perf_counter()
 

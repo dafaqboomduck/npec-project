@@ -25,7 +25,7 @@ class AuthResponse(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
-    expired_in: int = 3600
+    expires_in: int = 3600
     refresh_token: str
     role: UserRole
 

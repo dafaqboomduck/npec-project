@@ -25,7 +25,7 @@ ACCEPTED_EXTENSIONS: frozenset[str] = frozenset([".png", ".tiff", ".tif", ".jpg"
 
 
 def _error(status_code: int, error_code: ErrorCode, message: str) -> HTTPException:
-    """Build an :class:`~fastapi.HTTPException` with an :class:`~api.schemas.common.ErrorResponse` body."""
+    """Build an `HTTPException` with an `ErrorResponse` body."""
     return HTTPException(
         status_code=status_code,
         detail=ErrorResponse(error_code=error_code, message=message).model_dump(),
@@ -74,7 +74,7 @@ def validate_content_type(content_type: str, filename: str) -> None:
 
 
 def validate_image(data: bytes, filename: str) -> Image.Image:
-    """Decode and validate the image, returning the opened :class:`~PIL.Image.Image`.
+    """Decode and validate the image, returning the opened `PIL.Image.Image`.
 
     Validates:
     - The bytes are a readablel image (catches corrupt files).
@@ -86,7 +86,7 @@ def validate_image(data: bytes, filename: str) -> Image.Image:
         filename: Original filename, used in error messages and TIFF detection.
 
     Returns:
-        The opened :class:`~PIL.Image.Image` instance.
+        The opened `PIL.Image.Image` instance.
 
     Raises:
         HTTPException: 422 with appropriate error codes for each violation.

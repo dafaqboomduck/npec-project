@@ -6,17 +6,33 @@ a fresh in-memory repository, preventing state leakage.
 """
 
 import io
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from db.session import get_session
+from src.api.core.security import get_current_user, hash_password
 from src.api.dependencies import get_inference_service, get_prediction_repo
 from src.api.main import app
 from src.api.repositories.memory import InMemoryPredictionRepository
 from src.api.services.mock_inference import MockInferenceService
+
+_USER_ID = uuid4()
+_ADMIN_ID = uuid4()
+
+
+def _make_user(role: str = "user", user_id=_USER_ID) -> MagicMock:
+    """Return a mock User ORM object."""
+    u = MagicMock()
+    u.id = user_id
+    u.email = f"{role}@npec.nl"
+    u.password_hash = hash_password(f"{role}pass")
+    u.role = role
+    u.is_active = True
+    return u
 
 
 @pytest.fixture()
@@ -36,6 +52,25 @@ def client() -> TestClient:
     app.dependency_overrides[get_session] = lambda: mock_db
     app.dependency_overrides[get_prediction_repo] = lambda: repo
     app.dependency_overrides[get_inference_service] = lambda: service
+    app.dependency_overrides[get_current_user] = lambda: _make_user()
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def admin_client() -> TestClient:
+    """Client authenticated as admin — for endpoints requiring admin role."""
+    mock_db = AsyncMock()
+    repo = InMemoryPredictionRepository()
+    service = MockInferenceService()
+
+    app.dependency_overrides[get_session] = lambda: mock_db
+    app.dependency_overrides[get_prediction_repo] = lambda: repo
+    app.dependency_overrides[get_inference_service] = lambda: service
+    app.dependency_overrides[get_current_user] = lambda: _make_user("admin", _ADMIN_ID)
 
     with TestClient(app) as test_client:
         yield test_client

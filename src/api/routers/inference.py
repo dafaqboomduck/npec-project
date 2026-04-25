@@ -10,12 +10,15 @@ Exposes the four inference-related endpoints defined in api_spec.yaml:
 """
 
 import logging
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
+from src.api.core.security import get_current_user
 from src.api.dependencies import get_inference_service, get_prediction_repo
 from src.api.repositories.base import AbstractPredictionRepository
+from src.api.schemas.auth import TokenData
 from src.api.schemas.common import ErrorCode, ErrorResponse, MessageResponse
 from src.api.schemas.predictions import PredictionResponse
 from src.api.services.base import AbstractInferenceService
@@ -81,6 +84,7 @@ async def predict(
         le=0.99,
         description="Minimum confidence for a detection to be included.",
     ),
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
     repo: AbstractPredictionRepository = Depends(get_prediction_repo),
     inference_service: AbstractInferenceService = Depends(get_inference_service),
 ) -> PredictionResponse:
@@ -93,12 +97,12 @@ async def predict(
     Args:
         file: The uploaded image file.
         confidence_threshold: Predictions below this score are excluded from the results.
+        user: The authenticated user extracted from the Bearer token.
         repo: Injected prediction repository.
         inference_service: Injected inference service.
 
     Returns:
-        :class:`~api.schemas.predictions.PredictionResponse` with a
-        `prediction_id` UUID that can be used for later retrieval.
+        `PredictionResponse` with a `prediction_id` UUID that can be used for later retrieval.
 
     Raises:
         HTTPException: 413 if the file exceeds 50 mb.
@@ -137,12 +141,14 @@ async def predict(
 )
 async def get_prediction(
     prediction_id: UUID,
+    user: Annotated[TokenData, Depends(get_current_user)],
     repo: AbstractPredictionRepository = Depends(get_prediction_repo),
 ) -> PredictionResponse:
     """Return a previously stored prediction by its UUID.
 
     Args:
         prediction_id: UUID of the prediction to retrieve.
+        user: The authenticated user extracted from the Bearer token.
         repo: Injected prediction repository.
 
     Returns:
