@@ -48,7 +48,7 @@ INSERT INTO model_versions (
     artifact_uri, deployed_at
 )
 VALUES (
-    gen_random_uuid(),
+    '00000000-0000-0000-0000-000000000000',
     'unet-npec-v0.0.0-placeholder',
     'Placeholder U-Net',
     'Dev-only placeholder. Not a real trained model. Replace via training pipeline.',
