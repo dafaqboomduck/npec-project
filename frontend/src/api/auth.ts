@@ -8,7 +8,7 @@
  * API base: http://localhost:8000/api/v1  (see VITE_API_URL env var)
  */
 
-import { apiClient, BASE_URL } from './client';
+import { apiClient } from './client';
 
 // ---------------------------------------------------------------------------
 // Types (mirroring api_schema.md AuthResponse)
@@ -75,19 +75,23 @@ export async function refreshToken(): Promise<AuthTokens> {
 
 /**
  * POST /auth/logout
- * Invalidates the current session on the server and clears localStorage.
+ * Revokes the refresh token server-side (required in body).
+ * The access token expires naturally (~1 h); we discard it locally immediately.
+ * Fire-and-forget network call — the UI clears regardless of server response.
  */
 export async function logout(): Promise<void> {
-  const token = getAccessToken();
-  if (token) {
-    // Fire-and-forget — don't block UI on network errors during logout
-    // Using fetch directly here so we can suppress the error easily
-    await fetch(`${BASE_URL}/auth/logout`, {
+  const refreshToken = localStorage.getItem('refresh_token');
+
+  // Always clear local state first so the UI reacts immediately
+  clearTokens();
+
+  if (refreshToken) {
+    // Swallow errors — even if the server is unreachable the session is gone locally
+    await apiClient<void>('/auth/logout', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      body: { refresh_token: refreshToken },
     }).catch(() => undefined);
   }
-  clearTokens();
 }
 
 // ---------------------------------------------------------------------------
