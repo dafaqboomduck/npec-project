@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models for the CV5 database.
 
-Matches ``docs/database/schema.md`` v0.2. Six tables:
+Matches ``docs/database/schema.md`` v0.2. Eight tables:
 
 - users
 - refresh_tokens
@@ -8,6 +8,8 @@ Matches ``docs/database/schema.md`` v0.2. Six tables:
 - predictions
 - feedback
 - monitoring_metrics
+- datasets
+- annotations
 
 Any change to these models must be matched by an update to the schema doc
 and a new Alembic migration (never hand-edit an old migration).
@@ -283,6 +285,95 @@ class Feedback(Base):
 
 
 # ---------------------------------------------------------------------------
+# Datasets
+# ---------------------------------------------------------------------------
+
+
+class Dataset(Base):
+    """A named collection of root-scan images. Matches schema §2.7."""
+
+    __tablename__ = "datasets"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    species: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    growth_stage: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Denormalised count — updated by the application layer or a DB trigger.
+    count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = _created_at()
+    modified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    annotations: Mapped[list["Annotation"]] = relationship(back_populates="dataset")
+
+    __table_args__ = (
+        CheckConstraint(
+            "growth_stage IS NULL OR growth_stage IN ('seedling', 'mature')",
+            name="ck_datasets_growth_stage_valid",
+        ),
+        Index("ix_datasets_species", "species"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Annotations
+# ---------------------------------------------------------------------------
+
+
+class Annotation(Base):
+    """Human-reviewed segmentation mask for a single scan. Matches schema §2.8."""
+
+    __tablename__ = "annotations"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    # scan_id references the prediction that produced the raw output being annotated.
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("predictions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    dataset_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("datasets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="'pending'")
+    mask_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    species: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    age_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    treatment: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    growth_stage: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    dataset: Mapped[Optional["Dataset"]] = relationship(back_populates="annotations")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'annotated', 'review_required')",
+            name="ck_annotations_status_valid",
+        ),
+        CheckConstraint(
+            "growth_stage IS NULL OR growth_stage IN ('seedling', 'mature')",
+            name="ck_annotations_growth_stage_valid",
+        ),
+        Index("ix_annotations_scan_id", "scan_id"),
+        Index("ix_annotations_dataset_id", "dataset_id"),
+        Index("ix_annotations_status", "status"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Monitoring metrics
 # ---------------------------------------------------------------------------
 
@@ -328,4 +419,6 @@ __all__ = [
     "Prediction",
     "Feedback",
     "MonitoringMetric",
+    "Dataset",
+    "Annotation",
 ]
