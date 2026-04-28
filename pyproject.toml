@@ -33,13 +33,18 @@ ignore = []
 "**/inference_manager.py" = ["E402"]
 "**/_tf_setup.py" = ["E402"]
 "tests/*" = ["D"]
+"tests/preprocessing/conftest.py" = ["E402"]
 # Alembic env.py deliberately manipulates sys.path before importing db, so
 # imports are not at the top of the file. This is the standard alembic pattern.
 "db/alembic/env.py" = ["E402"]
 "db/session.py" = ["E402"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["npec_cv"]
+
 [tool.isort]
 profile = "black"
+known_first_party = ["npec_cv"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

@@ -1,5 +1,6 @@
 pytest
+setuptools
 pre-commit
-black
-ruff
-isort
+black==24.3.0
+ruff==0.4.1
+isort==5.13.2
