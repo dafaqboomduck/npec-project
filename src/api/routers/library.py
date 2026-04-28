@@ -1,14 +1,20 @@
 """Library router.
 
-Exposes six read-only endpoints:
+Read and write endpoints for datasets, annotations, and model versions.
 
+Read endpoints :
+- GET  /datasets                       — list datasets
+- GET  /datasets/{dataset_id}          — single dataset detail
+- GET  /annotations                    — paginated annotation list
+- GET  /annotations/{annotation_id}    — single annotation detail
+- GET  /models                         — list all model versions
+- GET  /models/{model_id}              — single model detail (admin gets extra fields)
 
-- GET /datasets                      — list datasets (filterable)
-- GET /datasets/{dataset_id}         — single dataset detail
-- GET /annotations                   — paginated annotation list (filterable)
-- GET /annotations/{annotation_id}   — single annotation detail
-- GET /models                        — list all model versions
-- GET /models/{model_id}             — single model detail (admin gets extra fields)
+Write endpoints:
+- DELETE /annotations/{id}             — remove annotation
+- POST   /annotations/{id}/confirm     — submit corrected mask
+- DELETE /models/{id}                  — remove model version (admin only)
+- POST   /models/{id}/deploy           — deploy model version (admin only)
 
 All endpoints require a valid Bearer token. Repositoreis are initiated per-request
 from the injected DB session.
@@ -18,16 +24,16 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_session
-from src.api.core.security import get_current_user
+from src.api.core.security import get_current_user, require_admin
 from src.api.repositories.annotations import AnnotationRepository
 from src.api.repositories.datasets import DatasetRepository
 from src.api.repositories.models import ModelRepository
 from src.api.schemas.auth import TokenData, UserRole
-from src.api.schemas.common import ErrorCode, ErrorResponse
+from src.api.schemas.common import ErrorCode, ErrorResponse, MessageResponse
 from src.api.schemas.library import (
     AnnotationResponse,
     DatasetDetail,
@@ -36,6 +42,8 @@ from src.api.schemas.library import (
     ModelDetail,
     ModelSummary,
 )
+from src.api.services.deployment import StubDeploymentService
+from src.api.services.mask_storage import save_annotation_mask, validate_tiff_mask
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +51,15 @@ router = APIRouter(tags=["Library"])
 
 # Shared 404 helper
 
-_NOT_FOUND = ErrorResponse(error_code=ErrorCode.NOT_FOUND, message="Resource not found.")
 
-
-def _404() -> HTTPException:
+def _404(message: str = "Resource not found.") -> HTTPException:
     """404 HTTPException helper."""
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=_NOT_FOUND.model_dump(),
+        detail=ErrorResponse(
+            error_code=ErrorCode.NOT_FOUND,
+            message=message,
+        ).model_dump(),
     )
 
 
@@ -196,6 +205,95 @@ async def get_annotation(
     return annotation
 
 
+@router.delete(
+    "/annotations/{annotation_id}",
+    response_model=MessageResponse,
+    summary="Delete an annotation",
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def delete_annotation(
+    annotation_id: UUID,
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> MessageResponse:
+    """Remove the annotation with `annotation_id`.
+
+    Args:
+        annotation_id: UUID of the annotation to remove.
+        user: Authenticated user from Bearer token.
+        db: Injected database session.
+
+    Returns:
+        `MessageResponse` confirming deletion.
+
+    Raises:
+        HTTPException: 404 if the annotation does not exist.
+    """
+    deleted = await AnnotationRepository(db).delete(annotation_id)
+    if not deleted:
+        raise _404("Annotation not found.")
+    logger.info("Deleted annotation %s by use %s", annotation_id, user.sub)
+    return MessageResponse(message=f"Annotation {annotation_id} deleted.")
+
+
+@router.post(
+    "/annotations/{annotation_id}/confirm",
+    response_model=AnnotationResponse,
+    summary="Submit a corrected annotation mask",
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+)
+async def confirm_annotation(
+    annotation_id: UUID,
+    mask: UploadFile = File(..., description="Corrected segmentation mask - .tiff, single-frame only."),
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> AnnotationResponse:
+    """Upload a corrected .tiff mask and mark the annotation as annotated.
+
+    The submitted mask becomes ground truth for model retraining.
+
+    Args:
+        annotation_id: UUID of the annotation to confirm.
+        mask: The corrected segmentation mask (.tiff, single-frame only).
+        user: Authenticated user from Bearer token.
+        db: Injected database session.
+
+    Returns:
+        The updated `AnnotationResponse`.
+
+    Raises:
+        HTTPException: 404 if the annotation does not exist.
+        HTTPException: 422 if the uploaded file is not a valid single-frame TIFF.
+    """
+    mask_bytes = await mask.read()
+
+    try:
+        validate_tiff_mask(mask_bytes, mask.filename or "")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ErrorResponse(
+                error_code=ErrorCode.INVALID_REQUEST,
+                message=str(exc),
+            ).model_dump(),
+        )
+
+    mask_url = save_annotation_mask(annotation_id, mask_bytes)
+    updated = await AnnotationRepository(db).confirm(annotation_id, mask_url=mask_url)
+    if updated is None:
+        raise _404("Annotation not found.")
+
+    logger.info("Confirmed annotation %s by user %s", annotation_id, user.sub)
+    return updated
+
+
 # Models
 
 
@@ -264,3 +362,103 @@ async def get_model(
     if model is None:
         raise _404()
     return model
+
+
+@router.delete(
+    "/models/{model_id}",
+    response_model=MessageResponse,
+    summary="Delete a registered model (admin only)",
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {
+            "model": ErrorResponse,
+            "description": "Model has associated predictions",
+        },
+    },
+)
+async def delete_model(
+    model_id: UUID,
+    user: Annotated[TokenData, Depends(require_admin)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> MessageResponse:
+    """Remove the model version with `model_id`.
+
+    Admin only. Returns 409 if predictions reference this model - archive
+    the model instead if it needs to be removed from active use.
+
+    Args:
+        model_id: UUID of the model to delete.
+        user: Admin-role authenticated user.
+        db: Injected database session.
+
+    Returns:
+        `MessageResponse` confirming deletion.
+
+    Raises:
+        HTTPException: 403 for non-admin tokens.
+        HTTPException: 404 if the model does not exist.
+        HTTPException: 409 if predictions reference this model.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        deleted = await ModelRepository(db).delete(model_id)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ErrorResponse(
+                error_code=ErrorCode.CONFLICT,
+                message="Cannot delete - predictions reference this model. Archive instead",
+            ).model_dump(),
+        )
+
+    if not deleted:
+        raise _404("Model not found.")
+
+    logger.info("Admin %s deleted model %s", user.sub, model_id)
+    return MessageResponse(message=f"Model {model_id} deleted.")
+
+
+@router.post(
+    "/models/{model_id}/deploy",
+    response_model=MessageResponse,
+    summary="Deploy a registered model",
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def deploy_model(
+    model_id: UUID,
+    user: Annotated[TokenData, Depends(require_admin)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> MessageResponse:
+    """Trigge deployment for the model with `model_id`.
+
+    Admin only.
+
+    Args:
+        model_id: UUID of the model to deploy.
+        user: Admin-role authenticated user.
+        db: Injected database session.
+
+    Returns:
+        `MessageResponse` confirming the deployment.
+
+    Raises:
+        HTTPException: 403 for non-admin tokens.
+        HTTPException: 404 if the model does not exist.
+    """
+    if not await ModelRepository(db).exists(model_id):
+        raise _404("Model not found.")
+
+    try:
+        await StubDeploymentService(db).deploy(model_id)
+    except ValueError as exc:
+        raise _404(str(exc))
+
+    logger.info("Admin %s deployed model %s", user.sub, model_id)
+    return MessageResponse(message=f"Model {model_id} deployment triggered.")

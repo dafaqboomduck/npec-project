@@ -28,11 +28,26 @@ def _make_user(role: str = "user", user_id=_USER_ID) -> MagicMock:
     """Return a mock User ORM object."""
     u = MagicMock()
     u.id = user_id
+    u.sub = str(user_id)
     u.email = f"{role}@npec.nl"
     u.password_hash = hash_password(f"{role}pass")
     u.role = role
     u.is_active = True
     return u
+
+
+def _make_mock_db() -> AsyncMock:
+    """Return an AsyncSession mock whose execute/get return sensible defaults."""
+    mock_db = AsyncMock()
+
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.all.return_value = []
+    execute_result.scalar_one_or_none.return_value = None
+    mock_db.execute = AsyncMock(return_value=execute_result)
+
+    mock_db.get = AsyncMock(return_value=None)
+
+    return mock_db
 
 
 @pytest.fixture()
@@ -45,13 +60,11 @@ def client() -> TestClient:
     Returns:
         A configured `TestClient`.
     """
-    mock_db = AsyncMock()
     repo = InMemoryPredictionRepository()
-    service = MockInferenceService()
 
-    app.dependency_overrides[get_session] = lambda: mock_db
+    app.dependency_overrides[get_session] = lambda: _make_mock_db()
     app.dependency_overrides[get_prediction_repo] = lambda: repo
-    app.dependency_overrides[get_inference_service] = lambda: service
+    app.dependency_overrides[get_inference_service] = lambda: MockInferenceService()
     app.dependency_overrides[get_current_user] = lambda: _make_user()
 
     with TestClient(app) as test_client:
@@ -63,13 +76,11 @@ def client() -> TestClient:
 @pytest.fixture()
 def admin_client() -> TestClient:
     """Client authenticated as admin — for endpoints requiring admin role."""
-    mock_db = AsyncMock()
     repo = InMemoryPredictionRepository()
-    service = MockInferenceService()
 
-    app.dependency_overrides[get_session] = lambda: mock_db
+    app.dependency_overrides[get_session] = lambda: _make_mock_db()
     app.dependency_overrides[get_prediction_repo] = lambda: repo
-    app.dependency_overrides[get_inference_service] = lambda: service
+    app.dependency_overrides[get_inference_service] = lambda: MockInferenceService()
     app.dependency_overrides[get_current_user] = lambda: _make_user("admin", _ADMIN_ID)
 
     with TestClient(app) as test_client:

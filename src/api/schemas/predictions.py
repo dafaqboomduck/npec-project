@@ -74,7 +74,19 @@ class PredictionResponse(BaseModel):
 class ConfirmPredictionRequest(BaseModel):
     """Body for POST /predictions/{id}/confirm."""
 
-    scan_id: UUID = Field(..., description="UUID of the scan this prediction belongs to.")
+    species: str | None = Field(
+        None,
+        description="Plant species observed in the scan.",
+    )
+    age_days: int | None = Field(
+        None,
+        ge=0,
+        description="Age of the plant in days at time of scan.",
+    )
+    treatment: str | None = Field(
+        None,
+        description="Experimental treatment applied to the plant.",
+    )
 
 
 class ConfirmPredictionResponse(BaseModel):

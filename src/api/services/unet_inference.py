@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api.schemas.predictions import (
+from src.api.schemas.predictions import (
     Plant,
     PredictionMetadata,
     PredictionResponse,
@@ -141,7 +141,7 @@ class UNetInferenceService(AbstractInferenceService):
         except RuntimeError as exc:
             logger.error("Pipeline RuntimeError for '%s': $s", filename, exc)
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=ErrorResponse(
                     error_code=ErrorCode.CORRUPT_FILE,
                     message=f"Inference failed: {exc}",

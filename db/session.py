@@ -16,6 +16,9 @@ etc.) change the env var, not this file. See ``.env.example`` and
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+
+load_dotenv()
 import os
 from typing import AsyncGenerator
 

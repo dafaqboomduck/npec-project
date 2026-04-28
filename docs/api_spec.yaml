@@ -469,42 +469,55 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
  
-  /annotations/{annotation_id}/confirm:
+  /predictions/{prediction_id}/confirm:
     post:
       tags: [Inference]
-      summary: Submit a corrected annotation mask
-      description: >
-        Upload a corrected .tiff mask for this annotation. The submitted mask
-        becomes ground truth for model retraining.
-      operationId: confirmAnnotation
+      summary: Confirm and save a prediction result
+      operationId: confirmPrediction
       security:
         - BearerAuth: []
       parameters:
-        - name: annotation_id
+        - name: prediction_id
           in: path
           required: true
           schema:
             type: string
             format: uuid
       requestBody:
-        required: true
+        required: false
         content:
-          multipart/form-data:
+          application/json:
             schema:
-              $ref: '#/components/schemas/AnnotationConfirmRequest'
+              $ref: '#/components/schemas/ConfirmPredictionRequest'
+            examples:
+              confirm_with_metadata:
+                summary: Confirm with biological metadata
+                value:
+                  prediction_id: b2e3d4f5-1a2b-3c4d-5e6f-7a8b9c0d1e2f
+                  species: Arabidopsis thaliana
+                  age_days: 7
+                  treatment: control
+              confirm_minimal:
+                summary: Confirm without metadata
+                value:
+                  prediction_id: b2e3d4f5-1a2b-3c4d-5e6f-7a8b9c0d1e2f
       responses:
         '200':
-          description: Updated annotation object
+          description: Prediction confirmed and annotation created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AnnotationResponse'
+                $ref: '#/components/schemas/ConfirmPredictionResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+        '409':
+          description: Prediction already confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # -------------------------------------------------------------------------
   # Library — Models
@@ -1348,12 +1361,24 @@ components:
  
     ConfirmPredictionRequest:
       type: object
-      required: [scan_id]
+      required: [prediction_id]
       properties:
-        scan_id:
+        prediction_id:
           type: string
           format: uuid
           description: UUID of the scan this prediction belongs to. Links result into library.
+        species:
+          type: string
+          description: Plant species observed in the scan.
+          example: Arabidopsis thaliana
+        age_days:
+          type: integer
+          minimum: 0
+          description: Age of the plant in days at time of scan.
+        treatment:
+          type: string
+          description: Experimental treatment applied to the plant.
+          example: control
  
     ConfirmPredictionResponse:
       type: object
@@ -1369,12 +1394,12 @@ components:
 
     AnnotationResponse:
       type: object
-      required: [annotation_id, scan_id, status, created_at, updated_at]
+      required: [annotation_id, prediction_id, status, created_at, updated_at]
       properties:
         annotation_id:
           type: string
           format: uuid
-        scan_id:
+        prediction_id:
           type: string
           format: uuid
         status:

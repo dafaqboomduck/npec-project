@@ -1,9 +1,8 @@
 """Model repository.
 
 The GET /models/{model_id} returns additional internal fields
-(artifact_uri, deployed_at) for admin tokens. The repository
-always fetches all fields. Field filtering is applied in the
-router based on the JWT role claim.
+(artifact_uri, deployed_at) for admin tokens. The write operations
+are admin only.
 """
 
 import logging
@@ -101,3 +100,37 @@ class ModelRepository:
         if row is None:
             return None
         return _row_to_detail(row, include_admin_fields=include_admin_fields)
+
+    async def exists(self, model_id: uuid.UUID) -> bool:
+        """Return `True` if a model with `model_id` exists.
+
+        Args:
+            model_id: UUID to check.
+
+        Returns:
+            `True` if the row exists, `False` otherwise.
+        """
+        return await self._db.get(ModelVersion, model_id) is not None
+
+    async def delete(self, model_id: uuid.UUID) -> bool:
+        """Hard-delete the model version with `model_id`.
+
+        Note:
+            The DB FK constraint (ON DELETE RESTRICT) will raise an
+            `IntegrityError` if predictions reference this model. The router
+            catches this and returns 409. Archive the model instead if it has
+            associated predictions.
+
+        Args:
+            model_id: UUID of the model to delete.
+
+        Returns:
+            `True` if deleted, `False` if not found.
+        """
+        row = await self._db.get(ModelVersion, model_id)
+        if row is None:
+            return False
+        await self._db.delete(row)
+        await self._db.commit()
+        logger.info("Deleted model version %s", model_id)
+        return True

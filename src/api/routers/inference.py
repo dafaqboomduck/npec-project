@@ -14,13 +14,20 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.session import get_session
 from src.api.core.security import get_current_user
 from src.api.dependencies import get_inference_service, get_prediction_repo
 from src.api.repositories.base import AbstractPredictionRepository
+from src.api.repositories.database import DatabasePredictionRepository
 from src.api.schemas.auth import TokenData
 from src.api.schemas.common import ErrorCode, ErrorResponse, MessageResponse
-from src.api.schemas.predictions import PredictionResponse
+from src.api.schemas.predictions import (
+    ConfirmPredictionRequest,
+    ConfirmPredictionResponse,
+    PredictionResponse,
+)
 from src.api.services.base import AbstractInferenceService
 from src.api.services.image_validation import (
     validate_content_type,
@@ -34,32 +41,18 @@ router = APIRouter(tags=["Inference"])
 
 # Helpers
 
-_NOT_FOUND_DETAIL = ErrorResponse(
+_NOT_FOUND = ErrorResponse(
     error_code=ErrorCode.NOT_FOUND,
     message="Prediction not found.",
-).model_dump()
+)
 
 
-def _prediction_or_404(prediction: PredictionResponse | None, prediction_id: UUID) -> PredictionResponse:
-    """Return `prediction` or raise HTTP 404.
-
-    Args:
-        prediction: Result from the repository. `None` if not found.
-        prediction_id: The UUID that was requested, used in the log message.
-
-    Returns:
-        The prediction if it exists.
-
-    Raises:
-        HTTPException: 404 if `prediction` is `None`.
-    """
-    if prediction is None:
-        logger.debug("Prediction %s not found", prediction_id)
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_NOT_FOUND_DETAIL,
-        )
-    return prediction
+def _404() -> HTTPException:
+    """404 HTTPException helper."""
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_NOT_FOUND.model_dump(),
+    )
 
 
 # Endpoints
@@ -158,7 +151,9 @@ async def get_prediction(
         HTTPException: 404 if no prediction with `prediction_id` exists.
     """
     prediction = await repo.get(prediction_id)
-    return _prediction_or_404(prediction, prediction_id)
+    if prediction is None:
+        raise _404()
+    return prediction
 
 
 @router.delete(
@@ -169,12 +164,14 @@ async def get_prediction(
 )
 async def delete_prediction(
     prediction_id: UUID,
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
     repo: AbstractPredictionRepository = Depends(get_prediction_repo),
 ) -> MessageResponse:
     """Remove a prediction from the store.
 
     Args:
         prediction_id: UUID of the prediction to discard.
+        user: The authenticated user extracted from the Bearer token.
         repo: Injected prediction repository.
 
     Returns:
@@ -185,9 +182,79 @@ async def delete_prediction(
     """
     deleted = await repo.delete(prediction_id)
     if not deleted:
+        raise _404()
+    logger.info("Discarded prediction %s by user %s", prediction_id, user.sub)
+    return MessageResponse(message=f"Prediction {prediction_id} discarded.")
+
+
+@router.post(
+    "/predictions/{prediction_id}/confirm",
+    response_model=ConfirmPredictionResponse,
+    summary="Confirm and save a prediction result",
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {
+            "model": ErrorResponse,
+            "description": "Prediction already confirmed",
+        },
+    },
+)
+async def confirm_prediction(
+    prediction_id: UUID,
+    body: ConfirmPredictionRequest | None = None,
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> ConfirmPredictionResponse:
+    """Confirm a prediction and create a linked annotation.
+
+    Permanently saves the prediction, links it to a scan, and creates an
+    annotation record pre-populated with the provided biological metadata.
+
+    The annotation becomes queryable via GET /annotations after this call.
+
+    Args:
+        prediction_id: UUID of the prediction to confirm.
+        body: Optional body with `species`, `age_days`, and `treatment`.
+        user: Authenticated user from Bearer token.
+        db: Injected database session.
+
+    Returns:
+        `ConfirmPredictionResponse`
+
+    Raises:
+        HTTPException: 404 if the prediction does not exist.
+        HTTPException: 409 if the prediction is already confirmed.
+    """
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+
+    try:
+        _, already_confirmed = await repo.confirm(
+            prediction_id=prediction_id,
+            species=body.species if body else None,
+            age_days=body.age_days if body else None,
+            treatment=body.treatment if body else None,
+        )
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_NOT_FOUND_DETAIL,
+            detail=ErrorResponse(
+                error_code=ErrorCode.NOT_FOUND,
+                message="Prediction not found.",
+            ).model_dump(),
         )
-    logger.info("Discarded prediction %s", prediction_id)
-    return MessageResponse(message=f"Prediction {prediction_id} discarded.")
+
+    if already_confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ErrorResponse(
+                error_code=ErrorCode.CONFLICT,
+                message="Prediction has already been confirmed.",
+            ).model_dump(),
+        )
+
+    logger.info("Confirmed prediction %s by user %s", prediction_id, user.sub)
+    return ConfirmPredictionResponse(
+        message="Prediction confirmed and annotation created.",
+        prediction_id=prediction_id,
+    )

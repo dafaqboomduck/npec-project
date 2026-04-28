@@ -1,23 +1,22 @@
 """PostgreSQL-backed prediction repository.
 
-Implements src.api.repostiories.base.AbstractPredictionRepository
-using the existing ORM and session setup from db/.
-
-Every PredictionResponse is mapped to/from db.orm.Prediction row.
-The plants and warnings columns are JSONB - they store the list
-directly without a separate join table.
+Implements AbstractPredictionRepository using the existing ORM and
+session setup from db/. The confirm method also creates a linked
+annotation record in the same transaction.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from db.orm import ModelVersion, Prediction
+from src.api.repositories.annotations import AnnotationRepository
 from src.api.repositories.base import AbstractPredictionRepository
 from src.api.schemas.predictions import (
     Plant,
@@ -189,3 +188,55 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         await self._db.commit()
         logger.debug("Deleted prediction %s from DB", prediction_id)
         return True
+
+    async def confirm(
+        self,
+        prediction_id: uuid.UUID,
+        species: str | None,
+        age_days: int | None,
+        treatment: str | None,
+    ) -> tuple[PredictionResponse, bool]:
+        """Confirm a prediction and create a linked annotation record.
+
+        Args:
+            prediction_id: UUID of the prediction to confirm.
+            species: Optional plant species for the annotation record.
+            age_days: Optional plant age in days.
+            treatment: Optional experimental treatment.
+
+        Returns:
+            `(prediction, already_confirmed)` - if `already_confirmed` is
+            `True` the router returns 409 without another DB round-trip.
+
+        Raises:
+            ValueError: If the prediction does not exist.
+        """
+        result = await self._db.execute(
+            select(Prediction).options(selectinload(Prediction.model_version)).where(Prediction.id == prediction_id)
+        )
+        row = result.scalar_one_or_none()
+
+        if row is None:
+            raise ValueError(f"Prediction {prediction_id} not found.")
+
+        if row.confirmed_at is not None:
+            return self._orm_to_schema(row), True
+
+        now = datetime.now(timezone.utc)
+        row.confirmed_at = now
+        await self._db.flush()  # write confirmed_at before annotation insert
+
+        annotation_repo = AnnotationRepository(self._db)
+        await annotation_repo.create_from_prediction(
+            prediction_id=prediction_id,
+            mask_uri=row.segmentation_mask_uri,
+            species=species,
+            age_days=age_days,
+            treatment=treatment,
+        )
+
+        logger.info(f"Confirmed prediction {prediction_id} and created annotation")
+
+        await self._db.commit()
+        await self._db.refresh(row)
+        return self._orm_to_schema(row), False
