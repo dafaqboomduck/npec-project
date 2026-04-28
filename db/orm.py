@@ -331,8 +331,8 @@ class Annotation(Base):
     __tablename__ = "annotations"
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    # scan_id references the prediction that produced the raw output being annotated.
-    scan_id: Mapped[uuid.UUID] = mapped_column(
+    # prediction_id references the prediction that produced the raw output being annotated.
+    prediction_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("predictions.id", ondelete="CASCADE"),
         nullable=False,
@@ -367,7 +367,7 @@ class Annotation(Base):
             "growth_stage IS NULL OR growth_stage IN ('seedling', 'mature')",
             name="ck_annotations_growth_stage_valid",
         ),
-        Index("ix_annotations_scan_id", "scan_id"),
+        Index("ix_annotations_prediction_id", "prediction_id"),
         Index("ix_annotations_dataset_id", "dataset_id"),
         Index("ix_annotations_status", "status"),
     )

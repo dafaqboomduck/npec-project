@@ -10,7 +10,7 @@ Adds two new tables introduced in the Library feature:
 - annotations — human-reviewed segmentation masks linked to a prediction scan
 
 datasets has no FK dependencies on existing tables and is created first.
-annotations references both predictions (scan_id) and datasets (dataset_id),
+annotations references both predictions (prediction_id) and datasets (dataset_id),
 so it is created after both of its parents.
 
 Downgrade drops annotations first (child), then datasets (parent).
@@ -85,7 +85,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         # FK → predictions.id  (the scan this annotation belongs to)
-        sa.Column("scan_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("prediction_id", postgresql.UUID(as_uuid=True), nullable=False),
         # FK → datasets.id  (optional — an annotation may not be in a dataset yet)
         sa.Column("dataset_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
@@ -113,9 +113,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name="pk_annotations"),
         sa.ForeignKeyConstraint(
-            ["scan_id"],
+            ["prediction_id"],
             ["predictions.id"],
-            name="fk_annotations_scan_id_predictions",
+            name="fk_annotations_prediction_id_predictions",
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
@@ -133,7 +133,7 @@ def upgrade() -> None:
             name="ck_annotations_growth_stage_valid",
         ),
     )
-    op.create_index("ix_annotations_scan_id", "annotations", ["scan_id"])
+    op.create_index("ix_annotations_prediction_id", "annotations", ["prediction_id"])
     op.create_index("ix_annotations_dataset_id", "annotations", ["dataset_id"])
     op.create_index("ix_annotations_status", "annotations", ["status"])
 
@@ -144,7 +144,7 @@ def downgrade() -> None:
     # automatically with the table, but being explicit is good practice).
     op.drop_index("ix_annotations_status", table_name="annotations")
     op.drop_index("ix_annotations_dataset_id", table_name="annotations")
-    op.drop_index("ix_annotations_scan_id", table_name="annotations")
+    op.drop_index("ix_annotations_prediction_id", table_name="annotations")
     op.drop_table("annotations")
 
     op.drop_index("ix_datasets_species", table_name="datasets")
