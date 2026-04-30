@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.api.config import settings
-from src.api.routers import auth, health, inference, library
+from src.api.routers import auth, feedback, health, inference, library
 from src.api.schemas.common import ErrorCode, ErrorResponse
 
 # Logging
@@ -140,3 +140,4 @@ app.include_router(health.router, prefix=API_PREFIX)
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(inference.router, prefix=API_PREFIX)
 app.include_router(library.router, prefix=API_PREFIX)
+app.include_router(feedback.router, prefix=API_PREFIX)

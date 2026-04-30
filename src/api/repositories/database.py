@@ -189,6 +189,37 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         logger.debug("Deleted prediction %s from DB", prediction_id)
         return True
 
+    async def list_by_user(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[PredictionResponse]:
+        """Return a paginated list of predictions for the authenticated user.
+
+        Uses `(user_id, creasted_at DESC)` index for efficient pagination.
+        SQL OFFSET/LIMIT - no in-memory slicing.
+
+        Args:
+            page: 1-indexed page number.
+            page_size: Number of record per page (1-100).
+
+        Returns:
+            `list[PredictionResponse]`
+        """
+        offset = (page - 1) * page_size
+
+        # Paginated rows
+        result = await self._db.execute(
+            select(Prediction)
+            .options(selectinload(Prediction.model_version))
+            .where(Prediction.user_id == self._user_id)
+            .order_by(Prediction.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+
+        return [self._orm_to_schema(r) for r in result.scalars().all()]
+
     async def confirm(
         self,
         prediction_id: uuid.UUID,

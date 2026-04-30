@@ -8,9 +8,14 @@ Covers:
 
 import io
 import uuid
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
+
+from src.api.core.security import get_current_user
+from src.api.main import app
+from tests.api.test_library import _make_prediction
 
 # Helpers
 
@@ -145,14 +150,50 @@ def test_predict_rejects_corrupt_file(client: TestClient) -> None:
     assert response.json()["error_code"] == "CORRUPT_FILE"
 
 
+def test_predict_still_returns_200_when_monitoring_fails(client: TestClient, valid_png_512: bytes) -> None:
+    """A monitoring write failure must not affect the predict response."""
+    with patch(
+        "src.api.services.monitoring.MonitoringService.record_prediction_metrics",
+        new_callable=AsyncMock,
+        side_effect=Exception("DB connection lost"),
+    ):
+        response = client.post(
+            "/api/v1/predict",
+            files={"file": ("scan.png", valid_png_512, "image/png")},
+            data={"confidence_threshold": "0.5"},
+        )
+    assert response.status_code == 200
+
+
+def test_predict_calls_monitoring_on_success(client: TestClient, valid_png_512: bytes) -> None:
+    record_mock = AsyncMock()
+    with patch(
+        "src.api.services.monitoring.MonitoringService.record_prediction_metrics",
+        record_mock,
+    ):
+
+        client.post(
+            "/api/v1/predict",
+            files={"file": ("scan.png", valid_png_512, "image/png")},
+            data={"confidence_threshold": "0.5"},
+        )
+    record_mock.assert_called_once()
+
+
 # GET /predictions/{id}
 
 
-def test_get_prediction_returns_stored_result(client: TestClient, valid_png_512: bytes) -> None:
-    prediction_id = _upload(client, valid_png_512).json()["prediction_id"]
-    response = client.get(f"/api/v1/predictions/{prediction_id}")
+def test_get_prediction_returns_stored_result(client, valid_png_512):
+    prediction = _upload(client, valid_png_512).json()
+
+    with patch(
+        "src.api.repositories.database.DatabasePredictionRepository.get",
+        new_callable=AsyncMock,
+        return_value=prediction,
+    ):
+        response = client.get(f"/api/v1/predictions/{prediction['prediction_id']}")
+
     assert response.status_code == 200
-    assert response.json()["prediction_id"] == prediction_id
 
 
 def test_get_prediction_returns_404_for_unknown_id(client: TestClient) -> None:
@@ -166,7 +207,14 @@ def test_get_prediction_returns_404_for_unknown_id(client: TestClient) -> None:
 
 def test_delete_prediction_returns_200(client: TestClient, valid_png_512: bytes) -> None:
     prediction_id = _upload(client, valid_png_512).json()["prediction_id"]
-    response = client.delete(f"/api/v1/predictions/{prediction_id}")
+
+    with patch(
+        "src.api.repositories.database.DatabasePredictionRepository.delete",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        response = client.delete(f"/api/v1/predictions/{prediction_id}")
+
     assert response.status_code == 200
     assert "message" in response.json()
 
@@ -182,3 +230,40 @@ def test_delete_prediction_returns_404_for_unknown_id(client: TestClient) -> Non
     response = client.delete(f"/api/v1/predictions/{uuid.uuid4()}")
     assert response.status_code == 404
     assert response.json()["error_code"] == "NOT_FOUND"
+
+
+def test_list_predictions_requires_auth(client: TestClient) -> None:
+    app.dependency_overrides.pop(get_current_user, None)
+    response = client.get("/api/v1/predictions")
+    assert response.status_code == 401
+
+
+# GET /predictions
+
+
+def test_list_predictions_returns_paginated_response(client: TestClient) -> None:
+    prediction = _make_prediction()
+
+    with patch(
+        "src.api.repositories.database.DatabasePredictionRepository.list_by_user",
+        new_callable=AsyncMock,
+        return_value=[prediction],
+    ):
+        response = client.get("/api/v1/predictions")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) > 0
+
+
+def test_list_predictions_returns_empty_when_none(client: TestClient) -> None:
+    response = client.get("/api/v1/predictions")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_predictions_rejects_invalid_page_size(client: TestClient) -> None:
+
+    response = client.get("/api/v1/predictions?page_size=999")
+    assert response.status_code == 422

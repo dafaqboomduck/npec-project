@@ -13,13 +13,21 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_session
 from src.api.core.security import get_current_user
-from src.api.dependencies import get_inference_service, get_prediction_repo
-from src.api.repositories.base import AbstractPredictionRepository
+from src.api.dependencies import get_inference_service
 from src.api.repositories.database import DatabasePredictionRepository
 from src.api.schemas.auth import TokenData
 from src.api.schemas.common import ErrorCode, ErrorResponse, MessageResponse
@@ -34,6 +42,7 @@ from src.api.services.image_validation import (
     validate_file_size,
     validate_image,
 )
+from src.api.services.monitoring import MonitoringService
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +87,7 @@ async def predict(
         description="Minimum confidence for a detection to be included.",
     ),
     user: Annotated[TokenData, Depends(get_current_user)] = None,
-    repo: AbstractPredictionRepository = Depends(get_prediction_repo),
+    db: AsyncSession = Depends(get_session),
     inference_service: AbstractInferenceService = Depends(get_inference_service),
 ) -> PredictionResponse:
     """Accept a root scan image and run U-Net inference.
@@ -91,7 +100,7 @@ async def predict(
         file: The uploaded image file.
         confidence_threshold: Predictions below this score are excluded from the results.
         user: The authenticated user extracted from the Bearer token.
-        repo: Injected prediction repository.
+        db: Injected database session.
         inference_service: Injected inference service.
 
     Returns:
@@ -102,6 +111,8 @@ async def predict(
         HTTPException: 415 if the file format is not accepted.
         HTTPException: 422 if the image is corrupt or has an invalid resolution.
     """
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+
     image_bytes = await file.read()
 
     # Validation pipeline
@@ -123,7 +134,56 @@ async def predict(
     )
 
     await repo.save(prediction)
+
+    # Write monitoring metrics
+    try:
+        monitoring = MonitoringService(db)
+        await monitoring.record_prediction_metrics(
+            prediction_id=prediction.prediction_id,
+            processing_time_ms=prediction.metadata.processing_time_ms,
+            overall_confidence=prediction.overall_confidence,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to record monitoring metrics for prediction %s: %s",
+            prediction.prediction_id,
+            exc,
+        )
+
     return prediction
+
+
+@router.get(
+    "/predictions",
+    response_model=list[PredictionResponse],
+    summary="List all predictions",
+    responses={401: {"model": ErrorResponse}},
+)
+async def list_predictions(
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(default=20, ge=1, le=100, description="Results per page"),
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> list[PredictionResponse]:
+    """Return a paginated list of predictions.
+
+    Pagination is performed at the database level via SQL OFFSET/LIMIT.
+
+    Args:
+        page: 1-indexed page number.
+        page_size: Number of results per page (max 100).
+        user: Authenticated user from Bearer token.
+        db: Injected database session.
+
+    Returns:
+        Paginated list of `AnnotationResponse`.
+    """
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+
+    return await repo.list_by_user(
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get(
@@ -135,14 +195,14 @@ async def predict(
 async def get_prediction(
     prediction_id: UUID,
     user: Annotated[TokenData, Depends(get_current_user)],
-    repo: AbstractPredictionRepository = Depends(get_prediction_repo),
+    db: AsyncSession = Depends(get_session),
 ) -> PredictionResponse:
     """Return a previously stored prediction by its UUID.
 
     Args:
         prediction_id: UUID of the prediction to retrieve.
         user: The authenticated user extracted from the Bearer token.
-        repo: Injected prediction repository.
+        db: Injected database session.
 
     Returns:
         The stored `PredictionResponse`.
@@ -150,6 +210,8 @@ async def get_prediction(
     Raises:
         HTTPException: 404 if no prediction with `prediction_id` exists.
     """
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+
     prediction = await repo.get(prediction_id)
     if prediction is None:
         raise _404()
@@ -165,14 +227,14 @@ async def get_prediction(
 async def delete_prediction(
     prediction_id: UUID,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
-    repo: AbstractPredictionRepository = Depends(get_prediction_repo),
+    db: AsyncSession = Depends(get_session),
 ) -> MessageResponse:
     """Remove a prediction from the store.
 
     Args:
         prediction_id: UUID of the prediction to discard.
         user: The authenticated user extracted from the Bearer token.
-        repo: Injected prediction repository.
+        db: Injected database session.
 
     Returns:
         MessageResponse confirming deletion.
@@ -180,6 +242,8 @@ async def delete_prediction(
     Raises:
         HTTPException: 404 if no prediction with `prediction_id` exists.
     """
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+
     deleted = await repo.delete(prediction_id)
     if not deleted:
         raise _404()

@@ -15,9 +15,8 @@ from PIL import Image
 
 from db.session import get_session
 from src.api.core.security import get_current_user, hash_password
-from src.api.dependencies import get_inference_service, get_prediction_repo
+from src.api.dependencies import get_inference_service
 from src.api.main import app
-from src.api.repositories.memory import InMemoryPredictionRepository
 from src.api.services.mock_inference import MockInferenceService
 
 _USER_ID = uuid4()
@@ -60,10 +59,8 @@ def client() -> TestClient:
     Returns:
         A configured `TestClient`.
     """
-    repo = InMemoryPredictionRepository()
 
     app.dependency_overrides[get_session] = lambda: _make_mock_db()
-    app.dependency_overrides[get_prediction_repo] = lambda: repo
     app.dependency_overrides[get_inference_service] = lambda: MockInferenceService()
     app.dependency_overrides[get_current_user] = lambda: _make_user()
 
@@ -76,10 +73,8 @@ def client() -> TestClient:
 @pytest.fixture()
 def admin_client() -> TestClient:
     """Client authenticated as admin — for endpoints requiring admin role."""
-    repo = InMemoryPredictionRepository()
 
     app.dependency_overrides[get_session] = lambda: _make_mock_db()
-    app.dependency_overrides[get_prediction_repo] = lambda: repo
     app.dependency_overrides[get_inference_service] = lambda: MockInferenceService()
     app.dependency_overrides[get_current_user] = lambda: _make_user("admin", _ADMIN_ID)
 

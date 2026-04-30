@@ -156,12 +156,11 @@ def test_protected_endpoint_returns_401_without_token(client):
     assert response.status_code == 401
 
 
-# TODO: uncomment once endpoint created
-# def test_admin_endpoint_returns_403_for_user_token(client):
-#     token = _get_token(client, role="user")
-#     response = client.delete(
-#         f"/api/v1/models/{uuid4()}",
-#         headers={"Authorization": f"Bearer {token}"},
-#     )
-#     assert response.status_code == 403
-#     assert response.json()["error_code"] == "FORBIDDEN"
+def test_admin_endpoint_returns_403_for_user_token(client):
+    token = _get_token(client, role="user")
+    response = client.delete(
+        f"/api/v1/models/{uuid4()}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "FORBIDDEN"

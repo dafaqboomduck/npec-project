@@ -1,7 +1,7 @@
 """Image validation utilities for the inference endpoint.
 
 All public functions raise fastapi.HTTPException with the correct
-status code and api.schemas.common.ErrorResponse-shaped bodies so
+status code and src.api.schemas.common.ErrorResponse-shaped bodies so
 that the router can call them without any extra error handling.
 """
 
