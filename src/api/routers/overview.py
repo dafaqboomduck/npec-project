@@ -8,6 +8,8 @@ Four endpoints feeding the application's Overview/Home page:
 - GET /overview/environment   - system stats (admin only)
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Annotated
 

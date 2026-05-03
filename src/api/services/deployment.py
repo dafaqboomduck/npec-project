@@ -7,6 +7,8 @@ Azure ML endpoint deployment and only mark the model as deployed once
 the cloud operation succeeds.
 """
 
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone

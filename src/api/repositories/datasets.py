@@ -3,6 +3,8 @@
 Reads from the datasets table via the ORM.
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
 

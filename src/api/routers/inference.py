@@ -9,6 +9,8 @@ Exposes the four inference-related endpoints defined in api_spec.yaml:
 - ``POST   /predictions/{prediction_id}/confirm`` — confirm and save a result
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Annotated
 from uuid import UUID

@@ -4,6 +4,8 @@ Reads from annotations table via the ORM. Pagination is handled
 entirely in SQL via OFFSET/LIMIT - no post-fetch slicing.
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
 from datetime import datetime, timezone

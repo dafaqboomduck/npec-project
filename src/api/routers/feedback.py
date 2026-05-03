@@ -4,6 +4,8 @@ Exposes POST /feedback. Multiple submissions from the same user
 on the same prediction are allowed.
 """
 
+from __future__ import annotations
+
 from typing import Annotated
 from uuid import UUID
 

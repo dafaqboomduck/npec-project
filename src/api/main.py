@@ -8,6 +8,8 @@ the entry point for uvicorn:
 All routers are registered here.
 """
 
+from __future__ import annotations
+
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator

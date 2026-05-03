@@ -8,6 +8,8 @@ All reads are wrapped in try/except so a missing GPU or failing sensor
 never raises and exception - it returns None for that field instead.
 """
 
+from __future__ import annotations
+
 import logging
 
 from src.api.configs.overview import (

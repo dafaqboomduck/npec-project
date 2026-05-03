@@ -5,6 +5,8 @@ POST /predict, GET /predictions/{id}, DELETE /predictions/{id}, and
 POST /predictions/{id}/confirm endpoints.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from uuid import UUID

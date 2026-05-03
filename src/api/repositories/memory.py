@@ -6,6 +6,8 @@ GIL. It exists purely so that all other layers can be developed and tested
 before a real database is available.
 """
 
+from __future__ import annotations
+
 import logging
 from uuid import UUID
 

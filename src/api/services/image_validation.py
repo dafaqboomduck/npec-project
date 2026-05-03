@@ -5,6 +5,8 @@ status code and src.api.schemas.common.ErrorResponse-shaped bodies so
 that the router can call them without any extra error handling.
 """
 
+from __future__ import annotations
+
 import io
 import logging
 

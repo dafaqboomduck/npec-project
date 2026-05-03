@@ -14,6 +14,8 @@ Activity feed aggregation strategy:
     page sizes and activity volumes expected for this application.
 """
 
+from __future__ import annotations
+
 import logging
 
 from sqlalchemy import func, select

@@ -5,6 +5,8 @@ to their abstract interfaces. Routers import only the get_* functions
 below. They never import a concrete class directly.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 

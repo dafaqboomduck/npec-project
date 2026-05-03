@@ -7,6 +7,8 @@ In a later sprint this will upload to Azure Blob Storage and return a
 presigned HTTPS URL. The interface will not change.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from pathlib import Path

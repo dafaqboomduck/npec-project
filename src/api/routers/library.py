@@ -20,6 +20,8 @@ All endpoints require a valid Bearer token. Repositoreis are initiated per-reque
 from the injected DB session.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Annotated
 from uuid import UUID

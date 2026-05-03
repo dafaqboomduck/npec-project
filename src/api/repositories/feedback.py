@@ -5,6 +5,8 @@ Writes to the feedback table. Multiple rows per
 recent row represents the user's current opinion.
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
 

@@ -1,5 +1,7 @@
 """Abstract inference service interface."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 from src.api.schemas.predictions import PredictionResponse

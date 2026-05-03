@@ -7,6 +7,8 @@ The segmentation mask is written to MASK_OUTPUT_DIR and the filename is
 returned ad segmentation_mask_url.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import time

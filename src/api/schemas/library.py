@@ -4,6 +4,8 @@ These are used by the GET-only library endpoints that
 feed the frontend's Library page and Model Info page.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from uuid import UUID

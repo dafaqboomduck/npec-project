@@ -1,5 +1,7 @@
 """Configuration for FastAPI."""
 
+from __future__ import annotations
+
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 

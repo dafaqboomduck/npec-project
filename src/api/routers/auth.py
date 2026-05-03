@@ -7,6 +7,8 @@ Exposes three endpoints:
 - POST /auth/logout  — invalidate current session
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Annotated
 

@@ -1,5 +1,7 @@
 """Shared response schemas used across multiple routers."""
 
+from __future__ import annotations
+
 from enum import Enum
 from typing import Any
 

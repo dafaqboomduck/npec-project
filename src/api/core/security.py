@@ -5,6 +5,8 @@ Injectable dependencies:
 - require_admin     - extends get_current_user, enforces admin role
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
