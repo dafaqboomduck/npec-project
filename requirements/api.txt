@@ -11,3 +11,4 @@ asyncpg
 bcrypt==4.0.1
 sqlalchemy
 psycopg
+psutil
