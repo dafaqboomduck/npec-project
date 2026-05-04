@@ -24,28 +24,9 @@ from __future__ import annotations
 # becomes a MagicMock for every test that follows. Preprocessing tests need
 # the real cv2 to actually exercise the image pipeline, so we restore it
 # before any cv2-dependent import in this file runs.
-import sys
-from unittest.mock import MagicMock
-
-_cv2_keys = [k for k in list(sys.modules) if k == "cv2" or k.startswith("cv2.")]
-if any(isinstance(sys.modules[k], MagicMock) for k in _cv2_keys):
-    for _k in _cv2_keys:
-        del sys.modules[_k]
-    # Drop npec_cv modules that may have cached the mock cv2 at module level.
-    # inference_manager.py does `import cv2` at module top — once imported with
-    # the mock, its local `cv2` reference is fixed. Re-importing fixes that.
-    # Helpers like padder/extract_petri_dish import cv2 inside functions, so
-    # they resolve at call time and don't strictly need the reload, but it's
-    # safer to drop everything for consistency.
-    for _k in list(sys.modules):
-        if _k.startswith("npec_cv"):
-            del sys.modules[_k]
-
-# ---------------------------------------------------------------------------
-# Now safe — cv2 in sys.modules is real (or never mocked in the first place)
-# ---------------------------------------------------------------------------
 from pathlib import Path
 from typing import Callable, Tuple
+from unittest.mock import MagicMock
 
 import cv2
 import numpy as np

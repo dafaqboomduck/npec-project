@@ -1,34 +1,13 @@
-"""Shared pytest fixtures for CLI tests.
-
-NOTE: cv2 is pre-mocked in sys.modules at the very top of this file.
-conftest.py is loaded before test_cli.py is collected, so the mock is in
-place before `from npec_cv.cli.main import app` triggers the
-npec_cv -> PlantMaster -> cv2 import chain.  This avoids a known
-cv2.gapi.wip.draw bug in opencv-contrib-python 4.10.x.
-"""
+"""Shared pytest fixtures for CLI tests."""
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-
-# ---------------------------------------------------------------------------
-# Silence the cv2.gapi.wip.draw AttributeError before anything else imports cv2
-# ---------------------------------------------------------------------------
-for _mod_name in (
-    "cv2",
-    "cv2.gapi",
-    "cv2.gapi.wip",
-    "cv2.gapi.wip.draw",
-    "cv2.typing",
-):
-    sys.modules.setdefault(_mod_name, MagicMock())
-
 
 # ---------------------------------------------------------------------------
 # Helpers — build mock pipeline objects

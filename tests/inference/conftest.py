@@ -23,27 +23,6 @@ Model checkpoint resolution:
 
 from __future__ import annotations
 
-# ---------------------------------------------------------------------------
-# Pre-import: restore real cv2 if another conftest has mocked it.
-# ---------------------------------------------------------------------------
-# Same defensive pattern as tests/preprocessing/conftest.py — see that file
-# for the full rationale. tl;dr: tests/cli/conftest.py mocks cv2 at import
-# time, and the mock leaks across the whole session when the full suite is
-# collected. We restore real cv2 before any cv2-dependent import here.
-import sys
-from unittest.mock import MagicMock
-
-_cv2_keys = [k for k in list(sys.modules) if k == "cv2" or k.startswith("cv2.")]
-if any(isinstance(sys.modules[k], MagicMock) for k in _cv2_keys):
-    for _k in _cv2_keys:
-        del sys.modules[_k]
-    for _k in list(sys.modules):
-        if _k.startswith("npec_cv"):
-            del sys.modules[_k]
-
-# ---------------------------------------------------------------------------
-# Now safe — cv2 in sys.modules is real (or never mocked)
-# ---------------------------------------------------------------------------
 from dataclasses import replace
 from pathlib import Path
 

@@ -25,25 +25,9 @@ fields.
 
 from __future__ import annotations
 
-# ---------------------------------------------------------------------------
-# Pre-import: restore real cv2 if another conftest has mocked it.
-# ---------------------------------------------------------------------------
-import sys
-from unittest.mock import MagicMock
-
-_cv2_keys = [k for k in list(sys.modules) if k == "cv2" or k.startswith("cv2.")]
-if any(isinstance(sys.modules[k], MagicMock) for k in _cv2_keys):
-    for _k in _cv2_keys:
-        del sys.modules[_k]
-    for _k in list(sys.modules):
-        if _k.startswith("npec_cv"):
-            del sys.modules[_k]
-
-# ---------------------------------------------------------------------------
-# Now safe — cv2 in sys.modules is real
-# ---------------------------------------------------------------------------
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
