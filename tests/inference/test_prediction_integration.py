@@ -24,9 +24,17 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 from npec_cv.models import ImageResult
 from npec_cv.models.plant_master import PlantResult
+
+# All tests in this file run real inference and are gated behind the
+# `slow` marker. They are skipped by default — run them with:
+#     pytest -m slow
+# or to run the entire suite:
+#     pytest -m "slow or not slow"
+pytestmark = pytest.mark.slow
 
 # ---------------------------------------------------------------------------
 # Helpers — image dimensions for bounds checks
