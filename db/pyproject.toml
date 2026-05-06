@@ -1,0 +1,15 @@
+[project]
+name = "npec-cv-db"
+version = "0.1.0"
+description = "NPEC database models and migrations"
+requires-python = ">=3.10.18"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest-postgresql>=6.0",
+]
