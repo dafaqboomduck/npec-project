@@ -82,6 +82,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         return PredictionResponse(
             prediction_id=row.id,
             status=PredictionStatus(row.status),
+            input_filename=row.input_filename,
             metadata=PredictionMetadata(
                 model_version=row.model_version.version if row.model_version else "unknown",
                 inference_timestamp=row.inference_timestamp,
@@ -116,7 +117,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             user_id=self._user_id,
             model_version_id=model_id,
             status=prediction.status.value,
-            input_filename=filename,
+            input_filename=filename or prediction.input_filename,
             input_width_px=meta.input_resolution[0] if meta.input_resolution else None,
             input_height_px=meta.input_resolution[1] if meta.input_resolution else None,
             input_channels=meta.input_channels,

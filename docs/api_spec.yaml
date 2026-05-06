@@ -373,6 +373,32 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+        tags: [Library]
+        summary: Delete a dataset
+        operationId: deleteDataset
+        security:
+          - BearerAuth: []
+        parameters:
+          - name: dataset_id
+            in: path
+            required: true
+            schema:
+              type: string
+              format: uuid
+        responses:
+          '200':
+            description: Confirmation message
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/MessageResponse'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/Forbidden'
+          '404':
+            $ref: '#/components/responses/NotFound'
         
   # -------------------------------------------------------------------------
   # Library — Annotations
@@ -787,44 +813,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
- 
-  /predictions/{prediction_id}/confirm:
-    post:
-      tags: [Inference]
-      summary: Confirm and save a prediction result
-      operationId: confirmPrediction
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: prediction_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConfirmPredictionRequest'
-      responses:
-        '200':
-          description: Prediction confirmed and saved
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConfirmPredictionResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: Prediction already confirmed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
  
   # -------------------------------------------------------------------------
   # Training

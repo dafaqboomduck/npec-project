@@ -167,6 +167,7 @@ export interface Plant {
 export interface PredictionResponse {
   prediction_id: string; // UUID
   status: 'ok' | 'error';
+  input_filename?: string;
   metadata: PredictionMetadata;
   segmentation_mask_url?: string;
   plants: Plant[];

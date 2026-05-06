@@ -13,8 +13,14 @@ import { useState, useRef, DragEvent, ChangeEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { predict, getModelsForInference } from '../api/inferenceApi';
-import type { PredictionResponse, ModelSummary } from '../types/api';
+import type { PredictionResponse, ModelSummary, Plant } from '../types/api';
+import { useInferenceJobs } from '../context/InferenceJobsContext';
+import ResultsView from '../components/ResultsView';
 import './Inference.css';
+
+// ---------------------------------------------------------------------------
+// Main Inference component
+// ---------------------------------------------------------------------------
 
 export default function Inference() {
   const navigate = useNavigate();
@@ -34,6 +40,8 @@ export default function Inference() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const { jobs, addJob, removeJob, cancelJob } = useInferenceJobs();
 
   // ── Modals ──
   const [showComingSoon, setShowComingSoon] = useState(false);
@@ -87,13 +95,29 @@ export default function Inference() {
     setRunning(true);
     setError(null);
     setResult(null);
+
+    const controller = new AbortController();
+    const jobId = crypto.randomUUID();
+    const newJob = {
+      id: jobId,
+      filename: file.name,
+      startedAt: Date.now(),
+      controller,
+    };
+    addJob(newJob);
+
     try {
-      const res = await predict(file, confidence);
+      const res = await predict(file, confidence, controller.signal);
       setResult(res);
     } catch (err) {
-      setError((err as Error).message);
+      if ((err as Error).name === 'AbortError') {
+        setError('Inference was cancelled.');
+      } else {
+        setError((err as Error).message);
+      }
     } finally {
       setRunning(false);
+      removeJob(jobId);
     }
   }
 
@@ -106,19 +130,10 @@ export default function Inference() {
 
       <main className="inference-main">
         <div className="inference-container">
-          {/* ── Page header ─────────────────────────────────────────────── */}
-          <header className="inference-header">
-            <div>
-              <h1 className="inference-title">Inference Lab</h1>
-              <p className="inference-subtitle">
-                Upload root scan images to run segmentation and detection.
-              </p>
-            </div>
-          </header>
-
           {/* ── Main layout ─────────────────────────────────────────────── */}
-          <div className="inference-layout">
-            {/* ── Left sidebar ─────────────────────────────────────────── */}
+          <div className={`inference-layout ${result ? 'inference-layout--results' : ''}`}>
+            {/* ── Left sidebar (hidden when results are shown) ──────────── */}
+            {!result && (
             <aside className="inference-sidebar">
               {/* Inference Model */}
               <section className="sidebar-section">
@@ -148,61 +163,41 @@ export default function Inference() {
                 </div>
               </section>
 
-              {/* Parameters */}
-              <section className="sidebar-section">
-                <span className="sidebar-section-label">PARAMETERS</span>
+                {/* Parameters */}
+                <section className="sidebar-section">
+                  <span className="sidebar-section-label">PARAMETERS</span>
 
-                <div className="param-group">
-                  <div className="param-row">
-                    <span className="param-label">Confidence Threshold</span>
-                    <span className="param-value">{confidence.toFixed(2)}</span>
-                  </div>
-                  <div className="slider-wrapper">
-                    <input
-                      type="range"
-                      className="conf-slider"
-                      id="confidence-slider"
-                      min="0.50"
-                      max="0.99"
-                      step="0.01"
-                      value={confidence}
-                      onChange={(e) =>
-                        setConfidence(parseFloat(e.target.value))
-                      }
-                      style={
-                        { '--pct': `${sliderPct}%` } as React.CSSProperties
-                      }
-                    />
-                    <div className="slider-marks">
-                      <span>0.50</span>
-                      <span>0.85</span>
-                      <span>0.99</span>
+                  <div className="param-group">
+                    <div className="param-row">
+                      <span className="param-label">Confidence Threshold</span>
+                      <span className="param-value">
+                        {confidence.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="slider-wrapper">
+                      <input
+                        type="range"
+                        className="conf-slider"
+                        id="confidence-slider"
+                        min="0.50"
+                        max="0.99"
+                        step="0.01"
+                        value={confidence}
+                        onChange={(e) =>
+                          setConfidence(parseFloat(e.target.value))
+                        }
+                        style={
+                          { '--pct': `${sliderPct}%` } as React.CSSProperties
+                        }
+                      />
+                      <div className="slider-marks">
+                        <span>0.50</span>
+                        <span>0.85</span>
+                        <span>0.99</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div className="param-group">
-                  <div className="param-row param-row--toggle">
-                    <span className="param-label">Fine Segment</span>
-                    <label
-                      className="toggle-switch"
-                      htmlFor="fine-segment-toggle"
-                      aria-label="Fine Segment"
-                    >
-                      <input
-                        type="checkbox"
-                        id="fine-segment-toggle"
-                        className="toggle-input"
-                        checked={fineSegment}
-                        onChange={(e) => setFineSegment(e.target.checked)}
-                      />
-                      <span className="toggle-track">
-                        <span className="toggle-thumb" />
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </section>
+                </section>
 
               {/* Active Session */}
               <section className="sidebar-section">
@@ -212,105 +207,53 @@ export default function Inference() {
                   <span className="session-label">CPU Optimized (A12Z)</span>
                 </div>
               </section>
+
+              {/* Running Processes */}
+              <section className="sidebar-section">
+                <span className="sidebar-section-label">RUNNING PROCESSES</span>
+                {jobs.length === 0 ? (
+                  <p className="running-empty">No active inferences.</p>
+                ) : (
+                  <ul className="running-list">
+                    {jobs.map((job) => (
+                      <li key={job.id} className="running-job">
+                        <div className="running-job-info">
+                          <span className="running-job-name" title={job.filename}>
+                            {job.filename.length > 20 ? job.filename.slice(0, 18) + '…' : job.filename}
+                          </span>
+                          <span className="running-job-spinner" aria-hidden="true" />
+                        </div>
+                        <button
+                          className="running-job-cancel"
+                          title="Cancel inference"
+                          onClick={() => cancelJob(job.id)}
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             </aside>
+            )}
 
-            {/* ── Right dropzone panel ─────────────────────────────────── */}
+            {/* ── Right panel ─────────────────────────────────── */}
             <div className="inference-panel">
-              {/* Result display */}
               {result ? (
-                <div className="inference-result">
-                  <div className="result-header">
-                    <h2 className="result-title">Inference Complete</h2>
-                    <div className="result-header-actions">
-                      <button
-                        className="btn-result-action btn-result-new"
-                        id="btn-new-scan"
-                        onClick={() => {
-                          setResult(null);
-                          setFile(null);
-                          setFilePreviewUrl(null);
-                        }}
-                      >
-                        ↩ New Scan
-                      </button>
-                      <button
-                        className="btn-result-action btn-result-save"
-                        id="btn-save-result"
-                        onClick={() => setShowComingSoon(true)}
-                      >
-                        ✓ Save
-                      </button>
-                      <button
-                        className="btn-result-action btn-result-discard"
-                        id="btn-discard-result"
-                        aria-label="Discard result"
-                        onClick={() => setShowDiscardConfirm(true)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="result-meta">
-                    <div className="result-stat">
-                      <span className="result-stat-label">PLANTS DETECTED</span>
-                      <span className="result-stat-value">
-                        {result.plants.length}
-                      </span>
-                    </div>
-                    <div className="result-stat">
-                      <span className="result-stat-label">CONFIDENCE</span>
-                      <span className="result-stat-value">
-                        {(result.overall_confidence * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="result-stat">
-                      <span className="result-stat-label">LATENCY</span>
-                      <span className="result-stat-value">
-                        {result.metadata.processing_time_ms}ms
-                      </span>
-                    </div>
-                  </div>
-
-                  {result.segmentation_mask_url && (
-                    <div className="result-mask">
-                      <img
-                        src={result.segmentation_mask_url}
-                        alt="Segmentation mask"
-                        className="result-mask-img"
-                      />
-                    </div>
-                  )}
-
-                  {filePreviewUrl && !result.segmentation_mask_url && (
-                    <div className="result-mask">
-                      <img
-                        src={filePreviewUrl}
-                        alt="Uploaded scan"
-                        className="result-mask-img"
-                      />
-                    </div>
-                  )}
-
-                  {result.plants.length > 0 && (
-                    <div className="result-plants">
-                      <h3 className="result-plants-heading">Detected Plants</h3>
-                      <div className="result-plants-grid">
-                        {result.plants.map((p) => (
-                          <div key={p.plant_id} className="plant-chip">
-                            <span className="plant-chip-id">#{p.plant_id}</span>
-                            <span className="plant-chip-val">
-                              {p.root_length_mm.toFixed(1)} mm
-                            </span>
-                            <span className="plant-chip-conf">
-                              {(p.confidence * 100).toFixed(0)}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <ResultsView
+                  result={result}
+                  file={file}
+                  filePreviewUrl={filePreviewUrl}
+                  deployedModelName={deployedModel?.name ?? 'RootNet-V2.4'}
+                  onNewScan={() => {
+                    setResult(null);
+                    setFile(null);
+                    setFilePreviewUrl(null);
+                  }}
+                  onDiscard={() => setShowDiscardConfirm(true)}
+                  onSave={() => setShowComingSoon(true)}
+                />
               ) : (
                 /* Dropzone */
                 <div

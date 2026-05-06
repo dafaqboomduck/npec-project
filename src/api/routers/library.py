@@ -38,6 +38,7 @@ from src.api.schemas.auth import TokenData, UserRole
 from src.api.schemas.common import ErrorCode, ErrorResponse, MessageResponse
 from src.api.schemas.library import (
     AnnotationResponse,
+    DatasetCreate,
     DatasetDetail,
     DatasetSummary,
     GrowthStage,
@@ -130,6 +131,82 @@ async def get_dataset(
     if dataset is None:
         raise _404()
     return dataset
+
+
+@router.post(
+    "/datasets",
+    response_model=DatasetDetail,
+    summary="Create a new dataset (admin only)",
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+    },
+)
+async def create_dataset(
+    data: DatasetCreate,
+    user: Annotated[TokenData, Depends(require_admin)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> DatasetDetail:
+    """Create a new dataset.
+
+    Args:
+        data: `DatasetCreate` containing name, description, species, growth_stage.
+        user: Admin-role authenticated user.
+        db: Injected database session.
+
+    Returns:
+        The created `DatasetDetail`.
+
+    Raises:
+        HTTPException: 403 for non-admin tokens.
+    """
+    repo = DatasetRepository(db)
+    dataset = await repo.create(
+        name=data.name,
+        description=data.description,
+        species=data.species,
+        growth_stage=data.growth_stage.value if data.growth_stage else None,
+    )
+    logger.info("Admin %s created dataset %s", user.sub, dataset.dataset_id)
+    return dataset
+
+
+@router.delete(
+    "/datasets/{dataset_id}",
+    response_model=MessageResponse,
+    summary="Delete a dataset (admin only)",
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def delete_dataset(
+    dataset_id: UUID,
+    user: Annotated[TokenData, Depends(require_admin)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> MessageResponse:
+    """Remove the dataset with `dataset_id`.
+
+    Admin only.
+
+    Args:
+        dataset_id: UUID of the dataset to delete.
+        user: Admin-role authenticated user.
+        db: Injected database session.
+
+    Returns:
+        `MessageResponse` confirming deletion.
+
+    Raises:
+        HTTPException: 403 for non-admin tokens.
+        HTTPException: 404 if the dataset does not exist.
+    """
+    deleted = await DatasetRepository(db).delete(dataset_id)
+    if not deleted:
+        raise _404("Dataset not found.")
+    logger.info("Admin %s deleted dataset %s", user.sub, dataset_id)
+    return MessageResponse(message=f"Dataset {dataset_id} deleted.")
 
 
 # Annotations

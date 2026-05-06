@@ -138,8 +138,13 @@ class UNetInferenceService(AbstractInferenceService):
             tmp_path = Path(tmp.name)
 
         try:
-            pipeline = self._get_pipeline()
-            image_result = pipeline.process_single_image(tmp_path)
+            import asyncio
+
+            def _run_pipeline():
+                pipeline = self._get_pipeline()
+                return pipeline.process_single_image(tmp_path)
+
+            image_result = await asyncio.to_thread(_run_pipeline)
         except RuntimeError as exc:
             logger.error("Pipeline RuntimeError for '%s': $s", filename, exc)
             raise HTTPException(
@@ -215,6 +220,7 @@ class UNetInferenceService(AbstractInferenceService):
         return PredictionResponse(
             prediction_id=prediction_id,
             status=PredictionStatus.OK,
+            input_filename=filename,
             metadata=PredictionMetadata(
                 model_version=MODEL_VERSION,
                 inference_timestamp=datetime.now(timezone.utc),

@@ -103,3 +103,48 @@ class DatasetRepository:
         if row is None:
             return None
         return _row_to_detail(row)
+
+    async def create(
+        self,
+        name: str,
+        description: str | None = None,
+        species: str | None = None,
+        growth_stage: str | None = None,
+    ) -> DatasetDetail:
+        """Create a new dataset.
+
+        Args:
+            name: Dataset name.
+            description: Optional dataset description.
+            species: Optional dataset species.
+            growth_stage: Optional dataset growth stage.
+
+        Returns:
+            The created DatasetDetail.
+        """
+        row = Dataset(
+            name=name,
+            description=description,
+            species=species,
+            growth_stage=growth_stage,
+        )
+        self._db.add(row)
+        await self._db.commit()
+        await self._db.refresh(row)
+        return _row_to_detail(row)
+
+    async def delete(self, dataset_id: uuid.UUID) -> bool:
+        """Delete a dataset by its ID.
+
+        Args:
+            dataset_id: UUID of the dataset to delete.
+
+        Returns:
+            True if the dataset was deleted, False if it did not exist.
+        """
+        row = await self._db.get(Dataset, dataset_id)
+        if row is None:
+            return False
+        await self._db.delete(row)
+        await self._db.commit()
+        return True

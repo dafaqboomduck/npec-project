@@ -25,10 +25,11 @@ export async function apiClient<T>(
   endpoint: string,
   options: ClientOptions = {},
 ): Promise<T> {
-  const { headers, ...customOptions } = options;
+  const { headers, signal, ...customOptions } = options;
 
   const config: RequestInit = {
     ...customOptions,
+    signal,
     headers: {
       ...getAuthHeader(),
       ...headers,
@@ -77,3 +78,4 @@ export async function apiClient<T>(
 
   return response.json() as Promise<T>;
 }
+

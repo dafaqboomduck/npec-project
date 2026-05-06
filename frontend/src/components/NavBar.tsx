@@ -46,6 +46,24 @@ export default function NavBar() {
           >
             Inference
           </NavLink>
+          <NavLink
+            to="/history"
+            id="nav-history"
+            className={({ isActive }) =>
+              `navbar-tab${isActive ? ' navbar-tab--active' : ''}`
+            }
+          >
+            History
+          </NavLink>
+          <NavLink
+            to="/library"
+            id="nav-library"
+            className={({ isActive }) =>
+              `navbar-tab${isActive ? ' navbar-tab--active' : ''}`
+            }
+          >
+            Library
+          </NavLink>
         </nav>
 
         {/* ── Right actions ── */}

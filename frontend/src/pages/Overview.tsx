@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
-import { getUsername } from '../api/auth';
+import { getUsername, getRole } from '../api/auth';
 import {
   getOverviewStatus,
   getOverviewActivity,
@@ -122,6 +122,7 @@ function ActivityIconSvg({ type }: { type: ActivityEventType }) {
 export default function Overview() {
   const navigate = useNavigate();
   const username = getUsername();
+  const role = getRole();
   // Display name: strip the domain from an email, capitalise first letter
   const displayName = username.includes('@')
     ? username
@@ -420,31 +421,33 @@ export default function Overview() {
               </div>
 
               {/* Environment stats card */}
-              <div className="env-card">
-                <div className="env-card-header">
-                  <h3 className="env-card-title">Environment Stats</h3>
-                  <span
-                    className={`env-status-badge ${env?.system_status === 'optimal' ? 'env-status-badge--ok' : 'env-status-badge--warn'}`}
-                  >
-                    <span className="env-dot" />
-                    {env ? capitalize(env.system_status) : 'Unknown'}
-                  </span>
-                </div>
-                <div className="env-grid">
-                  <div className="env-stat">
-                    <span className="env-stat-label">GPU TEMP</span>
-                    <span className="env-stat-value">
-                      {env ? `${env.gpu_temp_celsius}°C` : '—'}
+              {role === 'admin' && (
+                <div className="env-card">
+                  <div className="env-card-header">
+                    <h3 className="env-card-title">Environment Stats</h3>
+                    <span
+                      className={`env-status-badge ${env?.system_status === 'optimal' ? 'env-status-badge--ok' : 'env-status-badge--warn'}`}
+                    >
+                      <span className="env-dot" />
+                      {env ? capitalize(env.system_status) : 'Unknown'}
                     </span>
                   </div>
-                  <div className="env-stat">
-                    <span className="env-stat-label">MEMORY</span>
-                    <span className="env-stat-value">
-                      {env ? `${env.memory_percent}%` : '—'}
-                    </span>
+                  <div className="env-grid">
+                    <div className="env-stat">
+                      <span className="env-stat-label">GPU TEMP</span>
+                      <span className="env-stat-value">
+                        {env ? `${env.gpu_temp_celsius}°C` : '—'}
+                      </span>
+                    </div>
+                    <div className="env-stat">
+                      <span className="env-stat-label">MEMORY</span>
+                      <span className="env-stat-value">
+                        {env ? `${env.memory_percent}%` : '—'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </aside>
           </div>
         </div>

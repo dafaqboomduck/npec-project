@@ -58,6 +58,7 @@ class PredictionResponse(BaseModel):
 
     prediction_id: UUID
     status: PredictionStatus
+    input_filename: str | None = Field(None, description="Original filename of the uploaded image.")
     metadata: PredictionMetadata
     segmentation_mask_url: str | None = Field(
         None,

@@ -196,7 +196,7 @@ class OverviewRepository:
                 ActivityItem(
                     event_type=EventType.UPLOAD,
                     title="Root scan uploaded",
-                    description=(f"Image '{row.input_filename or 'unknown'}' submitted for inference.",),
+                    description=f"Image '{row.input_filename or 'unknown'}' submitted for inference.",
                     timestamp=row.created_at,
                     resource_url=f"/api/v1/predictions/{row.id}",
                 )

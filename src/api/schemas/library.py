@@ -41,6 +41,15 @@ class ModelStatus(str, Enum):
 # Dataset schemas
 
 
+class DatasetCreate(BaseModel):
+    """Payload for POST /datasets."""
+
+    name: str
+    description: str | None = None
+    species: str | None = None
+    growth_stage: GrowthStage | None = None
+
+
 class DatasetSummary(BaseModel):
     """Returned bz GET /datasets (list item)."""
 
@@ -49,6 +58,7 @@ class DatasetSummary(BaseModel):
     created_at: datetime
     modified_at: datetime
     count: int
+    species: str | None = None
 
 
 class DatasetDetail(DatasetSummary):

@@ -20,7 +20,10 @@ import './styles/global.css';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Inference from './pages/Inference';
+import History from './pages/History';
+import Library from './pages/Library';
 import { isAuthenticated } from './api/auth';
+import { InferenceJobsProvider } from './context/InferenceJobsContext';
 
 /** Redirects unauthenticated users to /login. */
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -51,6 +54,22 @@ function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/history"
+          element={
+            <RequireAuth>
+              <History />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/library"
+          element={
+            <RequireAuth>
+              <Library />
+            </RequireAuth>
+          }
+        />
 
         {/* Default redirect */}
         <Route
@@ -70,6 +89,8 @@ if (!rootElement) throw new Error('Root element #root not found in index.html');
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <InferenceJobsProvider>
+      <App />
+    </InferenceJobsProvider>
   </StrictMode>,
 );
