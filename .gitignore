@@ -42,3 +42,5 @@ dist/
 # PyPI configuration file (contains credentials, should not be committed)
 .pypirc
 
+# Ignore .coverage
+.coverage

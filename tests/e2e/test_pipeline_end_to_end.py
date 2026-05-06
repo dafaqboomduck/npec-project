@@ -74,28 +74,28 @@ def _adapt_to_api_plant_dict(plant_result: PlantResult) -> dict:
 class TestPipelineRunsEndToEnd:
     """The pipeline accepts a real image and produces a well-formed result."""
 
-    def test_returns_image_result(self, mocked_pipeline, real_test_image_path):
+    def test_returns_image_result(self, image_result):
         """process_single_image returns an ImageResult instance."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         assert isinstance(result, ImageResult)
 
-    def test_image_name_matches_input_stem(self, mocked_pipeline, real_test_image_path):
+    def test_image_name_matches_input_stem(self, image_result, real_test_image_path):
         """ImageResult.image_name equals the input file's stem."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         assert result.image_name == real_test_image_path.stem
 
-    def test_all_five_plant_slots_populated(self, mocked_pipeline, real_test_image_path):
+    def test_all_five_plant_slots_populated(self, image_result):
         """plant_results has exactly 5 entries (one per configured plant slot)."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         assert result.total_plants == 5
         assert len(result.plant_results) == 5
 
-    def test_plant_results_keyed_by_int_with_plant_result_values(self, mocked_pipeline, real_test_image_path):
+    def test_plant_results_keyed_by_int_with_plant_result_values(self, image_result):
         """plant_results is dict[int, PlantResult]."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         for plant_id, pr in result.plant_results.items():
             assert isinstance(plant_id, int)
@@ -106,31 +106,31 @@ class TestPipelineRunsEndToEnd:
 class TestImageResultMaskFields:
     """The mask-related fields the API reads are populated and correctly shaped."""
 
-    def test_filtered_mask_is_ndarray(self, mocked_pipeline, real_test_image_path):
+    def test_filtered_mask_is_ndarray(self, image_result):
         """filtered_mask (the overall segmentation mask) is an ndarray."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         assert result.filtered_mask is not None
         assert isinstance(result.filtered_mask, np.ndarray)
 
-    def test_filtered_mask_matches_input_image_shape(self, mocked_pipeline, real_test_image_path):
+    def test_filtered_mask_matches_input_image_shape(self, image_result, real_test_image_path):
         """filtered_mask has the same H, W as the input image."""
         import cv2
 
         img = cv2.imread(str(real_test_image_path))
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         assert result.filtered_mask.shape[:2] == img.shape[:2]
 
-    def test_filtered_mask_is_2d(self, mocked_pipeline, real_test_image_path):
+    def test_filtered_mask_is_2d(self, image_result):
         """filtered_mask is a 2D array (no channel dim)."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         assert result.filtered_mask.ndim == 2
 
-    def test_anchor_mask_populated(self, mocked_pipeline, real_test_image_path):
+    def test_anchor_mask_populated(self, image_result):
         """anchor_mask is populated as an ndarray for visualization."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         assert result.anchor_mask is not None
         assert isinstance(result.anchor_mask, np.ndarray)
@@ -141,19 +141,19 @@ class TestPlantResultUndetectedContract:
     are in the "undetected" state. Verify that state populates None correctly
     on every field the API service reads."""
 
-    def test_all_plants_marked_undetected(self, mocked_pipeline, real_test_image_path):
+    def test_all_plants_marked_undetected(self, image_result):
         """Every PlantResult.detected is False (synthetic predictions don't
         form valid root patterns)."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         for pr in result.plant_results.values():
             assert pr.detected is False
 
-    def test_undetected_plant_fields_are_none(self, mocked_pipeline, real_test_image_path):
+    def test_undetected_plant_fields_are_none(self, image_result):
         """Per-plant fields the API reads (length, end_point, threshold_used)
         are None for undetected plants. This is the contract the API's
         UNetInferenceService.run depends on when it skips undetected plants."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         for pr in result.plant_results.values():
             assert pr.length is None, f"plant_id={pr.plant_id}: length not None"
@@ -169,9 +169,9 @@ class TestApiContractAdapter:
     the API service expects to read when converting to PredictionResponse.
     """
 
-    def test_adapter_produces_required_keys(self, mocked_pipeline, real_test_image_path):
+    def test_adapter_produces_required_keys(self, image_result):
         """The adapter dict has every key the API's Plant schema requires."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
         required_keys = {
             "plant_id",
             "tip_x",
@@ -188,9 +188,9 @@ class TestApiContractAdapter:
                 f"Got {set(adapted.keys())}, expected {required_keys}"
             )
 
-    def test_adapter_field_types_match_api_schema(self, mocked_pipeline, real_test_image_path):
+    def test_adapter_field_types_match_api_schema(self, image_result):
         """Each adapted field has the type the API's Plant schema declares."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         for pr in result.plant_results.values():
             adapted = _adapt_to_api_plant_dict(pr)
@@ -202,9 +202,9 @@ class TestApiContractAdapter:
             assert isinstance(adapted["root_length_px"], float)
             assert isinstance(adapted["root_length_mm"], float)
 
-    def test_adapter_undetected_plant_yields_zero_confidence(self, mocked_pipeline, real_test_image_path):
+    def test_adapter_undetected_plant_yields_zero_confidence(self, image_result):
         """An undetected plant adapts to confidence=0.0 (per API service mapping)."""
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         for pr in result.plant_results.values():
             if not pr.detected:
@@ -213,12 +213,12 @@ class TestApiContractAdapter:
                 assert adapted["root_length_px"] == 0.0
                 assert adapted["root_length_mm"] == 0.0
 
-    def test_adapter_confidence_is_in_unit_range(self, mocked_pipeline, real_test_image_path):
+    def test_adapter_confidence_is_in_unit_range(self, image_result):
         """Adapted confidence value is always in [0.0, 1.0] regardless of detection state.
 
         Required by the API's Plant schema (Field(..., ge=0.0, le=1.0)).
         """
-        result = mocked_pipeline.process_single_image(real_test_image_path)
+        result = image_result
 
         for pr in result.plant_results.values():
             adapted = _adapt_to_api_plant_dict(pr)

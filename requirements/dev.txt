@@ -1,4 +1,5 @@
 pytest
+pytest-cov
 setuptools
 pre-commit
 black==24.3.0

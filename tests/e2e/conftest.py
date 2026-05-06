@@ -275,3 +275,9 @@ def mocked_pipeline(tmp_path_factory) -> CVPipeline:
 def real_test_image_path() -> Path:
     """Path to test_im1.png — the canonical happy-path real image."""
     return _image_path(1)
+
+
+@pytest.fixture(scope="session")
+def image_result(mocked_pipeline: CVPipeline, real_test_image_path: Path):
+    """Cached ImageResult to avoid rerunning the full pipeline for each test."""
+    return mocked_pipeline.process_single_image(real_test_image_path)
