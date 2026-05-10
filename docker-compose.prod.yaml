@@ -1,0 +1,101 @@
+# docker-compose.yml — production stack for CV5 (Portainer / on-prem).
+#
+# Services:
+#   db          Postgres 16, internal-only (no host port).
+#   migrations  One-shot. Runs `alembic upgrade head` and exits.
+#   api         FastAPI backend on host port 2022.
+#   frontend    Static SPA served by `serve` on host port 2021.
+#
+# Boot order (enforced via depends_on):
+#   db (healthy) → migrations (completed) → api → frontend
+#
+# Required .env values:
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB  — strong, non-default
+#   GITHUB_TOKEN                                   — for model download at build
+#   VITE_API_URL                                   — public URL of the API,
+#                                                    baked into the JS bundle
+#                                                    e.g. http://your-host:2022
+#
+# Usage:
+#   docker compose --env-file .env up -d --build
+#   docker compose down            # stop, keep volume
+#   docker compose down -v         # also wipe the database
+
+services:
+  db:
+    image: postgres:16
+    container_name: cv5-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - cv5_pgdata:/var/lib/postgresql/data
+    # No host port mapping — DB is reachable only on the compose network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migrations:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    image: cv5-migrations:local
+    container_name: cv5-migrations
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+    # One-shot: must succeed before the API starts. No restart loop on failure.
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      secrets:
+        - github_token
+    image: cv5-api:local
+    container_name: cv5-api
+    restart: unless-stopped
+    environment:
+      # Async URL for the backend (psycopg 3 async driver).
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    ports:
+      - "2022:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        # Gates the API on a successful `alembic upgrade head`. If migrations
+        # fail, the API never starts — exactly what we want in prod.
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Vite inlines VITE_API_URL into the bundle at build time. Changing
+        # this requires a rebuild (`docker compose build frontend`).
+        VITE_API_URL: ${VITE_API_URL}
+    image: cv5-frontend:local
+    container_name: cv5-frontend
+    restart: unless-stopped
+    ports:
+      - "2021:3000"
+    depends_on:
+      - api
+
+volumes:
+  cv5_pgdata:
+    name: cv5_pgdata
+
+secrets:
+  github_token:
+    environment: GITHUB_TOKEN
