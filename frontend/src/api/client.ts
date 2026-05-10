@@ -36,17 +36,20 @@ export async function apiClient<T>(
     },
   };
 
-  // Only stringify the body if it's a plain object (not FormData or URLSearchParams)
-  if (
-    config.body &&
-    !(config.body instanceof FormData) &&
-    !(config.body instanceof URLSearchParams)
-  ) {
-    config.body = JSON.stringify(config.body);
-    config.headers = {
-      'Content-Type': 'application/json',
-      ...config.headers,
-    };
+  if (body) {
+    if (
+      body instanceof FormData ||
+      body instanceof URLSearchParams ||
+      typeof body === 'string'
+    ) {
+      config.body = body;
+    } else {
+      config.body = JSON.stringify(body);
+      config.headers = {
+        'Content-Type': 'application/json',
+        ...config.headers,
+      };
+    }
   }
 
   const response = await fetch(`${BASE_URL}${endpoint}`, config);

@@ -9,8 +9,9 @@
  * Route: /inference (protected)
  */
 
-import { useState, useRef, DragEvent, ChangeEvent, useEffect } from 'react';
+import { ChangeEvent, DragEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getModelsForInference, predict } from '../api/inferenceApi';
 import NavBar from '../components/NavBar';
 import { predict, getModelsForInference } from '../api/inferenceApi';
 import type { PredictionResponse, ModelSummary, Plant } from '../types/api';
@@ -28,7 +29,6 @@ export default function Inference() {
   // ── Sidebar state ──
   const [models, setModels] = useState<ModelSummary[]>([]);
   const [confidence, setConfidence] = useState(0.85);
-  const [fineSegment, setFineSegment] = useState(true);
 
   // ── Dropzone state ──
   const [dragging, setDragging] = useState(false);

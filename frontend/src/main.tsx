@@ -26,11 +26,11 @@ import { isAuthenticated } from './api/auth';
 import { InferenceJobsProvider } from './context/InferenceJobsContext';
 
 /** Redirects unauthenticated users to /login. */
-function RequireAuth({ children }: { children: React.ReactNode }) {
+export function RequireAuth({ children }: { children: React.ReactNode }) {
   return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
-function App() {
+export function App() {
   return (
     <BrowserRouter>
       <Routes>

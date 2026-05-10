@@ -4,8 +4,8 @@
  * POST /predict and model helpers for the Inference Lab page.
  */
 
+import type { ModelSummary, PredictionResponse } from '../types/api';
 import { apiClient } from './client';
-import type { PredictionResponse, ModelSummary } from '../types/api';
 
 /**
  * POST /predict
