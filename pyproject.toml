@@ -71,6 +71,7 @@ ignore = []
 # imports are not at the top of the file. This is the standard alembic pattern.
 "db/alembic/env.py" = ["E402"]
 "db/session.py" = ["E402"]
+"scripts/*" = ["D"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["npec_cv"]
