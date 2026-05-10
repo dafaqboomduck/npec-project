@@ -25,7 +25,7 @@ export async function apiClient<T>(
   endpoint: string,
   options: ClientOptions = {},
 ): Promise<T> {
-  const { headers, signal, ...customOptions } = options;
+  const { headers, signal, body, ...customOptions } = options;
 
   const config: RequestInit = {
     ...customOptions,
