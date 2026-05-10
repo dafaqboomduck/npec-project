@@ -22,6 +22,7 @@ Test coverage
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -185,9 +186,11 @@ class TestPredictErrors:
         assert result.exit_code != 0
 
     def test_missing_artifact_dir_message(self, valid_image):
-        """Verify that missing --artifact-dir produces a required-option message."""
         result = runner.invoke(app, ["predict", str(valid_image)])
-        assert "--artifact-dir" in result.output
+        # Strip ANSI codes and collapse whitespace
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        clean = " ".join(clean.split())
+        assert "--artifact-dir" in clean
 
     def test_artifact_dir_missing_models_exits_1(self, valid_image, artifact_dir, monkeypatch):
         """Verify that predict surfaces model-resolution failures as CLI errors."""
