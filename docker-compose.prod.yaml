@@ -49,10 +49,12 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
-      db:
-        condition: service_healthy
-    # One-shot: must succeed before the API starts. No restart loop on failure.
-    restart: "no"
+      - db
+    # libcompose can't gate on db's healthcheck, so migrations may start before
+    # Postgres is accepting connections. on-failure retries until it succeeds.
+    # Real migration errors will still surface — they exit non-zero and Docker
+    # retries, but Alembic itself is idempotent so reruns are safe.
+    restart: on-failure
 
   api:
     build:
@@ -69,12 +71,11 @@ services:
     ports:
       - "2022:8000"
     depends_on:
-      db:
-        condition: service_healthy
-      migrations:
-        # Gates the API on a successful `alembic upgrade head`. If migrations
-        # fail, the API never starts — exactly what we want in prod.
-        condition: service_completed_successfully
+      - db
+      - migrations
+    # No condition gating available — the API may start before migrations
+    # finish. `restart: unless-stopped` (already set above) means it'll crash,
+    # restart, and eventually connect to a migrated DB.
 
   frontend:
     build:
