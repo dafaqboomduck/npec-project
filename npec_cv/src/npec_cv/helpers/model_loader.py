@@ -58,8 +58,7 @@ def get_models_dir(version: str | None = None, force_download: bool = False) -> 
     # Since this is a private repo, we use the Github API to get the release by tag.
     # Wait, the prompt says "private repo's GitHub Releases". The spec says:
     # "https://api.github.com/repos/<owner>/<repo>/releases/tags/v<version>"
-    # Let me just write the logic. Is the repo NPEC/block_d? Yes, author is NPEC.
-    repo = "NPEC/block_d"  # Assuming this.
+    repo = "RazvanNica242715/cv5-clone"  # Path to repo clone - replace with actual owner/repo later
     release_url = f"https://api.github.com/repos/{repo}/releases/tags/v{version}"
 
     resp = requests.get(release_url, headers=headers)
