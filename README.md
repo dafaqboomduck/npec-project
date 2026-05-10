@@ -1,3 +1,17 @@
+## Documentation
+
+Full documentation is published automatically to GitHub Pages on every push to `main`:
+
+**https://BredaUniversityADSAI.github.io/2025-26d-fai2-adsai-group-computervision5/**
+
+To build the docs locally:
+
+```bash
+pip install -r requirements/docs.txt
+sphinx-build -b html docs/ docs/_build/html
+# then open docs/_build/html/index.html
+```
+
 ## Installation Guide
 
 This repository now ships as two Python packages under src:
