@@ -44,3 +44,10 @@ dist/
 
 # Ignore .coverage
 .coverage
+
+# Ignore .github/prompts directory 
+.github/prompts/
+
+# Ignore Keras model files and cache directory
+*.keras
+.cache/

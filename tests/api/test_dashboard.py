@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from src.api.core.security import get_current_user
-from src.api.main import app
-from src.api.schemas.dashboard import (
+from api.core.security import get_current_user
+from api.main import app
+from api.schemas.dashboard import (
     DashboardMetricsResponse,
     DataDistributionResponse,
     F1HistoryPoint,
@@ -47,7 +47,7 @@ def test_metrics_requires_auth(client: TestClient) -> None:
 
 def test_metrics_returns_correct_schema(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_metrics",
+        "api.repositories.dashboard.DashboardRepository.get_metrics",
         new_callable=AsyncMock,
         return_value=_metrics(),
     ):
@@ -62,7 +62,7 @@ def test_metrics_returns_correct_schema(client: TestClient) -> None:
 
 def test_metrics_returns_zero_defaults_when_no_model(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_metrics",
+        "api.repositories.dashboard.DashboardRepository.get_metrics",
         new_callable=AsyncMock,
         return_value=DashboardMetricsResponse(f1_score=0.0, throughput_img_per_s=0),
     ):
@@ -75,7 +75,7 @@ def test_metrics_returns_zero_defaults_when_no_model(client: TestClient) -> None
 
 def test_metrics_f1_score_is_bounded(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_metrics",
+        "api.repositories.dashboard.DashboardRepository.get_metrics",
         new_callable=AsyncMock,
         return_value=_metrics(f1_score=0.92),
     ):
@@ -96,7 +96,7 @@ def test_f1_history_requires_auth(client: TestClient) -> None:
 
 def test_f1_history_returns_correct_schema(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_f1_history",
+        "api.repositories.dashboard.DashboardRepository.get_f1_history",
         new_callable=AsyncMock,
         return_value=_history(),
     ):
@@ -112,7 +112,7 @@ def test_f1_history_returns_correct_schema(client: TestClient) -> None:
 
 def test_f1_history_data_points_have_required_fields(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_f1_history",
+        "api.repositories.dashboard.DashboardRepository.get_f1_history",
         new_callable=AsyncMock,
         return_value=_history(n_points=2),
     ):
@@ -126,7 +126,7 @@ def test_f1_history_data_points_have_required_fields(client: TestClient) -> None
 
 def test_f1_history_ordered_by_epoch_ascending(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_f1_history",
+        "api.repositories.dashboard.DashboardRepository.get_f1_history",
         new_callable=AsyncMock,
         return_value=_history(n_points=3),
     ):
@@ -139,7 +139,7 @@ def test_f1_history_ordered_by_epoch_ascending(client: TestClient) -> None:
 
 def test_f1_history_empty_when_no_model(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_f1_history",
+        "api.repositories.dashboard.DashboardRepository.get_f1_history",
         new_callable=AsyncMock,
         return_value=F1HistoryResponse(model_version="unknown", data_points=[]),
     ):
@@ -161,7 +161,7 @@ def test_data_distribution_requires_auth(client: TestClient) -> None:
 
 def test_data_distribution_returns_correct_schema(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_data_distribution",
+        "api.repositories.dashboard.DashboardRepository.get_data_distribution",
         new_callable=AsyncMock,
         return_value=_distribution(),
     ):
@@ -176,7 +176,7 @@ def test_data_distribution_returns_correct_schema(client: TestClient) -> None:
 
 def test_data_distribution_items_have_required_fields(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_data_distribution",
+        "api.repositories.dashboard.DashboardRepository.get_data_distribution",
         new_callable=AsyncMock,
         return_value=_distribution(),
     ):
@@ -193,7 +193,7 @@ def test_data_distribution_returns_empty_before_migration(
 ) -> None:
     """Until annotations table is migrated, endpoint returns empty list."""
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_data_distribution",
+        "api.repositories.dashboard.DashboardRepository.get_data_distribution",
         new_callable=AsyncMock,
         return_value=DataDistributionResponse(species_counts=[]),
     ):
@@ -206,7 +206,7 @@ def test_data_distribution_returns_empty_before_migration(
 def test_data_distribution_excludes_zero_count_species(client: TestClient) -> None:
     """Only species with at least one sample should appear."""
     with patch(
-        "src.api.repositories.dashboard.DashboardRepository.get_data_distribution",
+        "api.repositories.dashboard.DashboardRepository.get_data_distribution",
         new_callable=AsyncMock,
         return_value=_distribution(species=["Arabidopsis thaliana"]),
     ):

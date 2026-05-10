@@ -28,7 +28,7 @@ import numpy as np
 import pytest
 from typer.testing import CliRunner
 
-from src.cli.main import app
+from npec_cv.cli.main import app
 
 runner = CliRunner()
 
@@ -141,7 +141,7 @@ class TestPredictConfidenceOption:
             pipeline.process_single_image.return_value = _make_image_result()
             return pipeline
 
-        monkeypatch.setattr("src.cli.main._build_pipeline", fake_build)
+        monkeypatch.setattr("npec_cv.cli.main._build_pipeline", fake_build)
         runner.invoke(app, ["predict", str(valid_image), "--confidence", "0.07", "-a", str(artifact_dir)])
         assert received == [pytest.approx(0.07)]
         assert received_artifact_dirs == [str(artifact_dir)]
@@ -192,7 +192,7 @@ class TestPredictErrors:
     def test_artifact_dir_missing_models_exits_1(self, valid_image, artifact_dir, monkeypatch):
         """Verify that predict surfaces model-resolution failures as CLI errors."""
         monkeypatch.setattr(
-            "src.cli.main._build_pipeline",
+            "npec_cv.cli.main._build_pipeline",
             lambda confidence, model_dir: (_ for _ in ()).throw(FileNotFoundError("Missing root model")),
         )
         result = runner.invoke(app, ["predict", str(valid_image), "-a", str(artifact_dir)])
@@ -246,7 +246,7 @@ class TestPredictErrors:
 
         fake_stat_result = MagicMock()
         fake_stat_result.st_size = 51 * 1024 * 1024
-        monkeypatch.setattr("src.cli.main.Path.stat", lambda self: fake_stat_result)
+        monkeypatch.setattr("npec_cv.cli.main.Path.stat", lambda self: fake_stat_result)
         result = runner.invoke(app, ["predict", str(img_path), "-a", str(artifact_dir)])
         assert result.exit_code == 1
 

@@ -83,3 +83,19 @@ services:
 volumes:
   cv5_pgdata:
     name: cv5_pgdata
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      secrets:
+        - github_token
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+secrets:
+  github_token:
+    environment: GITHUB_TOKEN

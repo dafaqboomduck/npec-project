@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from src.api.core.security import get_current_user
-from src.api.main import app
-from src.api.schemas.overview import (
+from api.core.security import get_current_user
+from api.main import app
+from api.schemas.overview import (
     ActivityFeedResponse,
     ActivityItem,
     DriftStatus,
@@ -72,7 +72,7 @@ def test_status_requires_auth(client: TestClient) -> None:
 
 def test_status_returns_correct_schema(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.overview.OverviewRepository.get_status",
+        "api.repositories.overview.OverviewRepository.get_status",
         new_callable=AsyncMock,
         return_value=_status_response(),
     ):
@@ -89,7 +89,7 @@ def test_status_returns_correct_schema(client: TestClient) -> None:
 
 def test_status_quota_is_bounded(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.overview.OverviewRepository.get_status",
+        "api.repositories.overview.OverviewRepository.get_status",
         new_callable=AsyncMock,
         return_value=_status_response(quota_percent=100),
     ):
@@ -109,7 +109,7 @@ def test_model_health_requires_auth(client: TestClient) -> None:
 
 def test_model_health_returns_correct_schema(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.overview.OverviewRepository.get_model_health",
+        "api.repositories.overview.OverviewRepository.get_model_health",
         new_callable=AsyncMock,
         return_value=_health_response(),
     ):
@@ -126,7 +126,7 @@ def test_model_health_returns_correct_schema(client: TestClient) -> None:
 def test_model_health_returns_defaults_when_no_metrics(client: TestClient) -> None:
     """Endpoint must return sensible defaults, not 500, when no metrics exist."""
     with patch(
-        "src.api.repositories.overview.OverviewRepository.get_model_health",
+        "api.repositories.overview.OverviewRepository.get_model_health",
         new_callable=AsyncMock,
         return_value=ModelHealthResponse(f1_score=0.0, latency_ms=0, drift_status=DriftStatus.NONE),
     ):
@@ -139,7 +139,7 @@ def test_model_health_returns_defaults_when_no_metrics(client: TestClient) -> No
 def test_model_health_drift_statuses(client: TestClient) -> None:
     for drift in (DriftStatus.NONE, DriftStatus.LOW, DriftStatus.MEDIUM, DriftStatus.HIGH):
         with patch(
-            "src.api.repositories.overview.OverviewRepository.get_model_health",
+            "api.repositories.overview.OverviewRepository.get_model_health",
             new_callable=AsyncMock,
             return_value=_health_response(drift_status=drift),
         ):
@@ -159,7 +159,7 @@ def test_activity_requires_auth(client: TestClient) -> None:
 
 def test_activity_returns_paginated_response(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.overview.OverviewRepository.get_activity",
+        "api.repositories.overview.OverviewRepository.get_activity",
         new_callable=AsyncMock,
         return_value=_activity_response(n_items=2),
     ):
@@ -177,7 +177,7 @@ def test_activity_returns_paginated_response(client: TestClient) -> None:
 
 def test_activity_returns_empty_when_none(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.overview.OverviewRepository.get_activity",
+        "api.repositories.overview.OverviewRepository.get_activity",
         new_callable=AsyncMock,
         return_value=ActivityFeedResponse(items=[], total=0, page=1, page_size=20),
     ):
@@ -189,7 +189,7 @@ def test_activity_returns_empty_when_none(client: TestClient) -> None:
 
 def test_activity_passes_pagination_params(client: TestClient) -> None:
     get_mock = AsyncMock(return_value=_activity_response(0))
-    with patch("src.api.repositories.overview.OverviewRepository.get_activity", get_mock):
+    with patch("api.repositories.overview.OverviewRepository.get_activity", get_mock):
 
         client.get("/api/v1/overview/activity?page=3&page_size=5")
     get_mock.assert_called_once_with(page=3, page_size=5)
@@ -203,7 +203,7 @@ def test_activity_rejects_invalid_page_size(client: TestClient) -> None:
 
 def test_activity_items_have_required_fields(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.overview.OverviewRepository.get_activity",
+        "api.repositories.overview.OverviewRepository.get_activity",
         new_callable=AsyncMock,
         return_value=_activity_response(n_items=1),
     ):
@@ -233,7 +233,7 @@ def test_environment_returns_403_for_user(client: TestClient) -> None:
 
 def test_environment_returns_200_for_admin(admin_client: TestClient) -> None:
     with patch(
-        "src.api.routers.overview.get_environment_stats",
+        "api.routers.overview.get_environment_stats",
         return_value=_env_response(),
     ):
         response = admin_client.get("/api/v1/overview/environment")
@@ -242,7 +242,7 @@ def test_environment_returns_200_for_admin(admin_client: TestClient) -> None:
 
 def test_environment_returns_correct_schema(admin_client: TestClient) -> None:
     with patch(
-        "src.api.routers.overview.get_environment_stats",
+        "api.routers.overview.get_environment_stats",
         return_value=_env_response(),
     ):
         data = admin_client.get("/api/v1/overview/environment").json()
@@ -254,7 +254,7 @@ def test_environment_returns_correct_schema(admin_client: TestClient) -> None:
 def test_environment_gpu_temp_can_be_null(admin_client: TestClient) -> None:
     """No GPU present — gpu_temp_celsius must be null, not an error."""
     with patch(
-        "src.api.routers.overview.get_environment_stats",
+        "api.routers.overview.get_environment_stats",
         return_value=_env_response(gpu_temp_celsius=None),
     ):
         data = admin_client.get("/api/v1/overview/environment").json()
@@ -271,7 +271,7 @@ def test_environment_system_status_thresholds(admin_client: TestClient) -> None:
     ]
     for memory_percent, expected_status in cases:
         with patch(
-            "src.api.routers.overview.get_environment_stats",
+            "api.routers.overview.get_environment_stats",
             return_value=_env_response(memory_percent=memory_percent, system_status=SystemStatus(expected_status)),
         ):
             data = admin_client.get("/api/v1/overview/environment").json()
@@ -282,28 +282,28 @@ def test_environment_system_status_thresholds(admin_client: TestClient) -> None:
 
 
 def test_drift_threshold_none() -> None:
-    from src.api.repositories.overview import _drift_status
+    from api.repositories.overview import _drift_status
 
     assert _drift_status(0.0) == DriftStatus.NONE
     assert _drift_status(0.09) == DriftStatus.NONE
 
 
 def test_drift_threshold_low() -> None:
-    from src.api.repositories.overview import _drift_status
+    from api.repositories.overview import _drift_status
 
     assert _drift_status(0.1) == DriftStatus.LOW
     assert _drift_status(0.29) == DriftStatus.LOW
 
 
 def test_drift_threshold_medium() -> None:
-    from src.api.repositories.overview import _drift_status
+    from api.repositories.overview import _drift_status
 
     assert _drift_status(0.3) == DriftStatus.MEDIUM
     assert _drift_status(0.59) == DriftStatus.MEDIUM
 
 
 def test_drift_threshold_high() -> None:
-    from src.api.repositories.overview import _drift_status
+    from api.repositories.overview import _drift_status
 
     assert _drift_status(0.6) == DriftStatus.HIGH
     assert _drift_status(1.0) == DriftStatus.HIGH

@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from src.api.core.security import get_current_user
-from src.api.main import app
+from api.core.security import get_current_user
+from api.main import app
 from tests.api.test_library import _make_prediction
 
 # Helpers
@@ -153,7 +153,7 @@ def test_predict_rejects_corrupt_file(client: TestClient) -> None:
 def test_predict_still_returns_200_when_monitoring_fails(client: TestClient, valid_png_512: bytes) -> None:
     """A monitoring write failure must not affect the predict response."""
     with patch(
-        "src.api.services.monitoring.MonitoringService.record_prediction_metrics",
+        "api.services.monitoring.MonitoringService.record_prediction_metrics",
         new_callable=AsyncMock,
         side_effect=Exception("DB connection lost"),
     ):
@@ -168,7 +168,7 @@ def test_predict_still_returns_200_when_monitoring_fails(client: TestClient, val
 def test_predict_calls_monitoring_on_success(client: TestClient, valid_png_512: bytes) -> None:
     record_mock = AsyncMock()
     with patch(
-        "src.api.services.monitoring.MonitoringService.record_prediction_metrics",
+        "api.services.monitoring.MonitoringService.record_prediction_metrics",
         record_mock,
     ):
 
@@ -187,7 +187,7 @@ def test_get_prediction_returns_stored_result(client, valid_png_512):
     prediction = _upload(client, valid_png_512).json()
 
     with patch(
-        "src.api.repositories.database.DatabasePredictionRepository.get",
+        "api.repositories.database.DatabasePredictionRepository.get",
         new_callable=AsyncMock,
         return_value=prediction,
     ):
@@ -209,7 +209,7 @@ def test_delete_prediction_returns_200(client: TestClient, valid_png_512: bytes)
     prediction_id = _upload(client, valid_png_512).json()["prediction_id"]
 
     with patch(
-        "src.api.repositories.database.DatabasePredictionRepository.delete",
+        "api.repositories.database.DatabasePredictionRepository.delete",
         new_callable=AsyncMock,
         return_value=True,
     ):
@@ -245,7 +245,7 @@ def test_list_predictions_returns_paginated_response(client: TestClient) -> None
     prediction = _make_prediction()
 
     with patch(
-        "src.api.repositories.database.DatabasePredictionRepository.list_by_user",
+        "api.repositories.database.DatabasePredictionRepository.list_by_user",
         new_callable=AsyncMock,
         return_value=[prediction],
     ):

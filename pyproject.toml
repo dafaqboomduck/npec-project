@@ -13,13 +13,14 @@ dev = [
 
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "."]
+pythonpath = ["."]
 testpaths = [
     "tests/preprocessing",
     "tests/inference",
     "tests/postprocessing",
     "tests/e2e",
     "tests/cli",
+    "tests/api",
 ]
 markers = [
     "slow: real-inference tests that load TF models (run with `pytest -m slow` or include in default discovery)",
@@ -33,10 +34,9 @@ addopts = [
 ]
 
 [tool.coverage.run]
-source = ["src/npec_cv"]
+source = ["npec_cv/src/npec_cv"]
 branch = true
 omit = [
-    "*/artifacts/*",
     "*/__init__.py",
     "*/_tf_setup.py",
     "*/helpers/dataset_manager.py",
