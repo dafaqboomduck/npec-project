@@ -1,0 +1,84 @@
+[project]
+name = "npec-cv-deps"
+version = "0.1.0"
+description = "NPEC project dependencies"
+requires-python = ">=3.10.18"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+]
+
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = [
+    "tests/preprocessing",
+    "tests/inference",
+    "tests/postprocessing",
+    "tests/e2e",
+    "tests/cli",
+    "tests/api",
+]
+markers = [
+    "slow: real-inference tests that load TF models (run with `pytest -m slow` or include in default discovery)",
+]
+addopts = [
+    "-m",
+    "not slow",
+    "--cov=npec_cv",
+    "--cov-report=term-missing",
+    "--cov-fail-under=70",
+]
+
+[tool.coverage.run]
+source = ["npec_cv/src/npec_cv"]
+branch = true
+omit = [
+    "*/__init__.py",
+    "*/_tf_setup.py",
+    "*/helpers/dataset_manager.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+skip_covered = false
+
+[tool.black]
+line-length = 120
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "D"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"**/inference_manager.py" = ["E402"]
+"**/_tf_setup.py" = ["E402"]
+"tests/*" = ["D"]
+"tests/*/conftest.py" = ["E402"]
+# Alembic env.py deliberately manipulates sys.path before importing db, so
+# imports are not at the top of the file. This is the standard alembic pattern.
+"db/alembic/env.py" = ["E402"]
+"db/session.py" = ["E402"]
+"scripts/*" = ["D"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["npec_cv"]
+
+[tool.isort]
+profile = "black"
+known_first_party = ["npec_cv"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
