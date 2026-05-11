@@ -1,7 +1,7 @@
 """U-Net inference service.
 
 Wraps the npec_cv pipeline behind AbstractInferenceService so the
-router never import npec_cv directly.
+router never import src.npec_cv directly.
 
 The segmentation mask is written to MASK_OUTPUT_DIR and the filename is
 returned ad segmentation_mask_url.

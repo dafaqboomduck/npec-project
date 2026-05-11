@@ -28,9 +28,9 @@ from pathlib import Path
 
 import pytest
 
-from npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
-from npec_cv.models import ImageResult
-from npec_cv.pipeline import CVPipeline
+from src.npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
+from src.npec_cv.models import ImageResult
+from src.npec_cv.pipeline import CVPipeline
 
 # ---------------------------------------------------------------------------
 # Constants

@@ -33,10 +33,10 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from npec_cv.exceptions import ConfigurationError
-from npec_cv.helpers.extract_petri_dish import extract_petri_dish
-from npec_cv.inference.inference_manager import InferenceManager
-from npec_cv.models.inference import ModelConfig
+from src.npec_cv.exceptions import ConfigurationError
+from src.npec_cv.helpers.extract_petri_dish import extract_petri_dish
+from src.npec_cv.inference.inference_manager import InferenceManager
+from src.npec_cv.models.inference import ModelConfig
 
 # ---------------------------------------------------------------------------
 # Helpers — small ModelConfig builders for these tests
@@ -308,7 +308,7 @@ class TestInferenceManagerConstructor:
             raise RuntimeError("simulated keras failure")
 
         with patch(
-            "npec_cv.inference.inference_manager.load_model",
+            "src.npec_cv.inference.inference_manager.load_model",
             side_effect=raising_load_model,
         ):
             with pytest.raises(ImportError):

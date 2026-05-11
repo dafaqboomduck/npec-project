@@ -30,4 +30,4 @@ language = "en"
 
 # -- Options for HTML output -------------------------------------------------
 html_theme = "furo"
-html_static_path = ["_static"]
+html_static_path = []

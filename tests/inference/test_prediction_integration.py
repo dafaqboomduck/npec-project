@@ -26,8 +26,8 @@ import cv2
 import numpy as np
 import pytest
 
-from npec_cv.models import ImageResult
-from npec_cv.models.plant_master import PlantResult
+from src.npec_cv.models import ImageResult
+from src.npec_cv.models.plant_master import PlantResult
 
 # All tests in this file run real inference and are gated behind the
 # `slow` marker. They are skipped by default — run them with:

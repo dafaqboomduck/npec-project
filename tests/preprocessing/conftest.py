@@ -191,7 +191,7 @@ def patch_load_model(monkeypatch, mock_keras_model: MagicMock):
     Returns the mock so tests can assert on it if needed.
     """
     monkeypatch.setattr(
-        "npec_cv.inference.inference_manager.load_model",
+        "src.npec_cv.inference.inference_manager.load_model",
         lambda *args, **kwargs: mock_keras_model,
     )
     return mock_keras_model

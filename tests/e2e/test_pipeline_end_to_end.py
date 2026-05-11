@@ -28,8 +28,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from npec_cv.models import ImageResult
-from npec_cv.models.plant_master import PlantResult
+from src.npec_cv.models import ImageResult
+from src.npec_cv.models.plant_master import PlantResult
 
 # ---------------------------------------------------------------------------
 # API contract adapter — mimics the mapping in src/api/services/unet_inference.py

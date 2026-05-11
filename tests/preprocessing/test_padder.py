@@ -26,7 +26,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from npec_cv.helpers.padder import padder
+from src.npec_cv.helpers.padder import padder
 
 
 class TestPadderDivisibility:

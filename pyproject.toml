@@ -27,7 +27,7 @@ markers = [
 addopts = [
     "-m",
     "not slow",
-    "--cov=npec_cv",
+    "--cov=src/npec_cv",
     "--cov-report=term-missing",
     "--cov-fail-under=70",
 ]

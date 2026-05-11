@@ -11,9 +11,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from npec_cv.core.plant_segmentation import PlantSegmentation
-from npec_cv.exceptions import ConfigurationError
-from npec_cv.models import Anchor, SegmentationResult
+from src.npec_cv.core.plant_segmentation import PlantSegmentation
+from src.npec_cv.exceptions import ConfigurationError
+from src.npec_cv.models import Anchor, SegmentationResult
 
 
 class TestPlantSegmentationInit:
