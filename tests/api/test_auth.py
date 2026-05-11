@@ -10,9 +10,9 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from api.core.security import get_current_user
-from api.main import app
-from api.repositories.users import UserRepository
+from src.api.core.security import get_current_user
+from src.api.main import app
+from src.api.repositories.users import UserRepository
 from tests.api.conftest import _ADMIN_ID, _USER_ID, _make_user
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ def _mock_repo(
 
     # Override at the class level so the router's `UserRepository(db)` call
     # returns our mock.
-    import api.routers.auth as auth_module
+    import src.api.routers.auth as auth_module
 
     auth_module.UserRepository = lambda db: repo  # type: ignore[assignment]
     return repo

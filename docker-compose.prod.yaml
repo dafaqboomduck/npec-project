@@ -1,102 +1,53 @@
-# docker-compose.yml — production stack for CV5 (Portainer / on-prem).
-#
-# Services:
-#   db          Postgres 16, internal-only (no host port).
-#   migrations  One-shot. Runs `alembic upgrade head` and exits.
-#   api         FastAPI backend on host port 2022.
-#   frontend    Static SPA served by `serve` on host port 2021.
-#
-# Boot order (enforced via depends_on):
-#   db (healthy) → migrations (completed) → api → frontend
-#
-# Required .env values:
-#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB  — strong, non-default
-#   GITHUB_TOKEN                                   — for model download at build
-#   VITE_API_URL                                   — public URL of the API,
-#                                                    baked into the JS bundle
-#                                                    e.g. http://your-host:2022
-#
-# Usage:
-#   docker compose --env-file .env up -d --build
-#   docker compose down            # stop, keep volume
-#   docker compose down -v         # also wipe the database
-
 services:
   db:
     image: postgres:16
-    container_name: cv5-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - cv5_pgdata:/var/lib/postgresql/data
-    # No host port mapping — DB is reachable only on the compose network.
+      - cv5_npec_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
 
   migrations:
-    build:
-      context: .
-      dockerfile: db/Dockerfile
-    image: cv5-migrations:local
-    container_name: cv5-migrations
+    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-migrations:latest
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
       - db
-    # libcompose can't gate on db's healthcheck, so migrations may start before
-    # Postgres is accepting connections. on-failure retries until it succeeds.
-    # Real migration errors will still surface — they exit non-zero and Docker
-    # retries, but Alembic itself is idempotent so reruns are safe.
     restart: on-failure
 
   api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-      secrets:
-        - github_token
-    image: cv5-api:local
-    container_name: cv5-api
+    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-api:latest
     restart: unless-stopped
     environment:
-      # Async URL for the backend (psycopg 3 async driver).
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      USE_MOCK_INFERENCE: "false"
+      USE_DB_STORAGE: "true"
+      CORS_ORIGINS: http://194.171.191.226:2025
+      NPEC_MASKS_DIR: /tmp/npec_masks
+      NPEC_ANNOTATION_MASK_DIR: /tmp/npec_annotation_masks
     ports:
-      - "2022:8000"
+      - "2024:8000"
     depends_on:
       - db
       - migrations
-    # No condition gating available — the API may start before migrations
-    # finish. `restart: unless-stopped` (already set above) means it'll crash,
-    # restart, and eventually connect to a migrated DB.
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        # Vite inlines VITE_API_URL into the bundle at build time. Changing
-        # this requires a rebuild (`docker compose build frontend`).
-        VITE_API_URL: ${VITE_API_URL}
-    image: cv5-frontend:local
-    container_name: cv5-frontend
+    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-frontend:latest
     restart: unless-stopped
     ports:
-      - "2021:3000"
+      - "2025:3000"
     depends_on:
       - api
 
 volumes:
-  cv5_pgdata:
-    name: cv5_pgdata
-
-secrets:
-  github_token:
-    environment: GITHUB_TOKEN
+  cv5_npec_pgdata:
+    name: cv5_npec_pgdata

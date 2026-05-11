@@ -14,7 +14,7 @@ function getAuthHeader(): Record<string, string> {
 }
 
 interface ClientOptions extends Omit<RequestInit, 'body'> {
-  body?: unknown;
+  body?: BodyInit | null | Record<string, unknown> | unknown[];
 }
 
 /**
@@ -25,10 +25,11 @@ export async function apiClient<T>(
   endpoint: string,
   options: ClientOptions = {},
 ): Promise<T> {
-  const { headers, signal, body, ...customOptions } = options;
+  const { headers, signal, ...customOptions } = options;
 
   const config: RequestInit = {
     ...customOptions,
+    body: options.body as BodyInit | null | undefined,
     signal,
     headers: {
       ...getAuthHeader(),
@@ -36,20 +37,17 @@ export async function apiClient<T>(
     },
   };
 
-  if (body) {
-    if (
-      body instanceof FormData ||
-      body instanceof URLSearchParams ||
-      typeof body === 'string'
-    ) {
-      config.body = body;
-    } else {
-      config.body = JSON.stringify(body);
-      config.headers = {
-        'Content-Type': 'application/json',
-        ...config.headers,
-      };
-    }
+  // Only stringify the body if it's a plain object (not FormData or URLSearchParams)
+  if (
+    config.body &&
+    !(config.body instanceof FormData) &&
+    !(config.body instanceof URLSearchParams)
+  ) {
+    config.body = JSON.stringify(config.body);
+    config.headers = {
+      'Content-Type': 'application/json',
+      ...config.headers,
+    };
   }
 
   const response = await fetch(`${BASE_URL}${endpoint}`, config);

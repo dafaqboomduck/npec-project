@@ -9,10 +9,10 @@
  * Route: /inference (protected)
  */
 
-import { ChangeEvent, DragEvent, useEffect, useRef, useState } from 'react';
+import { useState, useRef, DragEvent, ChangeEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getModelsForInference, predict } from '../api/inferenceApi';
 import NavBar from '../components/NavBar';
+import { predict, getModelsForInference } from '../api/inferenceApi';
 import type { PredictionResponse, ModelSummary } from '../types/api';
 import { useInferenceJobs } from '../context/InferenceJobsContext';
 import ResultsView from '../components/ResultsView';
@@ -133,34 +133,34 @@ export default function Inference() {
           <div className={`inference-layout ${result ? 'inference-layout--results' : ''}`}>
             {/* ── Left sidebar (hidden when results are shown) ──────────── */}
             {!result && (
-            <aside className="inference-sidebar">
-              {/* Inference Model */}
-              <section className="sidebar-section">
-                <span className="sidebar-section-label">INFERENCE MODEL</span>
-                <div className="model-display-card">
-                  <div className="model-display-icon" aria-hidden="true">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
+              <aside className="inference-sidebar">
+                {/* Inference Model */}
+                <section className="sidebar-section">
+                  <span className="sidebar-section-label">INFERENCE MODEL</span>
+                  <div className="model-display-card">
+                    <div className="model-display-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                      </svg>
+                    </div>
+                    <div className="model-display-info">
+                      <span className="model-display-name">
+                        {deployedModel?.name ?? 'RootNet-V2.4'}
+                      </span>
+                      <span className="model-display-desc">
+                        Standard Precision Pipeline
+                      </span>
+                    </div>
                   </div>
-                  <div className="model-display-info">
-                    <span className="model-display-name">
-                      {deployedModel?.name ?? 'RootNet-V2.4'}
-                    </span>
-                    <span className="model-display-desc">
-                      Standard Precision Pipeline
-                    </span>
-                  </div>
-                </div>
-              </section>
+                </section>
 
                 {/* Parameters */}
                 <section className="sidebar-section">
@@ -198,43 +198,43 @@ export default function Inference() {
                   </div>
                 </section>
 
-              {/* Active Session */}
-              <section className="sidebar-section">
-                <span className="sidebar-section-label">ACTIVE SESSION</span>
-                <div className="session-status">
-                  <span className="session-dot" />
-                  <span className="session-label">CPU Optimized (A12Z)</span>
-                </div>
-              </section>
+                {/* Active Session */}
+                <section className="sidebar-section">
+                  <span className="sidebar-section-label">ACTIVE SESSION</span>
+                  <div className="session-status">
+                    <span className="session-dot" />
+                    <span className="session-label">CPU Optimized (A12Z)</span>
+                  </div>
+                </section>
 
-              {/* Running Processes */}
-              <section className="sidebar-section">
-                <span className="sidebar-section-label">RUNNING PROCESSES</span>
-                {jobs.length === 0 ? (
-                  <p className="running-empty">No active inferences.</p>
-                ) : (
-                  <ul className="running-list">
-                    {jobs.map((job) => (
-                      <li key={job.id} className="running-job">
-                        <div className="running-job-info">
-                          <span className="running-job-name" title={job.filename}>
-                            {job.filename.length > 20 ? job.filename.slice(0, 18) + '…' : job.filename}
-                          </span>
-                          <span className="running-job-spinner" aria-hidden="true" />
-                        </div>
-                        <button
-                          className="running-job-cancel"
-                          title="Cancel inference"
-                          onClick={() => cancelJob(job.id)}
-                        >
-                          ✕
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </aside>
+                {/* Running Processes */}
+                <section className="sidebar-section">
+                  <span className="sidebar-section-label">RUNNING PROCESSES</span>
+                  {jobs.length === 0 ? (
+                    <p className="running-empty">No active inferences.</p>
+                  ) : (
+                    <ul className="running-list">
+                      {jobs.map((job) => (
+                        <li key={job.id} className="running-job">
+                          <div className="running-job-info">
+                            <span className="running-job-name" title={job.filename}>
+                              {job.filename.length > 20 ? job.filename.slice(0, 18) + '…' : job.filename}
+                            </span>
+                            <span className="running-job-spinner" aria-hidden="true" />
+                          </div>
+                          <button
+                            className="running-job-cancel"
+                            title="Cancel inference"
+                            onClick={() => cancelJob(job.id)}
+                          >
+                            ✕
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </aside>
             )}
 
             {/* ── Right panel ─────────────────────────────────── */}

@@ -85,7 +85,7 @@ export default function History() {
                 <div className="history-empty">
                   <div className="history-empty-icon">📊</div>
                   <h2>No history found</h2>
-                  <p>You haven&apos;t run any inferences yet. Go to the Inference Lab to get started!</p>
+                  <p>You haven't run any inferences yet. Go to the Inference Lab to get started!</p>
                 </div>
               ) : (
                 <div className="history-grid">

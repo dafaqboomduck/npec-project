@@ -13,14 +13,13 @@ dev = [
 
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["src", "."]
 testpaths = [
     "tests/preprocessing",
     "tests/inference",
     "tests/postprocessing",
     "tests/e2e",
     "tests/cli",
-    "tests/api",
 ]
 markers = [
     "slow: real-inference tests that load TF models (run with `pytest -m slow` or include in default discovery)",
@@ -34,9 +33,10 @@ addopts = [
 ]
 
 [tool.coverage.run]
-source = ["npec_cv/src/npec_cv"]
+source = ["src/npec_cv"]
 branch = true
 omit = [
+    "*/artifacts/*",
     "*/__init__.py",
     "*/_tf_setup.py",
     "*/helpers/dataset_manager.py",
@@ -71,7 +71,6 @@ ignore = []
 # imports are not at the top of the file. This is the standard alembic pattern.
 "db/alembic/env.py" = ["E402"]
 "db/session.py" = ["E402"]
-"scripts/*" = ["D"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["npec_cv"]
