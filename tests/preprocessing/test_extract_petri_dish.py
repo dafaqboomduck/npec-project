@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from src.npec_cv.helpers.extract_petri_dish import extract_petri_dish
+from npec_cv.helpers.extract_petri_dish import extract_petri_dish
 
 
 class TestReturnTypes:

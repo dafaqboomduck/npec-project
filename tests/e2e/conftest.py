@@ -32,9 +32,9 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from src.npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
-from src.npec_cv.helpers.patchify import patchify
-from src.npec_cv.pipeline import CVPipeline
+from npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
+from npec_cv.helpers.patchify import patchify
+from npec_cv.pipeline import CVPipeline
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -258,7 +258,7 @@ def mocked_pipeline(tmp_path_factory) -> CVPipeline:
         return mock_model
 
     with _patch(
-        "src.npec_cv.inference.inference_manager.load_model",
+        "npec_cv.inference.inference_manager.load_model",
         side_effect=fake_load_model,
     ):
         pipeline = CVPipeline(inference_config=(root_cfg, anchor_cfg))

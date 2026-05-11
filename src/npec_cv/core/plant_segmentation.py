@@ -6,8 +6,8 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from src.npec_cv.exceptions import ConfigurationError
-from src.npec_cv.models import Anchor, SegmentationConfig, SegmentationResult
+from npec_cv.exceptions import ConfigurationError
+from npec_cv.models import Anchor, SegmentationConfig, SegmentationResult
 
 logger = logging.getLogger(__name__)
 

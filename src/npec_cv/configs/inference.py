@@ -3,8 +3,8 @@
 from pathlib import Path
 from typing import Iterable
 
-from src.npec_cv.inference.custom_functions import dice_bce_loss, f1, iou
-from src.npec_cv.models.inference import MaskCombineStrategy, ModelConfig
+from npec_cv.inference.custom_functions import dice_bce_loss, f1, iou
+from npec_cv.models.inference import MaskCombineStrategy, ModelConfig
 
 # Patch size for the model
 PATCH_SIZE = 512

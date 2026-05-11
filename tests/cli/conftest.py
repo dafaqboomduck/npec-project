@@ -60,7 +60,7 @@ def _make_pipeline(image_result: Any = None) -> MagicMock:
 def mock_pipeline(monkeypatch) -> MagicMock:
     """Patch _build_pipeline so no TensorFlow models are loaded during tests."""
     pipeline = _make_pipeline()
-    monkeypatch.setattr("src.cli.main._build_pipeline", lambda confidence, artifact_dir: pipeline)
+    monkeypatch.setattr("npec_cv.cli.main._build_pipeline", lambda confidence, artifact_dir: pipeline)
     return pipeline
 
 

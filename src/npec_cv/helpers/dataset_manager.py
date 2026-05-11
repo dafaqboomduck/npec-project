@@ -85,7 +85,7 @@ class DatasetManager:
         import cv2
         import numpy as np
 
-        from src.npec_cv.helpers.patchify import patchify
+        from npec_cv.helpers.patchify import patchify
 
         if not os.path.exists(img_dir) or not os.path.exists(mask_dir):
             print("Error: Input directories not found.")

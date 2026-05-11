@@ -30,7 +30,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.npec_cv.helpers.patchify import NonUniformStepSizeError, patchify, unpatchify
+from npec_cv.helpers.patchify import NonUniformStepSizeError, patchify, unpatchify
 
 
 class TestPatchifyRoundTrip:

@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from src.api.core.security import get_current_user
-from src.api.main import app
+from api.src.core.security import get_current_user
+from api.src.main import app
 
 
 def test_feedback_requires_auth(client: TestClient) -> None:
@@ -18,7 +18,7 @@ def test_feedback_requires_auth(client: TestClient) -> None:
 
 def test_feedback_returns_404_for_unknown_prediction(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.feedback.FeedbackRepository.prediction_exists",
+        "api.src.repositories.feedback.FeedbackRepository.prediction_exists",
         new_callable=AsyncMock,
         return_value=False,
     ):
@@ -34,12 +34,12 @@ def test_feedback_returns_404_for_unknown_prediction(client: TestClient) -> None
 def test_feedback_returns_200_on_success(client: TestClient) -> None:
     with (
         patch(
-            "src.api.repositories.feedback.FeedbackRepository.prediction_exists",
+            "api.src.repositories.feedback.FeedbackRepository.prediction_exists",
             new_callable=AsyncMock,
             return_value=True,
         ),
         patch(
-            "src.api.repositories.feedback.FeedbackRepository.create",
+            "api.src.repositories.feedback.FeedbackRepository.create",
             new_callable=AsyncMock,
         ),
     ):
@@ -60,12 +60,12 @@ def test_feedback_stores_null_comment_when_absent(client: TestClient) -> None:
     create_mock = AsyncMock()
     with (
         patch(
-            "src.api.repositories.feedback.FeedbackRepository.prediction_exists",
+            "api.src.repositories.feedback.FeedbackRepository.prediction_exists",
             new_callable=AsyncMock,
             return_value=True,
         ),
         patch(
-            "src.api.repositories.feedback.FeedbackRepository.create",
+            "api.src.repositories.feedback.FeedbackRepository.create",
             create_mock,
         ),
     ):
@@ -84,12 +84,12 @@ def test_feedback_allows_multiple_submissions(client: TestClient) -> None:
     prediction_id = str(uuid.uuid4())
     with (
         patch(
-            "src.api.repositories.feedback.FeedbackRepository.prediction_exists",
+            "api.src.repositories.feedback.FeedbackRepository.prediction_exists",
             new_callable=AsyncMock,
             return_value=True,
         ),
         patch(
-            "src.api.repositories.feedback.FeedbackRepository.create",
+            "api.src.repositories.feedback.FeedbackRepository.create",
             new_callable=AsyncMock,
         ),
     ):

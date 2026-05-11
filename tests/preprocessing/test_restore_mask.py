@@ -22,8 +22,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.npec_cv.inference.inference_manager import InferenceManager
-from src.npec_cv.models.inference import ModelConfig
+from npec_cv.inference.inference_manager import InferenceManager
+from npec_cv.models.inference import ModelConfig
 
 
 def _make_config(checkpoint_path, patch_size=128, batch_size=4):

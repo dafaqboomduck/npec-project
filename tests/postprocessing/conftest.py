@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.npec_cv.models import Anchor, LengthCalculatorConfig, SegmentationConfig
+from npec_cv.models import Anchor, LengthCalculatorConfig, SegmentationConfig
 
 # ---------------------------------------------------------------------------
 # Plant segmentation fixtures

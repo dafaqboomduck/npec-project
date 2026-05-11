@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.npec_cv.helpers.sort_keys import extract_sort_keys
+from npec_cv.helpers.sort_keys import extract_sort_keys
 
 
 class TestExtractSortKeysHappyPath:

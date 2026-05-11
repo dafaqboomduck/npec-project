@@ -8,15 +8,15 @@ import cv2
 import pandas as pd
 from tqdm.auto import tqdm
 
-import src.npec_cv._tf_setup  # noqa: F401
-from src.npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
-from src.npec_cv.configs.lengths import LENGTH_CALCULATOR_CONFIG
-from src.npec_cv.configs.segmentation import SEGMENTATION_CONFIG
-from src.npec_cv.configs.thresholds import ADAPTIVE_THRESHOLD_CONFIG
-from src.npec_cv.core.plant_master import PlantMaster
-from src.npec_cv.exceptions import InitializationError
-from src.npec_cv.helpers import extract_sort_keys
-from src.npec_cv.models import ImageResult, PlantMeasurement
+import npec_cv._tf_setup  # noqa: F401
+from npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
+from npec_cv.configs.lengths import LENGTH_CALCULATOR_CONFIG
+from npec_cv.configs.segmentation import SEGMENTATION_CONFIG
+from npec_cv.configs.thresholds import ADAPTIVE_THRESHOLD_CONFIG
+from npec_cv.core.plant_master import PlantMaster
+from npec_cv.exceptions import InitializationError
+from npec_cv.helpers import extract_sort_keys
+from npec_cv.models import ImageResult, PlantMeasurement
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "npec_cv"
-version = "0.2.0"
+version = "0.2.1"
 description = "NPEC computer vision pipeline for root detection and measurement"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,8 +28,8 @@ dependencies = [
 ]
 
 [project.scripts]
-# CLI module is provided by the sibling src/cli package.
-npec-cv = "cli.main:app"
+# CLI provided by npec_cv.cli.main:app
+npec-cv = "npec_cv.cli.main:app"
 
 [project.optional-dependencies]
 cuda = [
@@ -50,21 +50,21 @@ cuda = [
 [tool.setuptools]
 packages = [
   "npec_cv",
-  "cli",
   "npec_cv.configs",
   "npec_cv.core",
   "npec_cv.exceptions",
   "npec_cv.helpers",
   "npec_cv.inference",
   "npec_cv.models",
+  "npec_cv.cli",
 ]
 
 [tool.setuptools.package-dir]
 npec_cv = "."
-cli = "../cli"
 "npec_cv.configs" = "configs"
 "npec_cv.core" = "core"
 "npec_cv.exceptions" = "exceptions"
 "npec_cv.helpers" = "helpers"
 "npec_cv.inference" = "inference"
 "npec_cv.models" = "models"
+"npec_cv.cli" = "cli"

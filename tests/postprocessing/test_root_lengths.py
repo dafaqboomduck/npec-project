@@ -15,13 +15,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.npec_cv.configs.lengths import (
+from npec_cv.configs.lengths import (
     RETURN_EMPTY_MASK,
     RETURN_INSUFFICIENT_PIXELS,
     RETURN_SUCCESS,
 )
-from src.npec_cv.core.root_lengths import LengthCalculator
-from src.npec_cv.exceptions import ConfigurationError
+from npec_cv.core.root_lengths import LengthCalculator
+from npec_cv.exceptions import ConfigurationError
 
 
 class TestLengthCalculatorInit:

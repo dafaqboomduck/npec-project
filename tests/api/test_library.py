@@ -24,16 +24,16 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from src.api.core.security import get_current_user
-from src.api.main import app
-from src.api.schemas.library import (
+from api.src.core.security import get_current_user
+from api.src.main import app
+from api.src.schemas.library import (
     AnnotationResponse,
     AnnotationStatus,
     ModelDetail,
     ModelStatus,
     ModelSummary,
 )
-from src.api.schemas.predictions import (
+from api.src.schemas.predictions import (
     PredictionMetadata,
     PredictionResponse,
     PredictionStatus,
@@ -190,7 +190,7 @@ def test_delete_annotation_returns_404_before_migration(client: TestClient) -> N
 def test_delete_annotation_returns_200_when_found(client: TestClient) -> None:
     annotation_id = uuid.uuid4()
     with patch(
-        "src.api.repositories.annotations.AnnotationRepository.delete",
+        "api.src.repositories.annotations.AnnotationRepository.delete",
         new_callable=AsyncMock,
         return_value=True,
     ):
@@ -224,13 +224,13 @@ def test_confirm_annotation_rejects_non_tiff(client: TestClient) -> None:
 def test_confirm_annotation_returns_404_when_not_found(client: TestClient) -> None:
     tiff = _make_tiff()
     with (
-        patch("src.api.routers.library.validate_tiff_mask"),
+        patch("api.src.routers.library.validate_tiff_mask"),
         patch(
-            "src.api.routers.library.save_annotation_mask",
+            "api.src.routers.library.save_annotation_mask",
             return_value="file:///tmp/mask.tiff",
         ),
         patch(
-            "src.api.repositories.annotations.AnnotationRepository.confirm",
+            "api.src.repositories.annotations.AnnotationRepository.confirm",
             new_callable=AsyncMock,
             return_value=None,
         ),
@@ -247,13 +247,13 @@ def test_confirm_annotation_returns_updated_annotation(client: TestClient) -> No
     annotation = _make_annotation()
     tiff = _make_tiff()
     with (
-        patch("src.api.routers.library.validate_tiff_mask"),
+        patch("api.src.routers.library.validate_tiff_mask"),
         patch(
-            "src.api.routers.library.save_annotation_mask",
+            "api.src.routers.library.save_annotation_mask",
             return_value="file:///tmp/mask.tiff",
         ),
         patch(
-            "src.api.repositories.annotations.AnnotationRepository.confirm",
+            "api.src.repositories.annotations.AnnotationRepository.confirm",
             new_callable=AsyncMock,
             return_value=annotation,
         ),
@@ -279,7 +279,7 @@ def test_list_models_requires_auth(client: TestClient) -> None:
 
 def test_list_models_returns_list(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.models.ModelRepository.list",
+        "api.src.repositories.models.ModelRepository.list",
         new_callable=AsyncMock,
         return_value=[_model_summary()],
     ):
@@ -295,7 +295,7 @@ def test_list_models_returns_list(client: TestClient) -> None:
 
 def test_list_models_returns_empty_list(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.models.ModelRepository.list",
+        "api.src.repositories.models.ModelRepository.list",
         new_callable=AsyncMock,
         return_value=[],
     ):
@@ -310,7 +310,7 @@ def test_list_models_returns_empty_list(client: TestClient) -> None:
 
 def test_get_model_returns_404_for_unknown_id(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.models.ModelRepository.get",
+        "api.src.repositories.models.ModelRepository.get",
         new_callable=AsyncMock,
         return_value=None,
     ):
@@ -324,7 +324,7 @@ def test_get_model_user_does_not_see_admin_fields(client: TestClient) -> None:
     """User-role tokens must not receive artifact_uri or deployed_at."""
     detail = _model_detail(artifact_uri=None, deployed_at=None)
     with patch(
-        "src.api.repositories.models.ModelRepository.get",
+        "api.src.repositories.models.ModelRepository.get",
         new_callable=AsyncMock,
         return_value=detail,
     ):
@@ -338,7 +338,7 @@ def test_get_model_admin_sees_admin_fields(admin_client: TestClient) -> None:
     """Admin-role tokens must receive artifact_uri and deployed_at."""
     detail = _model_detail()
     with patch(
-        "src.api.repositories.models.ModelRepository.get",
+        "api.src.repositories.models.ModelRepository.get",
         new_callable=AsyncMock,
         return_value=detail,
     ):
@@ -351,7 +351,7 @@ def test_get_model_admin_sees_admin_fields(admin_client: TestClient) -> None:
 def test_get_model_returns_correct_schema(admin_client: TestClient) -> None:
     detail = _model_detail()
     with patch(
-        "src.api.repositories.models.ModelRepository.get",
+        "api.src.repositories.models.ModelRepository.get",
         new_callable=AsyncMock,
         return_value=detail,
     ):
@@ -383,7 +383,7 @@ def test_delete_model_returns_403_for_user(client: TestClient) -> None:
 
 def test_delete_model_returns_404_for_unknown_id(admin_client: TestClient) -> None:
     with patch(
-        "src.api.repositories.models.ModelRepository.delete",
+        "api.src.repositories.models.ModelRepository.delete",
         new_callable=AsyncMock,
         return_value=False,
     ):
@@ -393,7 +393,7 @@ def test_delete_model_returns_404_for_unknown_id(admin_client: TestClient) -> No
 
 def test_delete_model_returns_200_for_admin(admin_client: TestClient) -> None:
     with patch(
-        "src.api.repositories.models.ModelRepository.delete",
+        "api.src.repositories.models.ModelRepository.delete",
         new_callable=AsyncMock,
         return_value=True,
     ):
@@ -419,7 +419,7 @@ def test_deploy_model_returns_403_for_user(client: TestClient) -> None:
 
 def test_deploy_model_returns_404_for_unknown_id(admin_client: TestClient) -> None:
     with patch(
-        "src.api.repositories.models.ModelRepository.exists",
+        "api.src.repositories.models.ModelRepository.exists",
         new_callable=AsyncMock,
         return_value=False,
     ):
@@ -430,12 +430,12 @@ def test_deploy_model_returns_404_for_unknown_id(admin_client: TestClient) -> No
 def test_deploy_model_returns_200_for_admin(admin_client: TestClient) -> None:
     with (
         patch(
-            "src.api.repositories.models.ModelRepository.exists",
+            "api.src.repositories.models.ModelRepository.exists",
             new_callable=AsyncMock,
             return_value=True,
         ),
         patch(
-            "src.api.services.deployment.StubDeploymentService.deploy",
+            "api.src.services.deployment.StubDeploymentService.deploy",
             new_callable=AsyncMock,
         ),
     ):
@@ -457,7 +457,7 @@ def test_confirm_prediction_requires_auth(client: TestClient) -> None:
 
 def test_confirm_prediction_returns_404_for_unknown(client: TestClient) -> None:
     with patch(
-        "src.api.repositories.database.DatabasePredictionRepository.confirm",
+        "api.src.repositories.database.DatabasePredictionRepository.confirm",
         new_callable=AsyncMock,
         side_effect=ValueError("not found"),
     ):
@@ -471,7 +471,7 @@ def test_confirm_prediction_returns_404_for_unknown(client: TestClient) -> None:
 def test_confirm_prediction_returns_409_if_already_confirmed(client: TestClient) -> None:
     prediction = _make_prediction()
     with patch(
-        "src.api.repositories.database.DatabasePredictionRepository.confirm",
+        "api.src.repositories.database.DatabasePredictionRepository.confirm",
         new_callable=AsyncMock,
         return_value=(prediction, True),  # already_confirmed=True
     ):
@@ -485,7 +485,7 @@ def test_confirm_prediction_returns_409_if_already_confirmed(client: TestClient)
 def test_confirm_prediction_returns_200_on_success(client: TestClient) -> None:
     prediction = _make_prediction()
     with patch(
-        "src.api.repositories.database.DatabasePredictionRepository.confirm",
+        "api.src.repositories.database.DatabasePredictionRepository.confirm",
         new_callable=AsyncMock,
         return_value=(prediction, False),  # already_confirmed=False
     ):
@@ -508,7 +508,7 @@ def test_confirm_prediction_works_without_body(client: TestClient) -> None:
     """Body is optional — confirm without any metadata should still succeed."""
     prediction = _make_prediction()
     with patch(
-        "src.api.repositories.database.DatabasePredictionRepository.confirm",
+        "api.src.repositories.database.DatabasePredictionRepository.confirm",
         new_callable=AsyncMock,
         return_value=(prediction, False),
     ):

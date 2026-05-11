@@ -5,10 +5,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from src.npec_cv.models.adaptive_threshold import AdaptiveThresholdConfig
-from src.npec_cv.models.inference import ModelConfig
-from src.npec_cv.models.length import LengthCalculatorConfig
-from src.npec_cv.models.segmentation import Anchor, SegmentationConfig
+from npec_cv.models.adaptive_threshold import AdaptiveThresholdConfig
+from npec_cv.models.inference import ModelConfig
+from npec_cv.models.length import LengthCalculatorConfig
+from npec_cv.models.segmentation import Anchor, SegmentationConfig
 
 
 @dataclass

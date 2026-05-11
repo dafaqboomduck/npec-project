@@ -6,12 +6,12 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from src.npec_cv.core.plant_segmentation import PlantSegmentation
-from src.npec_cv.core.root_lengths import LengthCalculator
-from src.npec_cv.exceptions import ConfigurationError
-from src.npec_cv.helpers.extract_petri_dish import extract_petri_dish
-from src.npec_cv.inference import InferenceManager
-from src.npec_cv.models import (
+from npec_cv.core.plant_segmentation import PlantSegmentation
+from npec_cv.core.root_lengths import LengthCalculator
+from npec_cv.exceptions import ConfigurationError
+from npec_cv.helpers.extract_petri_dish import extract_petri_dish
+from npec_cv.inference import InferenceManager
+from npec_cv.models import (
     AdaptiveThresholdConfig,
     Anchor,
     ImageResult,

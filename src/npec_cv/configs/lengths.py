@@ -1,6 +1,6 @@
 """Configuration settings for root length calculations."""
 
-from src.npec_cv.models.length import LengthCalculatorConfig, LengthResult
+from npec_cv.models.length import LengthCalculatorConfig, LengthResult
 
 EMPTY_RESULT = LengthResult(detected=False, length=0, pixel_count=0, path_result=None)
 

@@ -1,6 +1,6 @@
 """Configuration settings for plant segmentation rules."""
 
-from src.npec_cv.models import SegmentationConfig
+from npec_cv.models import SegmentationConfig
 
 PLANT_ZONES = {
     0: (890, 1390),

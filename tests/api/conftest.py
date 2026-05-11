@@ -13,11 +13,11 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from db.session import get_session
-from src.api.core.security import get_current_user, hash_password
-from src.api.dependencies import get_inference_service
-from src.api.main import app
-from src.api.services.mock_inference import MockInferenceService
+from api.src.core.security import get_current_user, hash_password
+from api.src.db.session import get_session
+from api.src.dependencies import get_inference_service
+from api.src.main import app
+from api.src.services.mock_inference import MockInferenceService
 
 _USER_ID = uuid4()
 _ADMIN_ID = uuid4()

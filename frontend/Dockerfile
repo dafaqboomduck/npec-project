@@ -2,16 +2,14 @@
 # Stage 1: Build the React (Vite) application
 # =========================================
 FROM node:20-alpine AS builder
-
 WORKDIR /app
 
 # Copy lockfiles first — Docker caches this layer and only
 # reruns npm ci when the lockfile actually changes
-COPY package.json package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json ./
 
 # Clean, reproducible install based on the lockfile
 RUN --mount=type=cache,target=/root/.npm npm ci
-RUN npm ci
 
 # VITE_API_URL must be injected at BUILD TIME, not runtime.
 # Vite bakes all VITE_* variables into the compiled JS bundle,
@@ -21,7 +19,7 @@ ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
 # Copy the rest of the application source code
-COPY . .
+COPY frontend/ ./
 
 # Compile the React app — output goes to /app/dist
 RUN npm run build

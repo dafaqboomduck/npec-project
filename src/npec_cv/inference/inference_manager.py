@@ -10,11 +10,11 @@ from keras.models import load_model
 
 logger = logging.getLogger(__name__)
 
-from src.npec_cv.exceptions import ConfigurationError
-from src.npec_cv.helpers.extract_petri_dish import extract_petri_dish
-from src.npec_cv.helpers.padder import padder
-from src.npec_cv.helpers.patchify import patchify, unpatchify
-from src.npec_cv.models.inference import ModelConfig
+from npec_cv.exceptions import ConfigurationError
+from npec_cv.helpers.extract_petri_dish import extract_petri_dish
+from npec_cv.helpers.padder import padder
+from npec_cv.helpers.patchify import patchify, unpatchify
+from npec_cv.models.inference import ModelConfig
 
 
 class InferenceManager:

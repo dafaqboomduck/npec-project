@@ -1,6 +1,6 @@
 """Configuration settings for adaptive thresholding in root extraction."""
 
-from src.npec_cv.models import AdaptiveThresholdConfig
+from npec_cv.models import AdaptiveThresholdConfig
 
 ADAPTIVE_THRESHOLD_CONFIG = AdaptiveThresholdConfig(
     adaptive_threshold_start=0.50,

@@ -9,15 +9,15 @@ import numpy as np
 from scipy.spatial import cKDTree
 from skimage.morphology import skeletonize
 
-from src.npec_cv.configs.lengths import (
+from npec_cv.configs.lengths import (
     EMPTY_RESULT,
     RETURN_EMPTY_MASK,
     RETURN_INSUFFICIENT_PIXELS,
     RETURN_NO_PATH,
     RETURN_SUCCESS,
 )
-from src.npec_cv.exceptions import ConfigurationError
-from src.npec_cv.models.length import LengthCalculatorConfig, LengthResult, PathResult
+from npec_cv.exceptions import ConfigurationError
+from npec_cv.models.length import LengthCalculatorConfig, LengthResult, PathResult
 
 logger = logging.getLogger(__name__)
 
