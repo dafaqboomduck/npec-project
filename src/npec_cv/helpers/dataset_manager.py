@@ -65,12 +65,8 @@ class DatasetManager:
         Splits images and corresponding root masks into uniform-sized patches
         and saves them to a structured output directory.
 
-        The process involves:
-        1. Scaling images/masks if required.
-        2. Padding the scaled images/masks to ensure they are fully divisible by
-            the patch size.
-        3. Cropping the padded images/masks to the area of the petri dish.
-        4. Generating and saving the patches.
+        The process involves: scaling, padding to a multiple of patch_size,
+        petri-dish cropping, and patch generation.
 
         Args:
             img_dir (str): The directory containing the source images (.png).
