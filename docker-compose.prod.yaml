@@ -12,7 +12,7 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
       start_period: 10s
 
   migrations:
@@ -20,7 +20,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: on-failure
 
   api:
@@ -35,16 +36,18 @@ services:
       NPEC_MASKS_DIR: /tmp/npec_masks
       NPEC_ANNOTATION_MASK_DIR: /tmp/npec_annotation_masks
     ports:
-      - "2024:8000"
+      - "2021:8000"
     depends_on:
-      - db
-      - migrations
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
 
   frontend:
     image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-frontend:latest
     restart: unless-stopped
     ports:
-      - "2025:3000"
+      - "2022:3000"
     depends_on:
       - api
 
