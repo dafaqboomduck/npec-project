@@ -36,7 +36,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       USE_MOCK_INFERENCE: "false"
       USE_DB_STORAGE: "true"
-      CORS_ORIGINS: http://194.171.191.226:2025
+      CORS_ORIGINS: ${CORS_ORIGINS}
       NPEC_MASKS_DIR: /tmp/npec_masks
       NPEC_ANNOTATION_MASK_DIR: /tmp/npec_annotation_masks
     ports:
@@ -51,6 +51,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
     restart: unless-stopped
     ports:
       - "2025:3000"
