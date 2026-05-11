@@ -34,7 +34,7 @@ from api.src.schemas.common import ErrorCode, ErrorResponse
 
 # Logging
 
-logging.basicConfig(level=logging.INFO, format="$(asctime)s | %(levelname)-8s | %(name)s | %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
