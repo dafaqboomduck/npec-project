@@ -44,3 +44,6 @@ dist/
 
 # Ignore .coverage
 .coverage
+
+# Azure ML workspace config — contains real subscription/resource IDs
+config.json
