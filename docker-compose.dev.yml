@@ -23,8 +23,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     restart: on-failure
 
   api:
@@ -32,7 +31,7 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
-    restart: unless-stopped
+    restart: on-failure
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SECRET_KEY: ${SECRET_KEY}
@@ -44,10 +43,8 @@ services:
     ports:
       - "2024:8000"
     depends_on:
-      db:
-        condition: service_healthy
-      migrations:
-        condition: service_completed_successfully
+      - db
+      - migrations
 
   frontend:
     image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-frontend:latest
