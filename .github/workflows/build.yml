@@ -1,0 +1,39 @@
+name: Build check
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create dummy .env for compose substitution
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=npec
+          SECRET_KEY=ci-build-only
+          CORS_ORIGINS=http://localhost:3000
+          VITE_API_URL=http://localhost:2024
+          EOF
+
+      - name: Build compose services with layer cache
+        uses: docker/bake-action@v5
+        with:
+          source: .
+          files: docker-compose.dev.yml
+          set: |
+            migrations.cache-from=type=gha,scope=migrations
+            migrations.cache-to=type=gha,scope=migrations,mode=max
+            api.cache-from=type=gha,scope=api
+            api.cache-to=type=gha,scope=api,mode=max
+            frontend.cache-from=type=gha,scope=frontend
+            frontend.cache-to=type=gha,scope=frontend,mode=max
