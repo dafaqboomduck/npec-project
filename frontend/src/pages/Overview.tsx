@@ -295,11 +295,18 @@ export default function Overview() {
               ) : (
                 <ul className="activity-list" role="list">
                   {activity.slice(0, 5).map((item, idx) => (
-                      <li key={idx} className="activity-item">
-                        <div
-                          className={`activity-icon activity-icon--${item.event_type}`}
-                        >
-                          <ActivityIconSvg type={item.event_type} />
+                    <li key={idx} className="activity-item">
+                      <div
+                        className={`activity-icon activity-icon--${item.event_type}`}
+                      >
+                        <ActivityIconSvg type={item.event_type} />
+                      </div>
+                      <div className="activity-content">
+                        <div className="activity-title-row">
+                          <span className="activity-title">{item.title}</span>
+                          <span className="activity-time">
+                            {relativeTime(item.timestamp)}
+                          </span>
                         </div>
                         <p className="activity-description">
                           {item.description}
