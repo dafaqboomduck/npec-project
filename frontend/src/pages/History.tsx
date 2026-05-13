@@ -92,7 +92,6 @@ export default function History() {
                 </div>
               ) : predictions.length === 0 ? (
                 <div className="history-empty">
-                  <div className="history-empty-icon">📊</div>
                   <h2>No history found</h2>
                   <p>No inference runs yet.</p>
                 </div>

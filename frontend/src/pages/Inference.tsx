@@ -155,7 +155,7 @@ export default function Inference() {
                     </div>
                     <div className="model-display-info">
                       <span className="model-display-name">
-                        {deployedModel?.name ?? 'RootNet-V2.4'}
+                        {deployedModel?.name ?? 'No model deployed'}
                       </span>
                       <span className="model-display-desc">
                         Standard Precision Pipeline
@@ -204,8 +204,6 @@ export default function Inference() {
                 <section className="sidebar-section">
                   <span className="sidebar-section-label">ACTIVE SESSION</span>
                   <div className="session-status">
-                    <span className="session-dot" />
-                    <span className="session-label">CPU Optimized (A12Z)</span>
                   </div>
                 </section>
 
@@ -256,7 +254,7 @@ export default function Inference() {
                   result={result}
                   file={file}
                   filePreviewUrl={filePreviewUrl}
-                  deployedModelName={deployedModel?.name ?? 'RootNet-V2.4'}
+                  deployedModelName={deployedModel?.name ?? 'No model deployed'}
                   onNewScan={() => {
                     setResult(null);
                     setFile(null);

@@ -9,11 +9,8 @@
 
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, saveTokens, clearTokens } from '../api/auth';
+import { login, saveTokens } from '../api/auth';
 import './Login.css';
-
-/** Only used during development when the backend is not yet running. */
-const IS_DEV = import.meta.env.DEV;
 
 export default function Login() {
   const navigate = useNavigate();
@@ -42,23 +39,6 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  }
-
-  /**
-   * Demo mode — bypasses the real API and injects fake tokens into
-   * localStorage so you can explore the UI without a running backend.
-   * Only available in development (import.meta.env.DEV).
-   */
-  function handleDemoMode() {
-    clearTokens();
-    // Fake token — the API will still reject protected requests, but
-    // the router auth guard will let you through and all UI states
-    // will show their graceful offline fallbacks.
-    localStorage.setItem('access_token', 'demo-preview-token');
-    localStorage.setItem('refresh_token', 'demo-refresh-token');
-    localStorage.setItem('role', 'user');
-    localStorage.setItem('username', 'dr.demo@npec.nl');
-    navigate('/overview', { replace: true });
   }
 
   return (
@@ -114,21 +94,6 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-
-        {IS_DEV && (
-          <div className="login-demo">
-            <span className="login-demo-divider">or</span>
-            <button
-              type="button"
-              className="login-demo-btn"
-              id="login-demo-button"
-              onClick={handleDemoMode}
-            >
-              Use Demo Mode
-              <span className="login-demo-tag">DEV ONLY</span>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

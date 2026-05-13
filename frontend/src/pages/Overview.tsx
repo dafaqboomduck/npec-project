@@ -226,14 +226,7 @@ export default function Overview() {
                         {m.name}
                       </span>
                     ))
-                  : ['ROOTNET-V2', 'LEAF-SEG-X', 'MYCELIUM-A'].map((n) => (
-                      <span
-                        className="model-badge model-badge--placeholder"
-                        key={n}
-                      >
-                        {n}
-                      </span>
-                    ))}
+                  : <span className="model-badge model-badge--empty">No models active</span>}
               </div>
             </div>
 
@@ -285,7 +278,7 @@ export default function Overview() {
                   </svg>
                 </span>
                 <span className="hero-card-name">
-                  {currentModel ? currentModel.name : 'RootNet-V2 model'}
+                  {currentModel ? currentModel.name : 'No model deployed'}
                 </span>
               </div>
             </div>
@@ -301,9 +294,7 @@ export default function Overview() {
                 <p className="activity-empty">No recent activity to display.</p>
               ) : (
                 <ul className="activity-list" role="list">
-                  {(activity.length > 0 ? activity : PLACEHOLDER_ACTIVITY)
-                    .slice(0, 5)
-                    .map((item, idx) => (
+                  {activity.slice(0, 5).map((item, idx) => (
                       <li key={idx} className="activity-item">
                         <div
                           className={`activity-icon activity-icon--${item.event_type}`}
@@ -463,29 +454,3 @@ export default function Overview() {
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-
-// Placeholder activity to show while API is offline
-const PLACEHOLDER_ACTIVITY: ActivityItem[] = [
-  {
-    event_type: 'retraining',
-    title: 'Model Retraining Complete',
-    description:
-      'RootNet-V2 retrained on 4,200 annotated images. F1 improved by 2.3%.',
-    timestamp: new Date(Date.now() - 2 * 3600000).toISOString(),
-    tags: ['EPOCH_50', 'VAL_B'],
-  },
-  {
-    event_type: 'upload',
-    title: 'Batch Upload — Wheat Cohort 12',
-    description: '312 TIFF scans uploaded and queued for annotation.',
-    timestamp: new Date(Date.now() - 5 * 3600000).toISOString(),
-  },
-  {
-    event_type: 'annotation',
-    title: 'Annotation Session',
-    description:
-      'Dr. E. Hrina completed 88 manual annotations for barley root set.',
-    timestamp: new Date(Date.now() - 86400000).toISOString(),
-    tags: ['BARLEY-SET-3'],
-  },
-];

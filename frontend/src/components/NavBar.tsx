@@ -5,13 +5,16 @@
  * Matches the Figma design: logo left, tabs centre, icons+avatar right.
  */
 
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { logout, getUsername } from '../api/auth';
+import SettingsPanel from './SettingsPanel';
 import './NavBar.css';
+import { useState } from 'react';
 
 export default function NavBar() {
   const navigate = useNavigate();
   const username = getUsername();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // Show first letter of username (or first letter before @)
   const initials = (username.split('@')[0] ?? username).charAt(0).toUpperCase();
 
@@ -24,7 +27,9 @@ export default function NavBar() {
     <header className="navbar">
       <div className="navbar-inner">
         {/* ── Logo ── */}
-        <span className="navbar-logo">Herbarium AI</span>
+        <Link to="/overview" className="navbar-logo" id="nav-logo">
+          Herbarium AI
+        </Link>
 
         {/* ── Nav tabs ── */}
         <nav className="navbar-tabs" aria-label="Primary navigation">
@@ -94,6 +99,7 @@ export default function NavBar() {
             className="navbar-icon-btn"
             aria-label="Settings"
             id="nav-settings"
+            onClick={() => setIsSettingsOpen(true)}
           >
             <svg
               width="19"
@@ -144,6 +150,8 @@ export default function NavBar() {
           </div>
         </div>
       </div>
+
+      <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </header>
   );
 }

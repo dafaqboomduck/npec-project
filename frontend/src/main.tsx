@@ -24,6 +24,7 @@ import History from './pages/History';
 import Library from './pages/Library';
 import { isAuthenticated } from './api/auth';
 import { InferenceJobsProvider } from './context/InferenceJobsContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 /** Redirects unauthenticated users to /login. */
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -90,7 +91,9 @@ if (!rootElement) throw new Error('Root element #root not found in index.html');
 createRoot(rootElement).render(
   <StrictMode>
     <InferenceJobsProvider>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </InferenceJobsProvider>
   </StrictMode>,
 );

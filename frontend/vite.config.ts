@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [react()],
 
   server: {
-    port: 5173,
+    port: 3000,
     // Proxy API and WebSocket requests to the Python backend during development.
     // This avoids CORS issues — the browser always talks to Vite (port 5173),
     // and Vite forwards /api/* and /ws/* to FastAPI.

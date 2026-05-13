@@ -109,3 +109,39 @@
   --max-width: 1200px;
   --content-pad: 2rem;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Dark Mode Theme                                                          */
+/* ---------------------------------------------------------------------- */
+
+[data-theme='dark'] {
+  --color-bg: #0b1a14; /* Deep forest night */
+  --color-bg-white: #1b4332; /* Dark leaf surface */
+  --color-bg-subtle: #142d22; /* Mid forest surface */
+
+  --color-primary: #d8f3dc; /* Light sage contrast */
+  --color-primary-mid: #95d5b2;
+  --color-primary-light: #74c69d;
+
+  --color-card-dark: #2d6a4f;
+  --color-card-dark-text: #ffffff;
+  --color-card-env: #142d22;
+
+  --color-text-primary: #f0f7f0;
+  --color-text-secondary: #b7e4c7;
+  --color-text-muted: #74907a;
+  --color-text-on-dark: #f0f7f0;
+
+  --color-border: #2d6a4f;
+  --color-border-subtle: #1b4332;
+
+  --color-progress-track: #1b4332;
+  --color-progress-fill: #95d5b2;
+
+  --color-tag-bg: #2d6a4f;
+  --color-tag-text: #d8f3dc;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
+}

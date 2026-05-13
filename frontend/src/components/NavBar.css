@@ -38,6 +38,11 @@
   color: var(--color-primary);
   letter-spacing: -0.02em;
   white-space: nowrap;
+  text-decoration: none;
+}
+
+.navbar-logo:hover {
+  text-decoration: none;
 }
 
 /* ---------------------------------------------------------------------- */
