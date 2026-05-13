@@ -26,7 +26,9 @@ export default function ResultsView({
   isHistoryView = false,
 }: ResultsViewProps) {
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('scan');
-  const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
+  const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(
+    null,
+  );
   const meta = result.metadata;
   const predIdShort = result.prediction_id.slice(0, 6);
 
@@ -49,21 +51,37 @@ export default function ResultsView({
             <h2 className="rv-title">
               {isHistoryView ? 'Past Prediction' : 'Inference complete'}
             </h2>
-            <span className="rv-plant-badge">{result.plants.length} PLANTS</span>
+            <span className="rv-plant-badge">
+              {result.plants.length} PLANTS
+            </span>
           </div>
           <p className="rv-subtitle">
-            prediction p_{predIdShort} · {result.input_filename || file?.name || 'scan'} · {deployedModelName}
+            prediction p_{predIdShort} ·{' '}
+            {result.input_filename || file?.name || 'scan'} ·{' '}
+            {deployedModelName}
           </p>
         </div>
         {!isHistoryView && (
           <div className="rv-header-actions">
-            <button className="rv-btn rv-btn--outline" id="btn-new-scan" onClick={onNewScan}>
+            <button
+              className="rv-btn rv-btn--outline"
+              id="btn-new-scan"
+              onClick={onNewScan}
+            >
               + New scan
             </button>
-            <button className="rv-btn rv-btn--danger" id="btn-discard-result" onClick={onDiscard}>
+            <button
+              className="rv-btn rv-btn--danger"
+              id="btn-discard-result"
+              onClick={onDiscard}
+            >
               Discard
             </button>
-            <button className="rv-btn rv-btn--primary" id="btn-save-result" onClick={onSave}>
+            <button
+              className="rv-btn rv-btn--primary"
+              id="btn-save-result"
+              onClick={onSave}
+            >
               ✓ Save to library
             </button>
           </div>
@@ -85,13 +103,15 @@ export default function ResultsView({
         <div className="rv-stat-card">
           <span className="rv-stat-label">LATENCY</span>
           <span className="rv-stat-value">
-            {meta.processing_time_ms}<small>ms</small>
+            {meta.processing_time_ms}
+            <small>ms</small>
           </span>
         </div>
         <div className="rv-stat-card">
           <span className="rv-stat-label">SCALE</span>
           <span className="rv-stat-value">
-            {meta.scale_factor_mm_per_px.toFixed(3)}<small> mm/px</small>
+            {meta.scale_factor_mm_per_px.toFixed(3)}
+            <small> mm/px</small>
           </span>
         </div>
       </div>
@@ -123,7 +143,8 @@ export default function ResultsView({
               />
             ) : (
               <span className="rv-overlay-placeholder">
-                {result.input_filename || file?.name || 'scan'} + segmentation_mask.png · {result.plants.length} tip markers
+                {result.input_filename || file?.name || 'scan'} +
+                segmentation_mask.png · {result.plants.length} tip markers
               </span>
             )}
           </div>
@@ -146,7 +167,9 @@ export default function ResultsView({
                 {result.plants.map((p: Plant) => (
                   <tr key={p.plant_id}>
                     <td className="rv-cell-id">#{p.plant_id}</td>
-                    <td>{p.tip_x}, {p.tip_y}</td>
+                    <td>
+                      {p.tip_x}, {p.tip_y}
+                    </td>
                     <td>{p.root_length_mm.toFixed(1)} mm</td>
                     <td className={p.confidence < 0.8 ? 'rv-cell-low' : ''}>
                       {(p.confidence * 100).toFixed(0)}%

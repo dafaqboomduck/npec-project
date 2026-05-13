@@ -39,8 +39,13 @@ export async function getModelsForInference(): Promise<ModelSummary[]> {
 }
 
 /** GET /predictions — paginated list of past predictions for this user. */
-export async function getPredictions(page = 1, pageSize = 20): Promise<PredictionResponse[]> {
-  return apiClient<PredictionResponse[]>(`/predictions?page=${page}&page_size=${pageSize}`);
+export async function getPredictions(
+  page = 1,
+  pageSize = 20,
+): Promise<PredictionResponse[]> {
+  return apiClient<PredictionResponse[]>(
+    `/predictions?page=${page}&page_size=${pageSize}`,
+  );
 }
 
 /** GET /predictions/:id — single past prediction. */

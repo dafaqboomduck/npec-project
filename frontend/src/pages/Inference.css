@@ -357,7 +357,9 @@
   padding: 2px 4px;
   border-radius: var(--radius-sm);
   line-height: 1;
-  transition: color var(--transition-fast), background var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -590,7 +592,6 @@
 .inference-layout--results {
   grid-template-columns: 1fr;
 }
-
 
 /* ---------------------------------------------------------------------- */
 /* Floating action button                                                   */

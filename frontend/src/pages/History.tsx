@@ -8,7 +8,8 @@ import './History.css';
 export default function History() {
   const [predictions, setPredictions] = useState<PredictionResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPrediction, setSelectedPrediction] = useState<PredictionResponse | null>(null);
+  const [selectedPrediction, setSelectedPrediction] =
+    useState<PredictionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,15 +47,17 @@ export default function History() {
         <div className="history-container">
           {selectedPrediction ? (
             <div className="history-detail-view">
-              <button 
+              <button
                 className="history-back-btn"
                 onClick={() => setSelectedPrediction(null)}
               >
                 ← Back to History
               </button>
-              <ResultsView 
+              <ResultsView
                 result={selectedPrediction}
-                filePreviewUrl={selectedPrediction.segmentation_mask_url || null}
+                filePreviewUrl={
+                  selectedPrediction.segmentation_mask_url || null
+                }
                 deployedModelName={selectedPrediction.metadata.model_version}
                 isHistoryView={true}
               />
@@ -63,13 +66,19 @@ export default function History() {
             <div className="history-list-view">
               <header className="history-header">
                 <div className="history-header-left">
-                  <span className="history-breadcrumb">INFERENCE / HISTORY</span>
+                  <span className="history-breadcrumb">
+                    INFERENCE / HISTORY
+                  </span>
                   <h1 className="history-title">Inference History</h1>
                   <p className="history-subtitle">
                     Review past detections and segmentation results.
                   </p>
                 </div>
-                <button className="history-refresh-btn" onClick={fetchHistory} disabled={loading}>
+                <button
+                  className="history-refresh-btn"
+                  onClick={fetchHistory}
+                  disabled={loading}
+                >
                   {loading ? 'Refreshing...' : 'Refresh'}
                 </button>
               </header>
@@ -85,7 +94,7 @@ export default function History() {
                 <div className="history-empty">
                   <div className="history-empty-icon">📊</div>
                   <h2>No history found</h2>
-                  <p>You haven't run any inferences yet. Go to the Inference Lab to get started!</p>
+                  <p>No inference runs yet.</p>
                 </div>
               ) : (
                 <div className="history-grid">
@@ -102,20 +111,33 @@ export default function History() {
                     </thead>
                     <tbody>
                       {predictions.map((pred) => (
-                        <tr key={pred.prediction_id} onClick={() => setSelectedPrediction(pred)}>
-                          <td>{formatDate(pred.metadata.inference_timestamp)}</td>
-                          <td className="history-filename">{pred.input_filename || 'Unknown Scan'}</td>
+                        <tr
+                          key={pred.prediction_id}
+                          onClick={() => setSelectedPrediction(pred)}
+                        >
+                          <td>
+                            {formatDate(pred.metadata.inference_timestamp)}
+                          </td>
+                          <td className="history-filename">
+                            {pred.input_filename || 'Unknown Scan'}
+                          </td>
                           <td>{pred.metadata.model_version}</td>
                           <td>
-                            <span className="history-plant-count">{pred.plants.length}</span>
+                            <span className="history-plant-count">
+                              {pred.plants.length}
+                            </span>
                           </td>
                           <td>
-                            <span className={`history-conf-badge ${pred.overall_confidence > 0.8 ? 'high' : 'low'}`}>
+                            <span
+                              className={`history-conf-badge ${pred.overall_confidence > 0.8 ? 'high' : 'low'}`}
+                            >
                               {(pred.overall_confidence * 100).toFixed(1)}%
                             </span>
                           </td>
                           <td>
-                            <button className="history-view-btn">View Details</button>
+                            <button className="history-view-btn">
+                              View Details
+                            </button>
                           </td>
                         </tr>
                       ))}

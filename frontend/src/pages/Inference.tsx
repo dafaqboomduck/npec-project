@@ -130,7 +130,9 @@ export default function Inference() {
       <main className="inference-main">
         <div className="inference-container">
           {/* ── Main layout ─────────────────────────────────────────────── */}
-          <div className={`inference-layout ${result ? 'inference-layout--results' : ''}`}>
+          <div
+            className={`inference-layout ${result ? 'inference-layout--results' : ''}`}
+          >
             {/* ── Left sidebar (hidden when results are shown) ──────────── */}
             {!result && (
               <aside className="inference-sidebar">
@@ -209,7 +211,9 @@ export default function Inference() {
 
                 {/* Running Processes */}
                 <section className="sidebar-section">
-                  <span className="sidebar-section-label">RUNNING PROCESSES</span>
+                  <span className="sidebar-section-label">
+                    RUNNING PROCESSES
+                  </span>
                   {jobs.length === 0 ? (
                     <p className="running-empty">No active inferences.</p>
                   ) : (
@@ -217,10 +221,18 @@ export default function Inference() {
                       {jobs.map((job) => (
                         <li key={job.id} className="running-job">
                           <div className="running-job-info">
-                            <span className="running-job-name" title={job.filename}>
-                              {job.filename.length > 20 ? job.filename.slice(0, 18) + '…' : job.filename}
+                            <span
+                              className="running-job-name"
+                              title={job.filename}
+                            >
+                              {job.filename.length > 20
+                                ? job.filename.slice(0, 18) + '…'
+                                : job.filename}
                             </span>
-                            <span className="running-job-spinner" aria-hidden="true" />
+                            <span
+                              className="running-job-spinner"
+                              aria-hidden="true"
+                            />
                           </div>
                           <button
                             className="running-job-cancel"

@@ -21,9 +21,15 @@ type InferenceJobsContextType = {
   cancelJob: (id: string) => void;
 };
 
-const InferenceJobsContext = createContext<InferenceJobsContextType | null>(null);
+const InferenceJobsContext = createContext<InferenceJobsContextType | null>(
+  null,
+);
 
-export function InferenceJobsProvider({ children }: { children: React.ReactNode }) {
+export function InferenceJobsProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [jobs, setJobs] = useState<RunningJob[]>([]);
 
   function addJob(job: RunningJob) {
@@ -43,7 +49,9 @@ export function InferenceJobsProvider({ children }: { children: React.ReactNode 
   }
 
   return (
-    <InferenceJobsContext.Provider value={{ jobs, addJob, removeJob, cancelJob }}>
+    <InferenceJobsContext.Provider
+      value={{ jobs, addJob, removeJob, cancelJob }}
+    >
       {children}
     </InferenceJobsContext.Provider>
   );
@@ -51,6 +59,9 @@ export function InferenceJobsProvider({ children }: { children: React.ReactNode 
 
 export function useInferenceJobs(): InferenceJobsContextType {
   const ctx = useContext(InferenceJobsContext);
-  if (!ctx) throw new Error('useInferenceJobs must be used inside InferenceJobsProvider');
+  if (!ctx)
+    throw new Error(
+      'useInferenceJobs must be used inside InferenceJobsProvider',
+    );
   return ctx;
 }
