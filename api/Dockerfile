@@ -18,7 +18,10 @@ COPY requirements/api.txt requirements/api.txt
 
 RUN pip install --no-cache-dir -r requirements/api.txt
 
-RUN pip install --no-cache-dir --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ npec-cv
+COPY src/npec_cv/ ./npec_cv/
+RUN pip install ./npec_cv
+
+# RUN pip install --no-cache-dir --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ npec-cv
 
 # Download models using BuildKit secret
 # Download models — token passed as build arg
@@ -44,6 +47,7 @@ COPY --from=deps /usr/local/bin /usr/local/bin
 
 # Application source
 COPY api/ ./api/
+COPY src/npec_cv/ ./npec_cv/
 
 # Non-root user
 RUN adduser --disabled-password --gecos "" --uid 1001 appuser \

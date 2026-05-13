@@ -98,12 +98,20 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             warnings=list(row.warnings or []),
         )
 
-    async def _schema_to_orm(self, prediction: PredictionResponse, filename: str | None = None) -> Prediction:
+    async def _schema_to_orm(
+        self,
+        prediction: PredictionResponse,
+        filename: str | None = None,
+        input_uri: str | None = None,
+        tip_photo_uri: str | None = None,
+    ) -> Prediction:
         """Convert a `PredictionResponse` to a `Prediction` ORM row.
 
         Args:
             prediction: The schema object returned by the inference service.
             filename: Original uploaded filename, stored for display purposes.
+            input_uri: Local file URI of the saved input image.
+            tip_photo_uri: Local file URI of the saved tip visualization.
 
         Returns:
             An unsaved `Prediction` ORM instance ready to be added to the
@@ -125,6 +133,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             scale_factor_mm_per_px=meta.scale_factor_mm_per_px,
             processing_time_ms=meta.processing_time_ms,
             segmentation_mask_uri=prediction.segmentation_mask_url,
+            tip_photo_uri=tip_photo_uri,
             overall_confidence=prediction.overall_confidence,
             plants=[p.model_dump() for p in prediction.plants],
             warnings=prediction.warnings,
@@ -137,17 +146,26 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         self,
         prediction: PredictionResponse,
         filename: str | None = None,
+        input_uri: str | None = None,
+        tip_photo_uri: str | None = None,
     ) -> PredictionResponse:
         """Persist `prediction` to the `predictions` table.
 
         Args:
             prediction: The fully populated prediction to store.
             filename: Original uploaded filename for display.
+            input_uri: Local file URI of the saved input image.
+            tip_photo_uri: Local file URI of the saved tip visualization.
 
         Returns:
             The stored prediction (identical to input for this implementation).
         """
-        row = await self._schema_to_orm(prediction, filename)
+        row = await self._schema_to_orm(
+            prediction,
+            filename,
+            input_uri,
+            tip_photo_uri,
+        )
         self._db.add(row)
         await self._db.commit()
         await self._db.refresh(row)

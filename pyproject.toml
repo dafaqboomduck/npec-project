@@ -72,12 +72,5 @@ ignore = []
 "db/alembic/env.py" = ["E402"]
 "db/session.py" = ["E402"]
 
-[tool.ruff.lint.isort]
-known-first-party = ["npec_cv"]
-
-[tool.isort]
-profile = "black"
-known_first_party = ["npec_cv"]
-
 [tool.ruff.lint.pydocstyle]
 convention = "google"

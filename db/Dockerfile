@@ -25,9 +25,9 @@ WORKDIR /app
 # here — Alembic imports them to read Base.metadata, but nothing hits the
 # wider app.
 RUN pip install --no-cache-dir \
-        "sqlalchemy>=2.0" \
-        "alembic>=1.13" \
-        "psycopg[binary]>=3.1"
+    "sqlalchemy>=2.0" \
+    "alembic>=1.13" \
+    "psycopg[binary]>=3.1"
 
 # Copy only the db package. No backend, no frontend, no CV code.
 COPY db/ /app/db/

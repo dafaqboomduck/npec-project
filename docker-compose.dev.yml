@@ -67,6 +67,8 @@ services:
       USE_DB_STORAGE: ${USE_DB_STORAGE:-true}
     ports:
       - "8000:8000"
+    volumes:
+      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy

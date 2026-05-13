@@ -34,7 +34,7 @@ class MockInferenceService(AbstractInferenceService):
         image_bytes: bytes,
         filename: str,
         confidence_threshold: float,
-    ) -> PredictionResponse:
+    ) -> tuple[PredictionResponse, None]:
         """Return a mock prediction with two plants.
 
         Args:
@@ -76,13 +76,7 @@ class MockInferenceService(AbstractInferenceService):
 
         processing_ms = int((time.perf_counter() - start) * 1000)
 
-        logger.info(
-            "MockInferenceService: returning %d plant(s) for '%s'",
-            len(filtered_plants),
-            filename,
-        )
-
-        return PredictionResponse(
+        prediction = PredictionResponse(
             prediction_id=uuid.uuid4(),
             status=PredictionStatus.OK,
             metadata=PredictionMetadata(
@@ -99,3 +93,11 @@ class MockInferenceService(AbstractInferenceService):
             overall_confidence=round(overall_confidence, 4),
             warnings=["MOCK_INFERENCE"] if not filtered_plants else [],
         )
+
+        logger.info(
+            "MockInferenceService: returning %d plant(s) for '%s'",
+            len(filtered_plants),
+            filename,
+        )
+
+        return prediction, None

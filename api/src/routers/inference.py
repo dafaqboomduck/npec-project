@@ -38,6 +38,11 @@ from api.src.schemas.predictions import (
     ConfirmPredictionResponse,
     PredictionResponse,
 )
+from api.src.services.artifact_storage import (
+    save_input_image,
+    save_segmentation_mask,
+    save_tip_photo,
+)
 from api.src.services.base import AbstractInferenceService
 from api.src.services.image_validation import (
     validate_content_type,
@@ -116,11 +121,12 @@ async def predict(
     repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
 
     image_bytes = await file.read()
+    original_filename = file.filename or "upload"
 
     # Validation pipeline
     validate_file_size(image_bytes)
-    validate_content_type(file.content_type or "", file.filename or "")
-    validate_image(image_bytes, file.filename or "")
+    validate_content_type(file.content_type or "", original_filename)
+    validate_image(image_bytes, original_filename)
 
     logger.info(
         "Running inference on '%s' (%d bytes, threshold=%.2f)",
@@ -129,13 +135,48 @@ async def predict(
         confidence_threshold,
     )
 
-    prediction = await inference_service.run(
+    prediction, image_result = await inference_service.run(
         image_bytes=image_bytes,
-        filename=file.filename or "",
+        filename=original_filename,
         confidence_threshold=confidence_threshold,
     )
 
-    await repo.save(prediction)
+    prediction_id = prediction.prediction_id
+    logger.info("Inference complete for '%s' - prediction_id=%s user=%s", original_filename, prediction_id, user.sub)
+
+    input_uri: str | None = save_input_image(
+        prediction_id=prediction_id,
+        image_bytes=image_bytes,
+        original_filename=original_filename,
+    )
+
+    mask_uri: str | None = None
+    tip_photo_uri: str | None = None
+
+    if image_result is not None:
+        mask_uri = save_segmentation_mask(
+            prediction_id=prediction_id,
+            image_result=image_result,
+        )
+        tip_photo_uri = save_tip_photo(
+            prediction_id=prediction_id,
+            image_result=image_result,
+            original_image_bytes=image_bytes,
+        )
+
+    prediction = prediction.model_copy(
+        update={
+            "segmentation_mask_url": mask_uri,
+            "tip_photo_url": tip_photo_uri,
+        }
+    )
+
+    await repo.save(
+        prediction,
+        filename=original_filename,
+        input_uri=input_uri,
+        tip_photo_uri=tip_photo_uri,
+    )
 
     # Write monitoring metrics
     try:

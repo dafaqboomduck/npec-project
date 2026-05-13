@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Config
 
 # Directory where artifact models are stored
-DEFAULT_ARTIFACT_DIR = Path("src/npec_cv/artifacts/models")
+DEFAULT_ARTIFACT_DIR = Path("npec_cv/artifacts/models")
 ARTIFACT_DIR = Path(os.getenv("NPEC_ARTIFACT_DIR", str(DEFAULT_ARTIFACT_DIR)))
 
 # Directory where output masks are written
@@ -102,7 +102,7 @@ class UNetInferenceService(AbstractInferenceService):
         image_bytes: bytes,
         filename: str,
         confidence_threshold: float,
-    ) -> PredictionResponse:
+    ) -> tuple[PredictionResponse, object | None]:
         """Run U-Net inference on `image_bytes`.
 
         Writes the raw image to a temporary file, runs the pipeline, maps the
@@ -116,7 +116,7 @@ class UNetInferenceService(AbstractInferenceService):
                 results.
 
         Returns:
-            A fully populated `PredictionResponse`.
+            `(PredictionResponse, image_result)` on success.
 
         Raises:
             HTTPException: 422 if the pipeline raises a known inference error.
@@ -210,14 +210,7 @@ class UNetInferenceService(AbstractInferenceService):
             width, height = img.size
             channels = len(img.getbands())
 
-        logger.info(
-            "Inference complete for '%s': %d plant(s) detected in %dms",
-            filename,
-            len(plants),
-            processing_ms,
-        )
-
-        return PredictionResponse(
+        prediction = PredictionResponse(
             prediction_id=prediction_id,
             status=PredictionStatus.OK,
             input_filename=filename,
@@ -235,6 +228,15 @@ class UNetInferenceService(AbstractInferenceService):
             overall_confidence=overall_confidence,
             warnings=warnings,
         )
+
+        logger.info(
+            "Inference complete for '%s': %d plant(s) detected in %dms",
+            filename,
+            len(plants),
+            processing_ms,
+        )
+
+        return prediction, image_result
 
 
 # Mask saving helper
