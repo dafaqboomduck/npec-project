@@ -301,38 +301,31 @@ export default function Overview() {
                         >
                           <ActivityIconSvg type={item.event_type} />
                         </div>
-                        <div className="activity-content">
-                          <div className="activity-title-row">
-                            <span className="activity-title">{item.title}</span>
-                            <span className="activity-time">
-                              {relativeTime(item.timestamp)}
-                            </span>
+                        <p className="activity-description">
+                          {item.description}
+                        </p>
+                        {item.tags && item.tags.length > 0 && (
+                          <div className="activity-tags">
+                            {item.tags.map((t) => (
+                              <span className="activity-tag" key={t}>
+                                {t}
+                              </span>
+                            ))}
                           </div>
-                          <p className="activity-description">
-                            {item.description}
-                          </p>
-                          {item.tags && item.tags.length > 0 && (
-                            <div className="activity-tags">
-                              {item.tags.map((t) => (
-                                <span className="activity-tag" key={t}>
-                                  {t}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {item.resource_url && (
-                            <a
-                              className="activity-link"
-                              href={item.resource_url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              View files ↗
-                            </a>
-                          )}
-                        </div>
-                      </li>
-                    ))}
+                        )}
+                        {item.resource_url && (
+                          <a
+                            className="activity-link"
+                            href={item.resource_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View files ↗
+                          </a>
+                        )}
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               )}
 
