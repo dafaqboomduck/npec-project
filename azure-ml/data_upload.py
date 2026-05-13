@@ -67,7 +67,7 @@ tags = {
     "is_raw": "true",
     "num_images": num_images,  # <--- Dynamically set
     "num_masks": num_masks,  # <--- Dynamically set
-    "created_by": "<your_github_username>",
+    "created_by": "VinceNemeth242058",
     "created_date": datetime.today().strftime("%Y-%m-%d"),
     "git_commit": get_git_revision_short_hash(),
     "excluded_paths": "Kaggle/,*.txt",
