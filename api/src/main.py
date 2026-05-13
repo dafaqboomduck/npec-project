@@ -25,6 +25,7 @@ from api.src.routers import (
     auth,
     dashboard,
     feedback,
+    files,
     health,
     inference,
     library,
@@ -164,3 +165,4 @@ app.include_router(library.router, prefix=API_PREFIX)
 app.include_router(inference.router, prefix=API_PREFIX)
 app.include_router(feedback.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
+app.include_router(files.router, prefix=API_PREFIX)

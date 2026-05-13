@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.core.security import get_current_user, require_admin
 from api.src.db.session import get_session
+from api.src.dependencies import get_storage
 from api.src.repositories.annotations import AnnotationRepository
 from api.src.repositories.datasets import DatasetRepository
 from api.src.repositories.models import ModelRepository
@@ -47,6 +48,7 @@ from api.src.schemas.library import (
 )
 from api.src.services.deployment import StubDeploymentService
 from api.src.services.mask_storage import save_annotation_mask, validate_tiff_mask
+from api.src.services.storage import AbstractStorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +334,7 @@ async def confirm_annotation(
     annotation_id: UUID,
     mask: UploadFile = File(..., description="Corrected segmentation mask - .tiff, single-frame only."),
     user: Annotated[TokenData, Depends(get_current_user)] = None,
+    storage: AbstractStorageBackend = Depends(get_storage),
     db: AsyncSession = Depends(get_session),
 ) -> AnnotationResponse:
     """Upload a corrected .tiff mask and mark the annotation as annotated.
@@ -342,6 +345,7 @@ async def confirm_annotation(
         annotation_id: UUID of the annotation to confirm.
         mask: The corrected segmentation mask (.tiff, single-frame only).
         user: Authenticated user from Bearer token.
+        storage: Injected backend storage.
         db: Injected database session.
 
     Returns:
@@ -364,7 +368,21 @@ async def confirm_annotation(
             ).model_dump(),
         )
 
-    mask_url = save_annotation_mask(annotation_id, mask_bytes)
+    try:
+        mask_url = save_annotation_mask(
+            annotation_id,
+            mask_bytes,
+            backend=storage,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=ErrorResponse(
+                error_code=ErrorCode.INTERNAL_ERROR,
+                message=f"Failed to save annotation mask: {exc}",
+            ).model_dump(),
+        )
+
     updated = await AnnotationRepository(db).confirm(annotation_id, mask_url=mask_url)
     if updated is None:
         raise _404("Annotation not found.")

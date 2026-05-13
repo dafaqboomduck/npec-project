@@ -59,8 +59,7 @@ USER appuser
 # Runtime configuration
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    USE_MOCK_INFERENCE=false \
-    USE_DB_STORAGE=true
+    USE_MOCK_INFERENCE=false
 
 EXPOSE 8000
 

@@ -12,26 +12,16 @@ import os
 
 from api.src.services.base import AbstractInferenceService
 from api.src.services.mock_inference import MockInferenceService
+from api.src.services.storage import AbstractStorageBackend, get_storage_backend
 
 logger = logging.getLogger(__name__)
 
 # Feature flags
 
 _USE_MOCK: bool = os.getenv("USE_MOCK_INFERENCE", "true").lower() != "false"
-_USE_DB: bool = os.getenv("USE_DB_STORAGE", "false").lower() == "true"
-
-if _USE_MOCK:
-    logger.info("Inference: MockInferenceService active (USE_MOCK_INFERENCE=true)")
-else:
-    logger.info("Inference: UNetInferenceService active (USE_MOCK_INFERENCE=false)")
-
-if _USE_DB:
-    logger.info("Storage: DatabasePredictionRepository active (USE_DB_STORAGE=true)")
-else:
-    logger.info("Storage: InMemoryPredictionRepository active (USE_DB_STORAGE=false)")
-
 
 # Module-level singletons
+_storage_backend: AbstractStorageBackend = get_storage_backend()
 
 
 def get_inference_service() -> AbstractInferenceService:
@@ -49,3 +39,12 @@ def get_inference_service() -> AbstractInferenceService:
     from api.src.services.unet_inference import UNetInferenceService
 
     return UNetInferenceService()
+
+
+def get_storage() -> AbstractStorageBackend:
+    """Return the module-level storage backend singleton.
+
+    Returns:
+        The configured `AbstractStorageBackend`.
+    """
+    return _storage_backend

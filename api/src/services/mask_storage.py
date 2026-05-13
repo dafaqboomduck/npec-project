@@ -9,15 +9,13 @@ presigned HTTPS URL. The interface will not change.
 
 from __future__ import annotations
 
+import io
 import logging
-import os
-from pathlib import Path
 from uuid import UUID
 
-logger = logging.getLogger(__name__)
+from api.src.services.storage import AbstractStorageBackend
 
-DEFAULT_MASK_DIR = Path("/tmp/npec_annotation_mask")
-MASK_DIR = Path(os.getenv("NPEC_ANNOTATION_MASK_DIR", str(DEFAULT_MASK_DIR)))
+logger = logging.getLogger(__name__)
 
 
 def validate_tiff_mask(mask_bytes: bytes, filename: str) -> None:
@@ -30,8 +28,6 @@ def validate_tiff_mask(mask_bytes: bytes, filename: str) -> None:
     Raises:
         ValueError: If the file is not a valid single-frame TIFF.
     """
-    import io
-
     from PIL import Image, UnidentifiedImageError
 
     if not filename.lower().endswith((".tiff", ".tif")):
@@ -53,22 +49,29 @@ def validate_tiff_mask(mask_bytes: bytes, filename: str) -> None:
         pass  # Single frame - correct
 
 
-def save_annotation_mask(annotation_id: UUID, mask_bytes: bytes) -> str:
+def save_annotation_mask(
+    annotation_id: UUID,
+    mask_bytes: bytes,
+    backend: AbstractStorageBackend,
+) -> str:
     """Write a .tiff mask to disk and return a file URL.
 
     Args:
         annotation_id: UUID of the annotation - used as the filename.
         mask_bytes: Raw byts of the uplaoded .tiff mask.
+        backend: Storage backend to upload to.
 
     Returns:
-        A `file://` URL pointing to the saved mask.
+        URL of the uploaded mask.
 
-    Note:
-        Replace with Azure Blob Storage upload in a later sprint.
-        The return type will not change.
+    Raises:
+        Exception: On any upload failure.
     """
-    MASK_DIR.mkdir(parents=True, exist_ok=True)
-    mask_path = MASK_DIR / f"{annotation_id}_mask.tiff"
-    mask_path.write_bytes(mask_bytes)
-    logger.debug("Saved annotation mask to %s", mask_path)
-    return mask_path.as_uri()
+    object_name = f"annotation-masks/{annotation_id}_mask.tiff"
+    url = backend.upload(
+        object_name=object_name,
+        data=mask_bytes,
+        content_type="image/tiff",
+    )
+    logger.debug("Saved annotation mask: %s", object_name)
+    return url

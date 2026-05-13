@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.core.security import get_current_user
 from api.src.db.session import get_session
-from api.src.dependencies import get_inference_service
+from api.src.dependencies import get_inference_service, get_storage
 from api.src.repositories.database import DatabasePredictionRepository
 from api.src.schemas.auth import TokenData
 from api.src.schemas.common import ErrorCode, ErrorResponse, MessageResponse
@@ -50,6 +50,7 @@ from api.src.services.image_validation import (
     validate_image,
 )
 from api.src.services.monitoring import MonitoringService
+from api.src.services.storage import AbstractStorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ async def predict(
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
     inference_service: AbstractInferenceService = Depends(get_inference_service),
+    storage: AbstractStorageBackend = Depends(get_storage),
 ) -> PredictionResponse:
     """Accept a root scan image and run U-Net inference.
 
@@ -109,6 +111,7 @@ async def predict(
         user: The authenticated user extracted from the Bearer token.
         db: Injected database session.
         inference_service: Injected inference service.
+        storage: Injected storage backend.
 
     Returns:
         `PredictionResponse` with a `prediction_id` UUID that can be used for later retrieval.
@@ -144,12 +147,15 @@ async def predict(
     prediction_id = prediction.prediction_id
     logger.info("Inference complete for '%s' - prediction_id=%s user=%s", original_filename, prediction_id, user.sub)
 
+    # Save input image
     input_uri: str | None = save_input_image(
         prediction_id=prediction_id,
         image_bytes=image_bytes,
         original_filename=original_filename,
+        backend=storage,
     )
 
+    # Save mask and tip photo
     mask_uri: str | None = None
     tip_photo_uri: str | None = None
 
@@ -157,20 +163,19 @@ async def predict(
         mask_uri = save_segmentation_mask(
             prediction_id=prediction_id,
             image_result=image_result,
+            backend=storage,
         )
         tip_photo_uri = save_tip_photo(
             prediction_id=prediction_id,
             image_result=image_result,
             original_image_bytes=image_bytes,
+            backend=storage,
         )
 
-    prediction = prediction.model_copy(
-        update={
-            "segmentation_mask_url": mask_uri,
-            "tip_photo_url": tip_photo_uri,
-        }
-    )
+    # Patch prediction with URLs
+    prediction = prediction.model_copy(update={"segmentation_mask_url": mask_uri})
 
+    # Persist to repository
     await repo.save(
         prediction,
         filename=original_filename,

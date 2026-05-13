@@ -198,9 +198,6 @@ class UNetInferenceService(AbstractInferenceService):
         if image_result.num_detected < image_result.total_plants:
             warnings.append("PARTIAL_DETECTION")
 
-        # Save segmentation mask
-        mask_url: str | None = _save_mask(image_result, prediction_id)
-
         # Image metadata
         import io as _io
 
@@ -223,7 +220,7 @@ class UNetInferenceService(AbstractInferenceService):
                 normalisation_applied=True,
                 scale_factor_mm_per_px=SCALE_FACTOR_MM_PER_PX,
             ),
-            segmentation_mask_url=mask_url,
+            segmentation_mask_url=None,
             plants=plants,
             overall_confidence=overall_confidence,
             warnings=warnings,
@@ -237,47 +234,3 @@ class UNetInferenceService(AbstractInferenceService):
         )
 
         return prediction, image_result
-
-
-# Mask saving helper
-
-
-def _save_mask(image_result, prediction_id: uuid.UUID) -> str | None:
-    """Write the segmentation mask to disk and return a file URL.
-
-    Args:
-        image_result: The `ImageResult` from the pipeline.
-        prediction_id: UUID of the prediction.
-
-    Returns:
-        A file:// URL pointing to the saved mask, or `None` if no
-        mask was available.
-
-    Note:
-        In a later sprint this will upload to Azure Blob Storage and
-        return a presigned HTTPS URL instead.
-    """
-    try:
-        import numpy as np
-        from PIL import Image as _PIL
-
-        # Collect masks from all plant results
-        masks = [pr.mask for pr in image_result.plant_results.values() if pr.mask is not None]
-        if not masks:
-            return None
-
-        # Combine all plant masks into a single uint8 image
-        combined = np.zeros_like(masks[0], dtype=np.uint8)
-        for m in masks:
-            combined = np.maximum(combined, (m > 0).astype(np.uint8) * 255)
-
-        MASK_OUTPUT_DIR.mkdir(parents=True, exists_ok=True)
-        mask_path = MASK_OUTPUT_DIR / f"{prediction_id}_mask.png"
-        _PIL.fromarray(combined).save(mask_path)
-
-        logger.debug("Saved mask to %s", mask_path)
-        return mask_path.as_uri()
-
-    except Exception:
-        logger.warning("Failed to save mask for prediction %s", prediction_id, exc_info=True)
-        return None

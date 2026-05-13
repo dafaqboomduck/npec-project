@@ -64,6 +64,14 @@ class PredictionResponse(BaseModel):
         None,
         description="Presigned URL to the output mask PNG. None if inference failed.",
     )
+    input_url: str | None = Field(
+        None,
+        description="Presigned URL of the original input image.",
+    )
+    tip_photo_url: str | None = Field(
+        None,
+        description="Presigned URL of the tip visualisation overlay.",
+    )
     plants: list[Plant] = Field(default_factory=list)
     overall_confidence: float = Field(
         ...,

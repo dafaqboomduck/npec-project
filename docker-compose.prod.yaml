@@ -15,6 +15,22 @@ services:
       retries: 15
       start_period: 10s
 
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://minio:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   migrations:
     image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-migrations:latest
     environment:
@@ -30,7 +46,6 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SECRET_KEY: ${SECRET_KEY}
       USE_MOCK_INFERENCE: "false"
-      USE_DB_STORAGE: "true"
       CORS_ORIGINS: ${CORS_ORIGINS}
       NPEC_MASKS_DIR: /tmp/npec_masks
       NPEC_ANNOTATION_MASK_DIR: /tmp/npec_annotation_masks
@@ -40,6 +55,7 @@ services:
       - ./data:/app/data
     depends_on:
       - db
+      - minio
       - migrations
 
   frontend:
@@ -52,4 +68,4 @@ services:
 
 volumes:
   cv5_npec_pgdata:
-    name: cv5_npec_pgdata
+  minio_data:

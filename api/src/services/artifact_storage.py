@@ -5,53 +5,64 @@ Saves three artefacts per prediction to configurable local directories:
 2. Segmentation mask    - the combined binary mask output from the pipeline
 3. Tip photo            - the visualisation image with root tips annotated
 
-All three save operations are independent. A failure in one is caught,
-logged as WARNING, and does not block the others or the prediction response.
+
+Object name conventions
+-----------------------
+inputs/{prediction_id}_input.{ext}     - raw uploaded image
+masks/{prediction_id}_mask.png         - combined segmentation mask
+tips/{prediction_id}_tips.png          - tip visualisation overlay
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from uuid import UUID
 
+from api.src.services.storage import AbstractStorageBackend
+
 logger = logging.getLogger(__name__)
 
-# Configurable storage directories
 
-INPUT_STORAGE_PATH = Path(os.getenv("INPUT_STORAGE_PATH", "/app/data/inputs"))
-MASK_STORAGE_PATH = Path(os.getenv("MASK_STORAGE_PATH", "/app/data/masks"))
-TIP_PHOTO_STORAGE_PATH = Path(os.getenv("TIP_PHOTO_STORAGE_PATH", "/app/data/tips"))
+def _mime_from_ext(ext: str) -> str:
+    """Return a MIME type for a file extension."""
+    return {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".tiff": "image/tiff",
+        ".tif": "image/tiff",
+    }.get(ext.lower(), "application/octet-stream")
 
 
 def save_input_image(
     prediction_id: UUID,
     image_bytes: bytes,
     original_filename: str,
+    backend: AbstractStorageBackend,
 ) -> str | None:
-    """Save the raw uploaded image to `INPUT_STORAGE_PATH`.
-
-    The filename is `{prediction_id}_input.{ext}` so it is deterministic
-    and directly traceable to the prediction record.
+    """Upload the raw input image and return its URL.
 
     Args:
         prediction_id: UUID of the prediction - used as the filename stem.
         image_bytes: Raw bytes of the uploaded file.
         original_filename: Original filename from the upload, used to
             extract the file extension.
+        backend: Storage backend to upload to.
 
     Returns:
-        An absolute `file://` URI of the saved file, or `None` if saving
-        failed.
+        An URL string, or `None` on failure.
     """
     try:
-        INPUT_STORAGE_PATH.mkdir(parents=True, exist_ok=True)
         ext = Path(original_filename).suffix.lower() or ".png"
-        dest = INPUT_STORAGE_PATH / f"{prediction_id}_input{ext}"
-        dest.write_bytes(image_bytes)
-        logger.debug("Saved input image to %s", dest)
-        return dest.resolve().as_uri()
+        object_name = f"inputs/{prediction_id}_input{ext}"
+        url = backend.upload(
+            object_name=object_name,
+            data=image_bytes,
+            content_type=_mime_from_ext(ext),
+        )
+        logger.debug("Saved input image: %s", object_name)
+        return url
     except Exception as exc:
         logger.warning("Failed to save input image for prediction %s: %s", prediction_id, exc)
         return None
@@ -60,19 +71,22 @@ def save_input_image(
 def save_segmentation_mask(
     prediction_id: UUID,
     image_result,
+    backend: AbstractStorageBackend,
 ) -> str | None:
-    """Combine all plant masks and save to `MASK_STORAGE_PATH`.
+    """Combine all plant masks and upload the result.
 
     Args:
         prediction_id: UUID ofo the prediction - used as the filename stem.
         image_result: `ImageResult` from the `npec_cv` pipeline containing
             per-plant masks in `image_result.plant_results`.
+        backend: Storage backend to uploado to.
 
     Returns:
-        An absolute `file://` URI of the saved mask, or `None` if no
-        masks were available or saving field.
+        A URL string, or `None` if no masks were available or upload failed.
     """
     try:
+        import io
+
         import numpy as np
         from PIL import Image
 
@@ -88,11 +102,18 @@ def save_segmentation_mask(
         for m in masks:
             combined = np.maximum(combined, (m > 0).astype(np.uint8) * 255)
 
-        MASK_STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-        dest = MASK_STORAGE_PATH / f"{prediction_id}_mask.png"
-        Image.fromarray(combined).save(dest)
-        logger.debug("Saved segmentation mask to %s", dest)
-        return dest.resolve().as_uri()
+        buf = io.BytesIO()
+        Image.fromarray(combined).save(buf, format="PNG")
+        mask_bytes = buf.getvalue()
+
+        object_name = f"masks/{prediction_id}_mask.png"
+        url = backend.upload(
+            object_name=object_name,
+            data=mask_bytes,
+            content_type="image/png",
+        )
+        logger.debug("Saved segmentation mask %s", object_name)
+        return url
     except Exception as exc:
         logger.warning(
             "Failed to save segmentation mask for prediction %s: %s",
@@ -106,6 +127,7 @@ def save_tip_photo(
     prediction_id: UUID,
     image_result,
     original_image_bytes: bytes,
+    backend: AbstractStorageBackend,
 ) -> str | None:
     """Draw root tips on the original image and save to `TIP_PHOTO_STORAGE_PATH`.
 
@@ -116,10 +138,10 @@ def save_tip_photo(
         prediction_id: UUID of the prediction - used as the filename stem.
         image_result: `ImageResult` from the pipeline with detected tips.
         original_image_bytes: Raw bytes of the input image used as background.
+        backend: Storage backend to upload to.
 
     Returns:
-        An absolute `file://` URI of the saved tip photo, or `None` if
-        saving failed.
+        A URL string, or `None` on failure.
     """
     try:
         import io
@@ -137,11 +159,18 @@ def save_tip_photo(
             bbox = [col - radius, row - radius, col + radius, row + radius]
             draw.ellipse(bbox, outline="red", fill="red", width=2)
 
-        TIP_PHOTO_STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-        dest = TIP_PHOTO_STORAGE_PATH / f"{prediction_id}_tips.png"
-        img.save(dest)
-        logger.debug("Saved tip photo to %s", dest)
-        return dest.resolve().as_uri()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        tip_bytes = buf.getvalue()
+
+        object_name = f"tips/{prediction_id}_tips.png"
+        url = backend.upload(
+            object_name=object_name,
+            data=tip_bytes,
+            content_type="image/png",
+        )
+        logger.debug("Saved tip photo: %s", object_name)
+        return url
     except Exception as exc:
         logger.warning("Failed to save tip photo for prediction %s: %s", prediction_id, exc)
         return None
