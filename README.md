@@ -14,13 +14,11 @@ sphinx-build -b html docs/ docs/_build/html
 
 ## Installation Guide
 
-This repository now ships as two Python packages under src:
+This repository now ships as a Python package under src:
 - npec_cv: computer vision pipeline
-- npec_robotics: robotics pipeline (depends on npec_cv)
 
-Distribution names on PyPI/TestPyPI:
+Distribution names on TestPyPI:
 - npec_cv
-- npec_robotics
 
 Install npec-cv (default):
 
@@ -34,32 +32,19 @@ Install npec-cv with CUDA extras:
 pip install -e src/npec_cv[cuda]
 ```
 
-Install npec-robotics (after npec-cv is installed locally):
-
-```bash
-pip install -e src/npec_robotics
-```
-
 Install from package index after publishing:
 
 ```bash
 pip install npec_cv
-pip install npec_robotics
 ```
 
-## Build And Publish Two Different Wheels
+## Build And Publish Wheels
 
 Build npec_cv wheel:
 
 ```bash
 mkdir -p build dist
 TMPDIR=$PWD/build python -m build --outdir dist src/npec_cv
-```
-
-Build npec_robotics wheel:
-
-```bash
-TMPDIR=$PWD/build python -m build --outdir dist src/npec_robotics
 ```
 
 Upload each dist directory separately with twine (TestPyPI example):
