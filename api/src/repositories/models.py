@@ -72,6 +72,57 @@ class ModelRepository:
         """
         self._db = db
 
+    async def create(
+        self,
+        version: str,
+        name: str,
+        artifact_uri: str,
+        description: str | None = None,
+        f1_score: float | None = None,
+        precision: float | None = None,
+        recall: float | None = None,
+        inference_latency_ms: int | None = None,
+    ) -> ModelDetail:
+        """Register a new model version with status = 'registered'.
+
+        Args:
+            version: Unique version string, e.g. 'unet-npec-v1.2.0'.
+            name: Human-readable model name.
+            artifact_uri: Path to the .keras file on disk.
+            description: Optional description.
+            f1_score: Optional validation F1 score (0-1).
+            precision: Optional precision score (0-1).
+            recall: Optional recall score (0-1).
+            inference_latency_ms: Optional benchmark latency in milliseconds.
+
+        Returns:
+            The created ModelDetail with admin fields populated.
+
+        Raises:
+            ValueError: If a model with the same version string already exists.
+        """
+        # Check version uniqueness before attempting insert
+        existing = await self._db.execute(select(ModelVersion).where(ModelVersion.version == version))
+        if existing.scalar_one_or_none() is not None:
+            raise ValueError(f"Model version '{version}' already exists.")
+
+        row = ModelVersion(
+            version=version,
+            name=name,
+            artifact_uri=artifact_uri,
+            description=description,
+            status=ModelStatus.REGISTERED.value,
+            f1_score=f1_score,
+            precision=precision,
+            recall=recall,
+            inference_latency_ms=inference_latency_ms,
+        )
+        self._db.add(row)
+        await self._db.commit()
+        await self._db.refresh(row)
+        logger.info("Registered model version '%s' with id %s", version, row.id)
+        return _row_to_detail(row, include_admin_fields=True)
+
     async def list(self) -> list[ModelSummary]:
         """Return all model version summaries ordered by creation date.
 

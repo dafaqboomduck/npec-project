@@ -112,3 +112,20 @@ class ModelDetail(ModelSummary):
     # Admin-only fields - None for user-role tokens
     artifact_uri: str | None = None
     deployed_at: datetime | None = None
+
+
+class ModelCreate(BaseModel):
+    """Payload for POST /models (admin only).
+
+    artifact_uri must point to the .keras file that will be used
+    when this model is deployed via POST /models/{id}/deploy.
+    """
+
+    version: str
+    name: str
+    artifact_uri: str
+    description: str | None = None
+    f1_score: float | None = None
+    precision: float | None = None
+    recall: float | None = None
+    inference_latency_ms: int | None = None

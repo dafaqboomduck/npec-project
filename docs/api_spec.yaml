@@ -566,7 +566,50 @@ paths:
                   $ref: '#/components/schemas/ModelSummary'
         '401':
           $ref: '#/components/responses/Unauthorized'
- 
+    post:
+        tags: [Library]
+        summary: Register a new model version (admin only)
+        description: >
+          Registers a model artifact in the model registry with status 'registered'.
+          The model is not deployed after registration — use POST /models/{id}/deploy
+          to make it the active inference model.
+        operationId: registerModel
+        security:
+          - BearerAuth: []
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelCreate'
+              examples:
+                register_trained_model:
+                  summary: Register a locally trained model
+                  value:
+                    version: unet-npec-v1.3.0
+                    name: U-Net NPEC v1.3.0
+                    artifact_uri: /app/data/models/unet-npec-v1.3.0/model.keras
+                    f1_score: 0.923
+                    precision: 0.911
+                    recall: 0.936
+                    inference_latency_ms: 820
+        responses:
+          '201':
+            description: Model registered successfully
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ModelDetail'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/Forbidden'
+          '409':
+            description: A model with this version string already exists
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ErrorResponse'
   /models/{model_id}:
     get:
       tags: [Library]
@@ -1240,7 +1283,44 @@ components:
         created_at:
           type: string
           format: date-time
-
+    ModelCreate:
+      type: object
+      required: [version, name, artifact_uri]
+      properties:
+        version:
+          type: string
+          maxLength: 64
+          description: Unique version string, e.g. 'unet-npec-v1.2.0'
+          example: unet-npec-v1.3.0
+        name:
+          type: string
+          maxLength: 128
+          description: Human-readable model name
+        artifact_uri:
+          type: string
+          description: >
+            Path to the .keras file on the server's mounted volume.
+            Must be accessible at this path when POST /models/{id}/deploy is called.
+          example: /app/data/models/unet-npec-v1.3.0/model.keras
+        description:
+          type: string
+        f1_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        precision:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        recall:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        inference_latency_ms:
+          type: integer
     ModelDetail:
       allOf:
         - $ref: '#/components/schemas/ModelSummary'

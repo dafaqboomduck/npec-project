@@ -43,6 +43,7 @@ from api.src.schemas.library import (
     DatasetDetail,
     DatasetSummary,
     GrowthStage,
+    ModelCreate,
     ModelDetail,
     ModelSummary,
 )
@@ -415,6 +416,67 @@ async def list_models(
     """
     repo = ModelRepository(db)
     return await repo.list()
+
+
+@router.post(
+    "/models",
+    response_model=ModelDetail,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new model version (admin only)",
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        409: {
+            "model": ErrorResponse,
+            "description": "A model with this version string already exists.",
+        },
+    },
+)
+async def register_model(
+    data: ModelCreate,
+    user: Annotated[TokenData, Depends(require_admin)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> ModelDetail:
+    """Register a new model version with status = 'registered'.
+
+    The model is not deployed after registration - use
+    POST /models/{id}/deploy to make it active.
+
+    Args:
+        data: Registration payload with version, name, artifact_uri,
+            and optional metric fields.
+        user: Admin-role authenticated user.
+        db: Injected database session.
+
+    Returns:
+        The created ModelDetail with admin fields (artifact_uri, deployed_at).
+
+    Raises:
+        HTTPException: 403 for non-admin tokens.
+        HTTPException: 409 if a model with the same version already exists.
+    """
+    try:
+        model = await ModelRepository(db).create(
+            version=data.version,
+            name=data.name,
+            artifact_uri=data.artifact_uri,
+            description=data.description,
+            f1_score=data.f1_score,
+            precision=data.precision,
+            recall=data.recall,
+            inference_latency_ms=data.inference_latency_ms,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ErrorResponse(
+                error_code=ErrorCode.CONFLICT,
+                message=str(exc),
+            ).model_dump(),
+        )
+
+    logger.info("Admin %s registered model version '%s'", user.sub, data.version)
+    return model
 
 
 @router.get(
