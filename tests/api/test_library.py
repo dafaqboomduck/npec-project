@@ -100,7 +100,6 @@ def _make_prediction(prediction_id: uuid.UUID | None = None) -> PredictionRespon
             scale_factor_mm_per_px=0.05405,
         ),
         plants=[],
-        overall_confidence=0.0,
         warnings=[],
     )
 

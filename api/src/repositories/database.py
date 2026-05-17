@@ -96,7 +96,6 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             input_url=row.input_uri,
             tip_photo_url=getattr(row, "tip_photo_uri", None),
             plants=plants,
-            overall_confidence=row.overall_confidence or 0.0,
             warnings=list(row.warnings or []),
         )
 
@@ -137,7 +136,6 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             processing_time_ms=meta.processing_time_ms,
             segmentation_mask_uri=prediction.segmentation_mask_url,
             tip_photo_uri=tip_photo_uri,
-            overall_confidence=prediction.overall_confidence,
             plants=[p.model_dump() for p in prediction.plants],
             warnings=prediction.warnings,
             inference_timestamp=meta.inference_timestamp,

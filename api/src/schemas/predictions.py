@@ -32,7 +32,6 @@ class PredictionMetadata(BaseModel):
     model_version: str
     inference_timestamp: datetime
     processing_time_ms: int
-    input_resolution: int
     input_resolution: list[int] = Field(..., min_length=2, max_length=2)
     input_channels: int
     normalisation_applied: bool
@@ -45,7 +44,6 @@ class Plant(BaseModel):
     plant_id: int = Field(..., description="1-indexed, left-to-right across image")
     tip_x: int = Field(..., description="X coordinate of root tip in pixel space")
     tip_y: int = Field(..., description="Y coordinate of root tip in pixel space")
-    confidence: float = Field(..., ge=0.0, le=1.0)
     root_length_px: float
     root_length_mm: float
 
@@ -73,12 +71,6 @@ class PredictionResponse(BaseModel):
         description="Presigned URL of the tip visualisation overlay.",
     )
     plants: list[Plant] = Field(default_factory=list)
-    overall_confidence: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Mean of per-plant confidence scores. 0.0 if no plants detected.",
-    )
     warnings: list[str] = Field(default_factory=list)
 
 

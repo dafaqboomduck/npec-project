@@ -46,8 +46,7 @@ class InMemoryPredictionRepository(AbstractPredictionRepository):
                     scale_factor_mm_per_px=0,
                 ),
                 segmentation_mask_url=None,
-                plants=[Plant(plant_id=0, tip_x=0, tip_y=0, confidence=1, root_length_px=0, root_length_mm=0)],
-                overall_confidence=1,
+                plants=[Plant(plant_id=0, tip_x=0, tip_y=0, root_length_px=0, root_length_mm=0)],
                 warnings=[],
             )
         }

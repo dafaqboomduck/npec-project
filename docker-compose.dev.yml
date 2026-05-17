@@ -1,4 +1,4 @@
-# docker-compose.yml — local development stack for the CV5 database layer.
+# docker-compose.dev.yml — local development stack for the CV5 database layer.
 #
 # Services:
 #   db         Postgres 16 with persistent volume and healthcheck.

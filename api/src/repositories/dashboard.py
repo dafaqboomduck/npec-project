@@ -7,7 +7,6 @@ Tables read:
 
 Metric name conventions (must match what MonitoringService writes):
     `prediction_latency_ms`  - inference wall-clock time
-    `overall_confidence`     - per-prediction mean confidence
     `throughput_img_per_s`   - images processed per second (written by training pipeline)
     `f1_validation`          - per-epoch validation F1 (written by training pipeline)
     `drift_score`            - data drift score (written by drift detection job)

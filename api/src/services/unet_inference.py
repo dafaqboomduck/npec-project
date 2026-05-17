@@ -101,7 +101,6 @@ class UNetInferenceService(AbstractInferenceService):
         self,
         image_bytes: bytes,
         filename: str,
-        confidence_threshold: float,
     ) -> tuple[PredictionResponse, object | None]:
         """Run U-Net inference on `image_bytes`.
 
@@ -112,8 +111,6 @@ class UNetInferenceService(AbstractInferenceService):
         Args:
             image_bytes: Raw bytes of the uploaded image.
             filename: Original filename - used for the temp file.
-            confidence_threshold: Minimum per-plant confidence to include in
-                results.
 
         Returns:
             `(PredictionResponse, image_result)` on success.
@@ -146,7 +143,7 @@ class UNetInferenceService(AbstractInferenceService):
 
             image_result = await asyncio.to_thread(_run_pipeline)
         except RuntimeError as exc:
-            logger.error("Pipeline RuntimeError for '%s': $s", filename, exc)
+            logger.error("Pipeline RuntimeError for '%s': %s", filename, exc)
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=ErrorResponse(
@@ -173,9 +170,6 @@ class UNetInferenceService(AbstractInferenceService):
         for plant_id, pr in image_result.plant_results.items():
             if not pr.detected:
                 continue
-            confidence = float(pr.threshold_used) if pr.threshold_used is not None else 0.0
-            if confidence < confidence_threshold:
-                continue
 
             tip_x = int(pr.end_point[1]) if pr.end_point is not None else 0
             tip_y = int(pr.end_point[0]) if pr.end_point is not None else 0
@@ -186,13 +180,10 @@ class UNetInferenceService(AbstractInferenceService):
                     plant_id=int(plant_id),
                     tip_x=tip_x,
                     tip_y=tip_y,
-                    confidence=round(confidence, 4),
                     root_length_px=round(length_px, 2),
                     root_length_mm=round(length_px * SCALE_FACTOR_MM_PER_PX, 2),
                 )
             )
-
-        overall_confidence = round(sum(p.confidence for p in plants) / len(plants), 4) if plants else 0.0
 
         warnings: list[str] = []
         if image_result.num_detected < image_result.total_plants:
@@ -222,7 +213,6 @@ class UNetInferenceService(AbstractInferenceService):
             ),
             segmentation_mask_url=None,
             plants=plants,
-            overall_confidence=overall_confidence,
             warnings=warnings,
         )
 
@@ -234,3 +224,13 @@ class UNetInferenceService(AbstractInferenceService):
         )
 
         return prediction, image_result
+
+    async def reload(self) -> None:
+        """Signal the service to reload weights on the next request.
+
+        Sets _pipeline to None so the next call to _get_pipeline()
+        re-loads the .keras file from ARTIFACT_DIR.
+        Called by LocalDeploymentService after a new model is deployed.
+        """
+        self._pipeline = None
+        logger.info("UNetInferenceService: pipeline marked for reload on next request.")

@@ -19,7 +19,6 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
-    Form,
     HTTPException,
     Query,
     UploadFile,
@@ -82,18 +81,12 @@ def _404() -> HTTPException:
     summary="Submit a root scan image for inference",
     responses={
         413: {"model": ErrorResponse, "description": "File exceeds 50 MB limit"},
-        415: {"model": ErrorResponse, "description": "Unsupported file foormat"},
+        415: {"model": ErrorResponse, "description": "Unsupported file format"},
         422: {"model": ErrorResponse, "description": "Validation error (resolution, corrupt file, ...)"},
     },
 )
 async def predict(
     file: UploadFile = File(..., description="Root scan image (PNG, TIFF, JPEG). Max 50 MB."),
-    confidence_threshold: float = Form(
-        default=0.50,
-        ge=0.50,
-        le=0.99,
-        description="Minimum confidence for a detection to be included.",
-    ),
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
     inference_service: AbstractInferenceService = Depends(get_inference_service),
@@ -103,11 +96,10 @@ async def predict(
 
     Validates file sizie, MIME type, image integrity, and resolution before
     dispatching to the inference service. The result is persisted in the
-    rerpository and returned to the caller.
+    repository and returned to the caller.
 
     Args:
         file: The uploaded image file.
-        confidence_threshold: Predictions below this score are excluded from the results.
         user: The authenticated user extracted from the Bearer token.
         db: Injected database session.
         inference_service: Injected inference service.
@@ -135,13 +127,11 @@ async def predict(
         "Running inference on '%s' (%d bytes, threshold=%.2f)",
         file.filename,
         len(image_bytes),
-        confidence_threshold,
     )
 
     prediction, image_result = await inference_service.run(
         image_bytes=image_bytes,
         filename=original_filename,
-        confidence_threshold=confidence_threshold,
     )
 
     prediction_id = prediction.prediction_id
@@ -189,7 +179,6 @@ async def predict(
         await monitoring.record_prediction_metrics(
             prediction_id=prediction.prediction_id,
             processing_time_ms=prediction.metadata.processing_time_ms,
-            overall_confidence=prediction.overall_confidence,
         )
     except Exception as exc:
         logger.warning(

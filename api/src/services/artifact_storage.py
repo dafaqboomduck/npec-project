@@ -76,7 +76,7 @@ def save_segmentation_mask(
     """Combine all plant masks and upload the result.
 
     Args:
-        prediction_id: UUID ofo the prediction - used as the filename stem.
+        prediction_id: UUID of the prediction - used as the filename stem.
         image_result: `ImageResult` from the `npec_cv` pipeline containing
             per-plant masks in `image_result.plant_results`.
         backend: Storage backend to uploado to.

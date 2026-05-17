@@ -62,8 +62,8 @@ app = FastAPI(
     title="ROOTR API",
     description=(
         "REST API for the NPEC plant root segmentation service. "
-        "Accepts root scan images, runs U-Net interference, and returns "
-        "segmentation masks, tip locations, and confidence scores."
+        "Accepts root scan images, runs U-Net inference, and returns "
+        "segmentation masks, and tip locations"
     ),
     version=settings.api_version,
     docs_url="/docs",
@@ -90,7 +90,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     """Serialise HTTPException.detail directly as the response body.
 
     All routers raise `HTTPException(detail=ErrorResponse(...).model_dump())`.
-    This handler ensures taht dict is returned as-is rather than being nested
+    This handler ensures that dict is returned as-is rather than being nested
     under a `"detail"` key.
 
     Args:

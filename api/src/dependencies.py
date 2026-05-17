@@ -22,23 +22,31 @@ _USE_MOCK: bool = os.getenv("USE_MOCK_INFERENCE", "true").lower() != "false"
 
 # Module-level singletons
 _storage_backend: AbstractStorageBackend = get_storage_backend()
+_inference_service: AbstractInferenceService | None = None
 
 
 def get_inference_service() -> AbstractInferenceService:
     """Yield the active inference service.
 
-    Controlled by the ``USE_MOCK_INFERENCE`` environment variable.
+    On the first call, the singleton is created. Controlled by
+    the ``USE_MOCK_INFERENCE`` environment variable.
 
     Returns:
         The currently configured `AbstractInferenceService`.
     """
-    if _USE_MOCK:
-        return MockInferenceService()
+    global _inference_service
 
-    # Deferred import keeps TensorFlow out of the import chain when mocking.
-    from api.src.services.unet_inference import UNetInferenceService
+    if _inference_service is None:
+        if _USE_MOCK:
+            _inference_service = MockInferenceService()
+            logger.info("Inference service: MockInferenceService")
+        else:
+            from api.src.services.unet_inference import UNetInferenceService
 
-    return UNetInferenceService()
+            _inference_service = UNetInferenceService()
+            logger.info("Inference service: UNetInferenceService")
+
+    return _inference_service
 
 
 def get_storage() -> AbstractStorageBackend:

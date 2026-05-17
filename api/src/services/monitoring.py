@@ -49,13 +49,11 @@ class MonitoringService:
         self,
         prediction_id: uuid.UUID,
         processing_time_ms: int,
-        overall_confidence: float,
     ) -> None:
-        """Write latency and confidence metrics for a completed prediction.
+        """Write metrics for a completed prediction.
 
         Inserts two rows into `monitoring_metrics`:
         - `prediction_latency_ms`   - wall-clock inference time in milliseconds
-        - `overall_confidence`      - mean per-plant confidence score (0-1)
 
         Both rows carry `{"endpoint": "/predict", "prediction_id": "<uuid>"}`
         labels so they can be filtered per-prediction in the dashboard.
@@ -63,7 +61,6 @@ class MonitoringService:
         Args:
             prediction_id: UUID of the prediction.
             processing_time_ms: Inference time in milliseconds.
-            overall_confidence: Mean per-plant confidence score (0.0-1.0).
         """
         model_version_id = await self._get_deployed_model_version_id()
         now = datetime.now(timezone.utc)
@@ -77,13 +74,6 @@ class MonitoringService:
                 labels=labels,
                 recorded_at=now,
             ),
-            MonitoringMetric(
-                metric_name="overall_confidence",
-                metric_value=overall_confidence,
-                model_version_id=model_version_id,
-                labels=labels,
-                recorded_at=now,
-            ),
         ]
 
         for row in rows:
@@ -91,8 +81,7 @@ class MonitoringService:
 
         await self._db.commit()
         logger.debug(
-            "Recorded metrics for prediction %s - latency=%dms confidence=%.4f",
+            "Recorded metrics for prediction %s - latency=%dms",
             prediction_id,
             processing_time_ms,
-            overall_confidence,
         )

@@ -202,7 +202,6 @@ def upgrade() -> None:
         sa.Column("scale_factor_mm_per_px", sa.Float(), nullable=True),
         sa.Column("processing_time_ms", sa.Integer(), nullable=True),
         sa.Column("segmentation_mask_uri", sa.Text(), nullable=True),
-        sa.Column("overall_confidence", sa.Float(), nullable=True),
         sa.Column(
             "plants",
             postgresql.JSONB(),
@@ -242,14 +241,15 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         ),
         sa.CheckConstraint("status IN ('ok', 'error')", name="ck_predictions_status_valid"),
-        sa.CheckConstraint(
-            "overall_confidence IS NULL OR (overall_confidence BETWEEN 0 AND 1)",
-            name="ck_predictions_confidence_range",
-        ),
     )
     op.create_index("ix_predictions_user_id", "predictions", ["user_id"])
     op.create_index("ix_predictions_model_version_id", "predictions", ["model_version_id"])
     op.create_index("ix_predictions_user_created", "predictions", ["user_id", "created_at"])
+
+    op.add_column(
+        "predictions",
+        sa.Column("tip_photo_uri", sa.Text(), nullable=True),
+    )
 
     # -----------------------------------------------------------------------
     # feedback

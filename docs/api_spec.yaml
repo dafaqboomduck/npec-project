@@ -4,7 +4,7 @@ info:
   title: CV5 - OpenAPI 3.1
   version: 0.1.0
   description: |-
-    REST API for the NPEC plant root segmentation service. Accepts root scan images, runs U-Net inference, and returns segmentation masks, tip locations, and confidence scores. Also exposes endpoints for dataset management, annotation review, model info, training, and monitoring.
+    REST API for the NPEC plant root segmentation service. Accepts root scan images, runs U-Net inference, and returns segmentation masks, and tip locations. Also exposes endpoints for dataset management, annotation review, model info, training, and monitoring.
 
     Some useful links:
     - [CV5 repository](https://github.com/BredaUniversityADSAI/2025-26d-fai2-adsai-group-computervision5)
@@ -673,9 +673,7 @@ paths:
               $ref: '#/components/schemas/PredictionRequest'
             examples:
               tiff_upload:
-                summary: Upload a TIFF scan with custom confidence threshold
-                value:
-                  confidence_threshold: 0.75
+                summary: Upload a TIFF scan
       responses:
         '200':
           description: Inference result
@@ -685,7 +683,7 @@ paths:
                 $ref: '#/components/schemas/PredictionResponse'
               examples:
                 successful_prediction:
-                  summary: Two plants detected with high confidence
+                  summary: Two plants detected
                   value:
                     prediction_id: a3f1c2d4-9e8b-4f2a-b1c3-d4e5f6a7b8c9
                     status: ok
@@ -702,16 +700,13 @@ paths:
                       - plant_id: 1
                         tip_x: 412
                         tip_y: 1803
-                        confidence: 0.94
                         root_length_px: 1643.2
                         root_length_mm: 88.7
                       - plant_id: 2
                         tip_x: 967
                         tip_y: 1765
-                        confidence: 0.87
                         root_length_px: 1501.4
                         root_length_mm: 81.1
-                    overall_confidence: 0.91
                     warnings: []
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -1278,13 +1273,6 @@ components:
             Root scan image. Accepted formats: .png, .tiff, .tif, .jpg, .jpeg.
             Max size: 50MB. Resolution: 512x512 to 5000x5000 px.
             Single-frame TIFF only.
-          confidence_threshold:
-            type: number
-            format: float
-            minimum: 0.50
-            maximum: 0.99
-            default: 0.50
-            description: Minimum confidence for a detection to be accepted
 
     PredictionMetadata:
       type: object
@@ -1320,7 +1308,7 @@ components:
  
     Plant:
       type: object
-      required: [plant_id, tip_x, tip_y, confidence, root_length_px, root_length_mm]
+      required: [plant_id, tip_x, tip_y, root_length_px, root_length_mm]
       properties:
         plant_id:
           type: integer
@@ -1331,11 +1319,6 @@ components:
         tip_y:
           type: integer
           description: Y coordinate of root tip in input image pixel space
-        confidence:
-          type: number
-          format: float
-          minimum: 0.0
-          maximum: 1.0
         root_length_px:
           type: number
           format: float
@@ -1350,7 +1333,6 @@ components:
         - status
         - metadata
         - plants
-        - overall_confidence
         - warnings
       properties:
         prediction_id:
@@ -1369,12 +1351,6 @@ components:
           items:
             $ref: '#/components/schemas/Plant'
           description: Empty array if no plants detected
-        overall_confidence:
-          type: number
-          format: float
-          minimum: 0.0
-          maximum: 1.0
-          description: Mean of per-plant confidence scores. 0.0 if no plants detected.
         warnings:
           type: array
           items:

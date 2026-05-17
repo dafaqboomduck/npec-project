@@ -31,7 +31,6 @@ def _upload(
     return client.post(
         "/api/v1/predict",
         files={"file": (filename, image_bytes, content_type)},
-        data={"confidence_threshold": str(threshold)},
     )
 
 
@@ -67,7 +66,6 @@ def test_predict_response_has_required_fields(client: TestClient, valid_png_512:
     assert "status" in data
     assert "metadata" in data
     assert "plants" in data
-    assert "overall_confidence" in data
     assert "warnings" in data
 
 
@@ -80,12 +78,6 @@ def test_predict_returns_unique_ids(client: TestClient, valid_png_512: bytes) ->
     id1 = _upload(client, valid_png_512).json()["prediction_id"]
     id2 = _upload(client, valid_png_512).json()["prediction_id"]
     assert id1 != id2
-
-
-def test_predict_confidence_threshold_filters_plants(client: TestClient, valid_png_512: bytes) -> None:
-    """A threshold of 0.95 should exclude the second mock plant (confidence=0.87)."""
-    data = _upload(client, valid_png_512, threshold=0.95).json()
-    assert all(p["confidence"] >= 0.95 for p in data["plants"])
 
 
 def test_predict_accepts_tiff(client: TestClient) -> None:
@@ -160,7 +152,6 @@ def test_predict_still_returns_200_when_monitoring_fails(client: TestClient, val
         response = client.post(
             "/api/v1/predict",
             files={"file": ("scan.png", valid_png_512, "image/png")},
-            data={"confidence_threshold": "0.5"},
         )
     assert response.status_code == 200
 
@@ -175,7 +166,6 @@ def test_predict_calls_monitoring_on_success(client: TestClient, valid_png_512: 
         client.post(
             "/api/v1/predict",
             files={"file": ("scan.png", valid_png_512, "image/png")},
-            data={"confidence_threshold": "0.5"},
         )
     record_mock.assert_called_once()
 

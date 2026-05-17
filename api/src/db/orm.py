@@ -217,7 +217,6 @@ class Prediction(Base):
     # Output
     segmentation_mask_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tip_photo_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    overall_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     plants: Mapped[list[dict[str, Any]]] = mapped_column(JSONB_or_JSON, nullable=False, server_default="[]")
     warnings: Mapped[list[str]] = mapped_column(JSONB_or_JSON, nullable=False, server_default="[]")
 
@@ -235,10 +234,6 @@ class Prediction(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('ok', 'error')", name="status_valid"),
-        CheckConstraint(
-            "overall_confidence IS NULL OR (overall_confidence BETWEEN 0 AND 1)",
-            name="confidence_range",
-        ),
         Index("ix_predictions_user_id", "user_id"),
         Index("ix_predictions_model_version_id", "model_version_id"),
         Index("ix_predictions_user_created", "user_id", "created_at"),
