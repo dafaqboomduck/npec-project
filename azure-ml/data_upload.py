@@ -1,3 +1,4 @@
+import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -6,13 +7,17 @@ from azure.ai.ml import MLClient
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Data
 from azure.identity import InteractiveBrowserCredential
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # --- 1. Helper Functions ---
 
-# Set your Azure ML workspace details
-subscription_id = "0a94de80-6d3b-49f2-b3e9-ec5818862801"
-resource_group = "buas-y2"
-workspace = "team-CV5-2026"
+# Set your Azure ML workspace details from environment variables
+subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID")
+resource_group = os.getenv("AZURE_RESOURCE_GROUP")
+workspace = os.getenv("AZURE_ML_WORKSPACE")
 
 
 def get_git_revision_short_hash() -> str:
