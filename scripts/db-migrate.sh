@@ -1,45 +1,41 @@
 #!/usr/bin/env bash
-# scripts/db-migrate.sh — thin wrapper around alembic that auto-loads .env.
+# scripts/db-migrate.sh — thin wrapper around alembic.
 #
-# Usage (from the repo root):
+# Why this exists:
+#   The DATABASE_URL lives in .env, but `alembic` doesn't auto-load .env files.
+#   Without this wrapper, every team member has to remember to `source .env`
+#   (or `export $(grep -v '^#' .env | xargs)`) before running alembic, which
+#   nobody does, and then they get a confusing "DATABASE_URL is not set" error.
+#
+# Usage:
 #   ./scripts/db-migrate.sh upgrade head
-#   ./scripts/db-migrate.sh revision --autogenerate -m "add foo column"
-#   ./scripts/db-migrate.sh downgrade -1
 #   ./scripts/db-migrate.sh current
 #   ./scripts/db-migrate.sh history
+#   ./scripts/db-migrate.sh revision --autogenerate -m "add foo"
 #
-# All arguments are passed through to `alembic` unchanged. The script's only
-# job is to load .env (if present) and point alembic at db/alembic.ini.
-#
-# If DATABASE_URL is already exported in your shell, it takes precedence over
-# what's in .env — that's standard env-var behaviour and keeps CI from being
-# accidentally overridden by a stale .env file.
+# All arguments are passed through to alembic verbatim.
 
 set -euo pipefail
 
-# Resolve the repo root relative to this script so the wrapper works regardless
-# of where it's invoked from.
+# Resolve repo root from this script's location so the wrapper works no matter
+# where you invoke it from.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 cd "${REPO_ROOT}"
 
-# Load .env if it exists. `set -a` makes every assignment an automatic export.
-# We use `set +a` to turn that back off afterwards so we don't pollute the
-# rest of the script's environment.
+# Load .env if present. We only export entries that look like VAR=value so
+# stray comments or blank lines don't blow up the shell.
 if [[ -f .env ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source .env
-    set +a
+    # shellcheck disable=SC2046
+    export $(grep -E '^[A-Z_][A-Z0-9_]*=' .env | xargs -0 -d '\n' 2>/dev/null || grep -E '^[A-Z_][A-Z0-9_]*=' .env)
 fi
 
-# Fail fast with a clear message if DATABASE_URL still isn't set. Alembic
-# would also fail, but its error is less helpful than ours.
 if [[ -z "${DATABASE_URL:-}" ]]; then
-    echo "ERROR: DATABASE_URL is not set." >&2
-    echo "       Either export it in your shell, or copy .env.example to .env" >&2
-    echo "       and fill it in. See db/session.py for the URL format." >&2
+    echo "error: DATABASE_URL is not set." >&2
+    echo "       Copy .env.example to .env and fill it in, or export the var manually." >&2
     exit 1
 fi
 
+# Hand off to alembic with the db/ config and whatever args the caller gave us.
 exec alembic -c db/alembic.ini "$@"

@@ -16,18 +16,20 @@ etc.) change the env var, not this file. See ``.env.example`` and
 
 from __future__ import annotations
 
-from dotenv import load_dotenv
-
-load_dotenv()
 import os
 from typing import AsyncGenerator
 
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+
+# Load .env once at import time. Safe in containers too: if no .env file is
+# present, load_dotenv() is a silent no-op and we fall back to real env vars.
+load_dotenv()
 
 
 def _get_database_url() -> str:

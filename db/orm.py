@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models for the CV5 database.
 
-Matches ``docs/database/schema.md`` v0.2. Eight tables:
+Matches ``docs/database/schema.md`` v0.4. Nine tables:
 
 - users
 - refresh_tokens
@@ -10,6 +10,7 @@ Matches ``docs/database/schema.md`` v0.2. Eight tables:
 - monitoring_metrics
 - datasets
 - annotations
+- training_runs
 
 Any change to these models must be matched by an update to the schema doc
 and a new Alembic migration (never hand-edit an old migration).
@@ -322,13 +323,23 @@ class Dataset(Base):
 
 
 class Annotation(Base):
-    """Human-reviewed segmentation mask for a single scan. Matches schema §2.8."""
+    """Human-reviewed segmentation mask for a single scan. Matches schema §2.8.
+
+    Annotations come from two sources:
+
+    - **Prediction-derived**: created by correcting a model output. In this
+      case ``prediction_id`` points at the source prediction (and the input
+      image URI can be looked up via that prediction).
+    - **Upload-created**: created by uploading a mask directly, with no
+      backing prediction. In this case ``prediction_id`` is NULL and
+      ``image_uri`` carries the reference to the annotated image.
+    """
 
     __tablename__ = "annotations"
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    # prediction_id references the prediction that produced the raw output being annotated.
-    prediction_id: Mapped[uuid.UUID] = mapped_column(
+    # NULLable: upload-created annotations have no source prediction.
+    prediction_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("predictions.id", ondelete="CASCADE"),
         nullable=True,
@@ -339,8 +350,11 @@ class Annotation(Base):
         nullable=True,
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="'pending'")
-    image_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     mask_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Reference to the annotated input image. Required (in practice) for
+    # upload-created annotations; prediction-derived annotations can leave
+    # this NULL and look the image up via prediction_id.
+    image_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     species: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     age_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     treatment: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)

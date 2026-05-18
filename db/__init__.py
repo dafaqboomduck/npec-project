@@ -9,20 +9,26 @@ instead of reaching into submodules.
 
 from .base import Base
 from .orm import (
+    Annotation,
+    Dataset,
     Feedback,
     ModelVersion,
     MonitoringMetric,
     Prediction,
     RefreshToken,
+    TrainingRun,
     User,
 )
 
 __all__ = [
+    "Annotation",
     "Base",
+    "Dataset",
     "Feedback",
     "ModelVersion",
     "MonitoringMetric",
     "Prediction",
     "RefreshToken",
+    "TrainingRun",
     "User",
 ]

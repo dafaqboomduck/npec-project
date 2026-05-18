@@ -1,6 +1,6 @@
 # Database Schema
 
-**Version:** 0.2 (Sprint 2)
+**Version:** 0.4 (Sprint 2)
 **Status:** Draft
 **Related docs:** `docs/api_endpoints.md` · `docs/auth_schema.md` · `docs/IO_specifications.md`
 
@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-This document is the authoritative schema for the CV5 PostgreSQL database for Sprint 2. It covers the six tables needed to back the API at this stage:
+This document is the authoritative schema for the CV5 PostgreSQL database for Sprint 2. It covers the nine tables needed to back the API at this stage:
 
 - `users` — authenticated accounts
 - `refresh_tokens` — server-side rotating refresh tokens (required by `auth_schema.md` §2.2)
@@ -16,8 +16,11 @@ This document is the authoritative schema for the CV5 PostgreSQL database for Sp
 - `predictions` — one row per `POST /predict` inference result
 - `feedback` — user thumbs-up/down on predictions
 - `monitoring_metrics` — time-series metrics for drift detection and dashboards
+- `datasets` — named collections of root-scan images
+- `annotations` — human-reviewed segmentation masks (prediction-derived or upload-created)
+- `training_runs` — one row per training job, with hyperparameters and outcome
 
-Tables for experiments, plates, scans, datasets, and annotations are mentioned in the API spec but are **deferred to a later sprint**. They are not created by this migration.
+Tables for experiments, plates, and scans are mentioned in the API spec but are **deferred to a later sprint**. They are not created by these migrations.
 
 ### Conventions
 
@@ -114,7 +117,7 @@ One row per `POST /predict` call. Matches the `PredictionResponse` envelope in `
 | `scale_factor_mm_per_px`  | `FLOAT`        | NULL                                                         | |
 | `processing_time_ms`      | `INTEGER`      | NULL                                                         | |
 | `segmentation_mask_uri`   | `TEXT`         | NULL                                                         | Presigned URL or local path |
-| `overall_confidence`      | `FLOAT`        | NULL, CHECK `overall_confidence BETWEEN 0 AND 1`             | |
+| `tip_photo_uri`           | `TEXT`         | NULL                                                         | Optional rendered overlay showing detected tip positions on the input image |
 | `plants`                  | `JSONB`        | NOT NULL, default `'[]'::jsonb`                              | Array of `{plant_id, tip_x, tip_y, confidence, root_length_px, root_length_mm}` — see §2.4.1 |
 | `warnings`                | `JSONB`        | NOT NULL, default `'[]'::jsonb`                              | Array of warning code strings |
 | `confirmed_at`            | `TIMESTAMPTZ`  | NULL                                                         | Set by `POST /predictions/{id}/confirm` |
@@ -173,6 +176,79 @@ Time-series store for dashboard KPIs, drift detection, and operational metrics. 
 
 ---
 
+### 2.7 `datasets`
+
+Named collections of root-scan images. Backs `GET /datasets` and `GET /datasets/{id}`.
+
+| Column          | Type           | Constraints                                                        | Notes |
+|-----------------|----------------|--------------------------------------------------------------------|-------|
+| `id`            | `UUID`         | PK, default `gen_random_uuid()`                                    | |
+| `name`          | `VARCHAR(128)` | NOT NULL                                                           | Human-readable label |
+| `description`   | `TEXT`         | NULL                                                               | |
+| `species`       | `VARCHAR(128)` | NULL                                                               | Filter target for `GET /datasets?species=` |
+| `growth_stage`  | `VARCHAR(32)`  | NULL, CHECK `growth_stage IS NULL OR growth_stage IN ('seedling','mature')` | Filter target for `GET /datasets?growth_stage=` |
+| `count`         | `INTEGER`      | NOT NULL, default `0`                                              | Denormalised — number of annotations in the dataset. Updated by the application layer |
+| `created_at`    | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`                                          | |
+| `modified_at`   | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`                                          | Updated when contents change |
+
+**Indexes:** `species` (for the species filter).
+
+#### 2.7.1 Why `count` is denormalised
+
+`GET /datasets` returns dataset summaries with a count of items. A live `SELECT COUNT(*)` per row in the list response is fine at our scale but adds an N+1 join. Storing the count and updating it on annotation insert/delete is cheap and removes the join. If consistency drifts (e.g. a crash between annotation insert and count increment), a periodic reconciliation job can resync.
+
+---
+
+### 2.8 `annotations`
+
+Human-reviewed segmentation masks. Annotations come from two sources:
+
+- **Prediction-derived** — created by correcting a model output via `POST /annotations/{id}/confirm`. `prediction_id` references the source prediction; the annotated input image is reachable through that prediction.
+- **Upload-created** — created by uploading a mask and its input image directly, with no backing prediction. `prediction_id` is NULL and `image_uri` carries the reference to the annotated image.
+
+| Column          | Type           | Constraints                                                                                  | Notes |
+|-----------------|----------------|----------------------------------------------------------------------------------------------|-------|
+| `id`            | `UUID`         | PK, default `gen_random_uuid()`                                                              | |
+| `prediction_id` | `UUID`         | FK → `predictions.id` ON DELETE CASCADE, NULL                                                | NULL for upload-created annotations — see introduction above |
+| `dataset_id`    | `UUID`         | FK → `datasets.id` ON DELETE SET NULL, NULL                                                  | Optional — an annotation may not be in a dataset yet |
+| `status`        | `VARCHAR(32)`  | NOT NULL, default `'pending'`, CHECK `status IN ('pending','annotated','review_required')`   | From `AnnotationResponse.status` |
+| `mask_uri`      | `TEXT`         | NULL                                                                                         | Presigned URL or local path to the `.tiff` mask |
+| `image_uri`     | `TEXT`         | NULL                                                                                         | URI of the annotated input image. Required in practice for upload-created annotations; prediction-derived annotations leave this NULL and resolve the image via `prediction_id` |
+| `species`       | `VARCHAR(128)` | NULL                                                                                         | |
+| `age_days`      | `INTEGER`      | NULL                                                                                         | |
+| `treatment`     | `VARCHAR(128)` | NULL                                                                                         | |
+| `growth_stage`  | `VARCHAR(32)`  | NULL, CHECK `growth_stage IS NULL OR growth_stage IN ('seedling','mature')`                  | |
+| `created_at`    | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`                                                                    | |
+| `updated_at`    | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`                                                                    | |
+
+**Indexes:** `prediction_id`, `dataset_id`, `status`.
+
+#### 2.8.1 Why no XOR constraint between `prediction_id` and `image_uri`
+
+A CHECK enforcing "exactly one of `prediction_id` or `image_uri` is set" would be semantically tighter, but it would also reject legitimate intermediate states (e.g. an upload row inserted before its image_uri is populated). For Sprint 2 we leave the constraint out and let the application layer enforce the invariant; we can add it later if the ambiguity causes real bugs.
+
+---
+
+### 2.9 `training_runs`
+
+One row per training job. Backs `GET /training/runs` and `GET /training/runs/{id}`.
+
+| Column              | Type           | Constraints                                                                            | Notes |
+|---------------------|----------------|----------------------------------------------------------------------------------------|-------|
+| `id`                | `UUID`         | PK, default `gen_random_uuid()`                                                        | |
+| `status`            | `VARCHAR(16)`  | NOT NULL, CHECK `status IN ('running','completed','failed','stopped')`                 | From `TrainingRunSummary.status` |
+| `started_at`        | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`                                                              | |
+| `completed_at`      | `TIMESTAMPTZ`  | NULL                                                                                   | Set when status leaves `running` |
+| `hyperparameters`   | `JSONB`        | NULL                                                                                   | Whatever subset of `TrainingStartRequest` was passed |
+| `final_f1`          | `FLOAT`        | NULL                                                                                   | Populated on `completed` |
+| `model_version_id`  | `UUID`         | FK → `model_versions.id` ON DELETE SET NULL, NULL                                      | The model registered from this run, once registration happens |
+
+**Indexes:** `status`, `model_version_id`, `started_at`.
+
+**Lifecycle:** rows are inserted with `status='running'` when a job starts. The training subprocess updates `status` to `completed` (with `final_f1` and `model_version_id` populated) or `failed` on exit. `DELETE /training/runs/{id}` sets status to `stopped` — it does not delete the row, so the audit trail is preserved.
+
+---
+
 ## 3. Relationships (ER summary)
 
 ```
@@ -181,16 +257,21 @@ users ──1:N──> predictions
 users ──1:N──> feedback
 
 model_versions ──1:N──> predictions
-model_versions ──1:N──> monitoring_metrics (nullable)
+model_versions ──1:N──> monitoring_metrics  (nullable FK)
+model_versions ──1:N──> training_runs       (nullable FK)
 
 predictions ──1:N──> feedback
+predictions ──1:N──> annotations            (nullable FK — upload-created annotations have no prediction)
+
+datasets ──1:N──> annotations               (nullable FK — annotation may not yet belong to a dataset)
 ```
 
-No circular dependencies. Cascade rules:
+### 3.1 Cascade rules
 
 - Deleting a user cascades to their `refresh_tokens` (auth cleanup) but **restricts** if they have predictions or feedback (we want audit trail — deactivate via `is_active` instead).
-- Deleting a prediction cascades to its feedback.
-- Deleting a model version is restricted if predictions reference it (archive instead).
+- Deleting a prediction cascades to its feedback and to any prediction-derived annotations.
+- Deleting a model version is restricted if predictions reference it (archive instead). For `monitoring_metrics` and `training_runs` the FK is `SET NULL` — metrics and runs survive their model.
+- Deleting a dataset sets `dataset_id = NULL` on its annotations (annotations outlive their dataset assignment).
 
 ---
 
@@ -199,9 +280,13 @@ No circular dependencies. Cascade rules:
 **Decided:**
 - ✅ **Feedback uniqueness:** multiple feedback rows per `(user_id, prediction_id)` are allowed. Users can update their opinion; each submission is a new row. See §2.5.
 - ✅ **Monitoring retention:** no TTL or partitioning in Sprint 2. `monitoring_metrics` grows unboundedly for now; retention strategy will be revisited when table size becomes a problem.
+- ✅ **Annotation source duality:** `annotations.prediction_id` is nullable so upload-created annotations (no backing prediction) and prediction-derived annotations share one table. `image_uri` carries the image reference when `prediction_id` is NULL. See §2.8.
+- ✅ **Dataset count denormalisation:** `datasets.count` is maintained by the application layer rather than computed live. See §2.7.1.
+- ✅ **Training run lifecycle:** stopped runs are kept (status='stopped') rather than deleted, preserving the audit trail.
 
 **Open:**
-- [ ] **Deferred tables:** `experiments`, `plates`, `scans`, `datasets`, `annotations` are in the API spec but out of scope for this task. They will need their own schema doc update in a future task.
+- [ ] **Deferred tables:** `experiments`, `plates`, `scans` are in the API spec but out of scope for these migrations. They will need their own schema doc update in a future task.
+- [ ] **XOR constraint on annotations:** whether to enforce "exactly one of `prediction_id` or `image_uri` set" at the DB layer. See §2.8.1.
 
 ---
 
@@ -211,3 +296,5 @@ No circular dependencies. Cascade rules:
 |---------|------------|--------|---------|
 | 0.1     | 2026-04-22 | —      | Initial draft — Sprint 2, six tables |
 | 0.2     | 2026-04-22 | —      | Added nullable `predictions.input_uri` for persisted input pointer |
+| 0.3     | 2026-04-26 | —      | Added Mermaid ER diagram (subsection 3.1) |
+| 0.4     | 2026-05-18 | —      | Added `datasets`, `annotations`, `training_runs`; added `predictions.tip_photo_uri`; made `annotations.prediction_id` nullable and added `annotations.image_uri` for upload-created annotations |
