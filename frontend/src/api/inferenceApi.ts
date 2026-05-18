@@ -14,12 +14,10 @@ import type { PredictionResponse, ModelSummary } from '../types/api';
  */
 export async function predict(
   file: File,
-  confidenceThreshold: number,
   signal?: AbortSignal,
 ): Promise<PredictionResponse> {
   const form = new FormData();
   form.append('file', file);
-  form.append('confidence_threshold', String(confidenceThreshold));
 
   return apiClient<PredictionResponse>('/predict', {
     method: 'POST',

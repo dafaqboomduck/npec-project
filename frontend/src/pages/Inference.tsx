@@ -27,7 +27,6 @@ export default function Inference() {
 
   // ── Sidebar state ──
   const [models, setModels] = useState<ModelSummary[]>([]);
-  const [confidence, setConfidence] = useState(0.85);
 
   // ── Dropzone state ──
   const [dragging, setDragging] = useState(false);
@@ -106,7 +105,7 @@ export default function Inference() {
     addJob(newJob);
 
     try {
-      const res = await predict(file, confidence, controller.signal);
+      const res = await predict(file, controller.signal);
       setResult(res);
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
@@ -120,8 +119,7 @@ export default function Inference() {
     }
   }
 
-  // ── Slider label helper ──
-  const sliderPct = ((confidence - 0.5) / 0.49) * 100;
+
 
   return (
     <div className="inference-page">
@@ -164,41 +162,7 @@ export default function Inference() {
                   </div>
                 </section>
 
-                {/* Parameters */}
-                <section className="sidebar-section">
-                  <span className="sidebar-section-label">PARAMETERS</span>
 
-                  <div className="param-group">
-                    <div className="param-row">
-                      <span className="param-label">Confidence Threshold</span>
-                      <span className="param-value">
-                        {confidence.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="slider-wrapper">
-                      <input
-                        type="range"
-                        className="conf-slider"
-                        id="confidence-slider"
-                        min="0.50"
-                        max="0.99"
-                        step="0.01"
-                        value={confidence}
-                        onChange={(e) =>
-                          setConfidence(parseFloat(e.target.value))
-                        }
-                        style={
-                          { '--pct': `${sliderPct}%` } as React.CSSProperties
-                        }
-                      />
-                      <div className="slider-marks">
-                        <span>0.50</span>
-                        <span>0.85</span>
-                        <span>0.99</span>
-                      </div>
-                    </div>
-                  </div>
-                </section>
 
                 {/* Active Session */}
                 <section className="sidebar-section">
