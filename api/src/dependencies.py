@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from api.src.services.base import AbstractInferenceService
+from api.src.services.deployment import AbstractDeploymentService
 from api.src.services.mock_inference import MockInferenceService
 from api.src.services.storage import AbstractStorageBackend, get_storage_backend
 from api.src.services.training import AbstractTrainingService, StubTrainingService
@@ -21,9 +23,15 @@ logger = logging.getLogger(__name__)
 
 _USE_MOCK: bool = os.getenv("USE_MOCK_INFERENCE", "true").lower() != "false"
 
+# Fallback artifact directory used when no model is deployed in the DB yet.
+_FALLBACK_ARTIFACT_DIR = Path(os.getenv("NPEC_ARTIFACT_DIR", "/app/npec_cv/artifacts/models"))
+
 # Module-level singletons
 _storage_backend: AbstractStorageBackend = get_storage_backend()
 _inference_service: AbstractInferenceService | None = None
+
+
+# Getters
 
 
 def get_inference_service() -> AbstractInferenceService:
@@ -44,8 +52,13 @@ def get_inference_service() -> AbstractInferenceService:
         else:
             from api.src.services.unet_inference import UNetInferenceService
 
-            _inference_service = UNetInferenceService()
-            logger.info("Inference service: UNetInferenceService")
+            _inference_service = UNetInferenceService(
+                artifact_path=_FALLBACK_ARTIFACT_DIR,
+            )
+            logger.info(
+                "Inference service: UNetInferenceService (artifact_path=%s)",
+                _FALLBACK_ARTIFACT_DIR,
+            )
 
     return _inference_service
 
@@ -66,3 +79,19 @@ def get_training_service() -> AbstractTrainingService:
       The configured AbstractTrainingService.
     """
     return StubTrainingService()
+
+
+def get_deployment_service(db) -> AbstractDeploymentService:
+    """Return the active deployment service.
+
+    Injects the DB session required by LocalDeploymentService.
+
+    Args:
+        db: An open AsyncSession from get_session().
+
+    Returns:
+        The configured AbstractDeploymentService.
+    """
+    from api.src.services.deployment import LocalDeploymentService
+
+    return LocalDeploymentService(db=db, inference_service=get_inference_service())

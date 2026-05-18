@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.src.core.security import get_current_user, require_admin
 from api.src.db.orm import Annotation
 from api.src.db.session import get_session
-from api.src.dependencies import get_inference_service, get_storage
+from api.src.dependencies import get_deployment_service, get_inference_service, get_storage
 from api.src.repositories.annotations import AnnotationRepository
 from api.src.repositories.datasets import DatasetRepository
 from api.src.repositories.models import ModelRepository
@@ -54,7 +54,6 @@ from api.src.schemas.library import (
     ModelSummary,
 )
 from api.src.services.base import AbstractInferenceService
-from api.src.services.deployment import StubDeploymentService
 from api.src.services.mask_storage import save_annotation_mask, validate_tiff_mask
 from api.src.services.storage import AbstractStorageBackend
 
@@ -886,13 +885,26 @@ async def deploy_model(
         HTTPException: 403 for non-admin tokens.
         HTTPException: 404 if the model does not exist.
     """
-    if not await ModelRepository(db).exists(model_id):
-        raise _404("Model not found.")
+    service = get_deployment_service(db)
 
     try:
-        await StubDeploymentService(db).deploy(model_id)
+        await service.deploy(model_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=ErrorResponse(
+                error_code=ErrorCode.INVALID_REQUEST,
+                message=str(exc),
+            ).model_dump(),
+        )
     except ValueError as exc:
-        raise _404(str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ErrorResponse(
+                error_code=ErrorCode.NOT_FOUND,
+                message=str(exc),
+            ).model_dump(),
+        )
 
     logger.info("Admin %s deployed model %s", user.sub, model_id)
-    return MessageResponse(message=f"Model {model_id} deployment triggered.")
+    return MessageResponse(message=f"Model {model_id} deployed successfully.")

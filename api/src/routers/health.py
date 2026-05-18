@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, text
@@ -42,25 +43,43 @@ async def _check_db(db: AsyncSession) -> bool:
 
 
 async def _check_model(db: AsyncSession) -> bool:
-    """Check whether a deployed model version exists.
+    """Check whether a deployed model version exists and its artifact is on disk.
+
+    Returns `degraded` (False) if:
+        - No deployed row exists.
+        - artifact_uri is NULL.
+        - The file at artifact_uri does not exist on disk.
 
     Args:
         db: An open async SQLAlchemy session.
 
     Returns:
-        `True` if at least one `model_versions` row has
-        `status = 'deployed'`, `False` otherwise.
+        `True` if both the `model_versions` row and the artifact
+        file are present.
     """
     try:
         result = await db.execute(
-            select(ModelVersion.id).where(ModelVersion.status == ModelStatus.DEPLOYED.value).limit(1)
+            select(ModelVersion.artifact_uri).where(ModelVersion.status == ModelStatus.DEPLOYED.value).limit(1)
         )
-        found = result.scalar_one_or_none() is not None
-        if not found:
-            logger.warning("Health check - no deployed model version found.")
-        return found
+        artifact_uri: str | None = result.scalar_one_or_none()
+
+        if artifact_uri is None:
+            logger.warning("Health check - no deployed model found or artifact_uri is NULL.")
+            return False
+
+        artifact_path = Path(artifact_uri)
+        if not artifact_path.exists():
+            logger.warning(
+                "Health check - artifact file missing at '%s'. "
+                "Place the .keras file there or deploy a model via "
+                "POST /models/{id}/deploy.",
+                artifact_path,
+            )
+            return False
+
+        return True
     except Exception as exc:
-        logger.warning("Health check - model version query failed: %s", exc)
+        logger.warning("Health check - model artifact check failed: %s", exc)
         return False
 
 

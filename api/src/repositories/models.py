@@ -152,6 +152,21 @@ class ModelRepository:
             return None
         return _row_to_detail(row, include_admin_fields=include_admin_fields)
 
+    async def get_deployed_artifact_uri(self) -> str | None:
+        """Return the artifact_uri of the currently deployed model, or None.
+
+        Used by LocalDeploymentService and the health check. Returns None
+        if no omodel has status='deployed' or if artifact_uri is NULL.
+
+        Returns:
+            artifact_uri string if a deployed model with a non-null URI exists,
+            otherwise None.
+        """
+        result = await self._db.execute(
+            select(ModelVersion.artifact_uri).where(ModelVersion.status == ModelStatus.DEPLOYED.value).limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def exists(self, model_id: uuid.UUID) -> bool:
         """Return `True` if a model with `model_id` exists.
 

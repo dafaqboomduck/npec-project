@@ -54,10 +54,20 @@ VALUES (
     'Dev-only placeholder. Not a real trained model. Replace via training pipeline.',
     'deployed',
     NULL, NULL, NULL, NULL,
-    NULL,
+    '/app/npec_cv/artifacts/models',
     NOW()
 )
-ON CONFLICT (version) DO NOTHING;
+ON CONFLICT (version) DO UPDATE SET
+    id          = EXCLUDED.id,
+    name        = EXCLUDED.name,
+    description = EXCLUDED.description,
+    status      = EXCLUDED.status,
+    f1_score    = EXCLUDED.f1_score,
+    precision   = EXCLUDED.precision,
+    recall      = EXCLUDED.recall,
+    inference_latency_ms = EXCLUDED.inference_latency_ms,
+    artifact_uri = EXCLUDED.artifact_uri,
+    deployed_at  = EXCLUDED.deployed_at;
 
 COMMIT;
 
