@@ -325,6 +325,7 @@ async def confirm_prediction(
 
     Raises:
         HTTPException: 404 if the prediction does not exist.
+        HTTPException: 404 if dataset_id is provided but the dataset does not exist.
         HTTPException: 409 if the prediction is already confirmed.
     """
     repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
@@ -335,13 +336,14 @@ async def confirm_prediction(
             species=body.species if body else None,
             age_days=body.age_days if body else None,
             treatment=body.treatment if body else None,
+            dataset_id=body.dataset_id if body else None,
         )
-    except ValueError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=ErrorResponse(
                 error_code=ErrorCode.NOT_FOUND,
-                message="Prediction not found.",
+                message=str(exc),
             ).model_dump(),
         )
 

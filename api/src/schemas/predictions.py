@@ -90,6 +90,14 @@ class ConfirmPredictionRequest(BaseModel):
         None,
         description="Experimental treatment applied to the plant.",
     )
+    dataset_id: UUID | None = Field(
+        None,
+        description=(
+            "Optional UUID of the dataset to link this annotation to. "
+            "When provided, the created annotation has dataset_id set and "
+            "datasets.count is incremented by 1."
+        ),
+    )
 
 
 class ConfirmPredictionResponse(BaseModel):

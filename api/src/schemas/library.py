@@ -75,8 +75,10 @@ class AnnotationResponse(BaseModel):
     """Returned by GET /annotations and GET /annotations/{id}."""
 
     annotation_id: UUID
-    prediction_id: UUID
+    prediction_id: UUID | None = None
+    dataset_id: UUID | None = None
     status: AnnotationStatus
+    image_uri: str | None = None
     mask_url: str | None = None
     species: str | None = None
     age_days: int | None = None

@@ -331,7 +331,7 @@ class Annotation(Base):
     prediction_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("predictions.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     dataset_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
@@ -339,6 +339,7 @@ class Annotation(Base):
         nullable=True,
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="'pending'")
+    image_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     mask_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     species: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     age_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

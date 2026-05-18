@@ -23,6 +23,7 @@ from the injected DB session.
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Annotated
 from uuid import UUID
 
@@ -210,6 +211,102 @@ async def delete_dataset(
         raise _404("Dataset not found.")
     logger.info("Admin %s deleted dataset %s", user.sub, dataset_id)
     return MessageResponse(message=f"Dataset {dataset_id} deleted.")
+
+
+@router.post(
+    "/datasets/{dataset_id}/upload",
+    response_model=AnnotationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload an image to a dataset",
+    resopnses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        412: {"model": ErrorResponse},
+        415: {"model": ErrorResponse},
+    },
+)
+async def upload_dataset_image(
+    dataset_id: UUID,
+    file: UploadFile = File(..., description="Root scan image. Accepted: .png, .tiff, .tif, .jpg, .jpeg. Max 50 MB."),
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    storage: AbstractStorageBackend = Depends(get_storage),
+    db: AsyncSession = Depends(get_session),
+) -> AnnotationResponse:
+    """Upload a raw image to a dataset and create a pending annotation.
+
+    The image is saved to the storage backend and a pending annotation
+    is created and linked to the dataset. The dataset count is incremented
+    atomically in the same transaction.
+
+    Args:
+        dataset_id: UUID of the dataset to upload to.
+        file: The image file to upload.
+        user: Authenticated user from Bearer token.
+        storage: Injected storage backend.
+        db: Injected database session.
+
+    Returns:
+        The created AnnotationResponse with status='pending'.
+
+    Raises:
+        HTTPException: 404 if the dataset does not exist.
+        HTTPException: 413 if the file exceeds 50 MB.
+        HTTPException: 415 if the file format is not accepted.
+    """
+    from api.src.services.image_validation import (
+        validate_content_type,
+        validate_file_size,
+    )
+
+    dataset_repo = DatasetRepository(db)
+    annotation_repo = AnnotationRepository(db)
+
+    # Verify dataset exists
+    dataset = await dataset_repo.get(dataset_id)
+    if dataset is None:
+        raise _404("Dataset not found.")
+
+    # Read and validate the file
+    image_bytes = await file.read()
+    validate_file_size(image_bytes)
+    validate_content_type(file.content_type or "", file.filename or "")
+
+    # Save to storage
+    storage_key = f"datasets/{dataset_id}/{uuid.uuid4()}{_ext(file.filename or '')}"
+    try:
+        image_uri = await storage.save(storage_key, image_bytes)
+    except Exception as exc:
+        logger.error("Storage save failed for dataset %s: %s", dataset_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=ErrorResponse(
+                error_code=ErrorCode.INTERNAL_ERROR,
+                message="Failed to save image to storage.",
+            ).model_dump(),
+        )
+
+    # Create annotation + increment count in a single transaction
+    annotation = await annotation_repo.create_pending(
+        dataset_id=dataset_id,
+        image_uri=image_uri,
+    )
+    await dataset_repo.increment_count(dataset_id)
+    await db.commit()
+
+    logger.info(
+        "User %s uploaded image to dataset %s - annotation %s created",
+        user.sub,
+        dataset_id,
+        annotation.annotation_id,
+    )
+    return annotation
+
+
+def _ext(filename: str) -> str:
+    """Extract the file extension including the dot, e.g. '.png'."""
+    import os
+
+    return os.path.splittext(filename)[1].lower()
 
 
 # Annotations

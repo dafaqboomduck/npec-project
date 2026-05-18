@@ -90,6 +90,24 @@ class DatasetRepository:
         rows = result.scalars().all()
         return [_row_to_summary(r) for r in rows]
 
+    async def increment_count(self, dataset_id: uuid.UUID) -> None:
+        """Increment the denormalised count column by 1.
+
+        Does not commit - the caller is responsible for committing the
+        encolsing transaction. Raises ValueError if the dataset does not exist.
+
+        Args:
+            dataset_id: UUID of the dataset whose count to increment.
+
+        Raises:
+            ValueError: If no dataset with dataset_id exists.
+        """
+        row = await self._db.get(Dataset, dataset_id)
+        if row is None:
+            raise ValueError(f"Dataset {dataset_id} not found.")
+        row.count += 1
+        logger.debug("Incremented count for dataset %s to %d", dataset_id, row.count)
+
     async def get(self, dataset_id: uuid.UUID) -> DatasetDetail | None:
         """Return the dataset with `dataset_id`, or `None`.
 

@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 from api.src.db.orm import ModelVersion, Prediction
 from api.src.repositories.annotations import AnnotationRepository
 from api.src.repositories.base import AbstractPredictionRepository
+from api.src.repositories.datasets import DatasetRepository
 from api.src.schemas.predictions import (
     Plant,
     PredictionMetadata,
@@ -246,6 +247,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         species: str | None,
         age_days: int | None,
         treatment: str | None,
+        dataset_id: uuid.UUID | None = None,
     ) -> tuple[PredictionResponse, bool]:
         """Confirm a prediction and create a linked annotation record.
 
@@ -254,6 +256,8 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             species: Optional plant species for the annotation record.
             age_days: Optional plant age in days.
             treatment: Optional experimental treatment.
+            dataset_id: Optional UUID of the dataset to link the annotation to.
+                When provided, datasets.count is incremented in the transaction.
 
         Returns:
             `(prediction, already_confirmed)` - if `already_confirmed` is
@@ -261,6 +265,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
 
         Raises:
             ValueError: If the prediction does not exist.
+            ValueError: If dataset_id is provided but the dataset does not exist.
         """
         result = await self._db.execute(
             select(Prediction).options(selectinload(Prediction.model_version)).where(Prediction.id == prediction_id)
@@ -284,7 +289,12 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             species=species,
             age_days=age_days,
             treatment=treatment,
+            dataset_id=dataset_id,
         )
+
+        if dataset_id is not None:
+            dataset_repo = DatasetRepository(self._db)
+            await dataset_repo.increment_count(dataset_id)
 
         logger.info(f"Confirmed prediction {prediction_id} and created annotation")
 
