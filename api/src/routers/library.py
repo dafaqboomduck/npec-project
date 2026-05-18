@@ -3,18 +3,20 @@
 Read and write endpoints for datasets, annotations, and model versions.
 
 Read endpoints :
-- GET  /datasets                       — list datasets
-- GET  /datasets/{dataset_id}          — single dataset detail
-- GET  /annotations                    — paginated annotation list
-- GET  /annotations/{annotation_id}    — single annotation detail
-- GET  /models                         — list all model versions
-- GET  /models/{model_id}              — single model detail (admin gets extra fields)
+- GET  /datasets                            — list datasets
+- GET  /datasets/{dataset_id}               — single dataset detail
+- GET  /datasets/{dataset_id}/upload        - add a pending image to a dataset
+- POST /datasets/{dataset_id}/run-inference - run inference on all pending images
+- GET  /annotations                         — paginated annotation list
+- GET  /annotations/{annotation_id}         — single annotation detail
+- GET  /models                              — list all model versions
+- GET  /models/{model_id}                   — single model detail (admin gets extra fields)
 
 Write endpoints:
-- DELETE /annotations/{id}             — remove annotation
-- POST   /annotations/{id}/confirm     — submit corrected mask
-- DELETE /models/{id}                  — remove model version (admin only)
-- POST   /models/{id}/deploy           — deploy model version (admin only)
+- DELETE /annotations/{id}                  — remove annotation
+- POST   /annotations/{id}/confirm          — submit corrected mask
+- DELETE /models/{id}                       — remove model version (admin only)
+- POST   /models/{id}/deploy                — deploy model version (admin only)
 
 All endpoints require a valid Bearer token. Repositoreis are initiated per-request
 from the injected DB session.
@@ -24,15 +26,17 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.core.security import get_current_user, require_admin
+from api.src.db.orm import Annotation
 from api.src.db.session import get_session
-from api.src.dependencies import get_storage
+from api.src.dependencies import get_inference_service, get_storage
 from api.src.repositories.annotations import AnnotationRepository
 from api.src.repositories.datasets import DatasetRepository
 from api.src.repositories.models import ModelRepository
@@ -40,6 +44,7 @@ from api.src.schemas.auth import TokenData, UserRole
 from api.src.schemas.common import ErrorCode, ErrorResponse, MessageResponse
 from api.src.schemas.library import (
     AnnotationResponse,
+    AnnotationStatus,
     DatasetCreate,
     DatasetDetail,
     DatasetSummary,
@@ -48,6 +53,7 @@ from api.src.schemas.library import (
     ModelDetail,
     ModelSummary,
 )
+from api.src.services.base import AbstractInferenceService
 from api.src.services.deployment import StubDeploymentService
 from api.src.services.mask_storage import save_annotation_mask, validate_tiff_mask
 from api.src.services.storage import AbstractStorageBackend
@@ -56,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Library"])
 
-# Shared 404 helper
+# Helpers
 
 
 def _404(message: str = "Resource not found.") -> HTTPException:
@@ -67,6 +73,108 @@ def _404(message: str = "Resource not found.") -> HTTPException:
             error_code=ErrorCode.NOT_FOUND,
             message=message,
         ).model_dump(),
+    )
+
+
+def _ext(filename: str) -> str:
+    """Extract the file extension including the dot, e.g. '.png'."""
+    import os
+
+    return os.path.splittext(filename)[1].lower()
+
+
+async def _run_inference_background(
+    dataset_id: uuid.UUID,
+    annotations: list,
+    inference_service: AbstractInferenceService,
+    storage: AbstractStorageBackend,
+    db_session_factory,
+) -> None:
+    """Background task: run inference on all pending annotations in a dataset.
+
+    Iterates over pending annotations, fetches each image from storage, runs
+    inference, saves the mask, and updates the annotation row.
+
+    Partial failures are isolated - a single bad image sets that annotation
+    to 'review_required' and logs the error, then processing continues with
+    the remaining images.
+
+    Args:
+        dataset_id: UUID of the dataset being processed (for logging).
+        annotations: List of pending Annotation ORM rows to process.
+        inference_service: The active inference service singleton.
+        storage: The active storage backend.
+        db_session_factory: Callable that returns a new AsyncSession.
+    """
+    succeeded = 0
+    failed = 0
+
+    logger.info(
+        "run-inference background task started for dataset %s - %d image(s)",
+        dataset_id,
+        len(annotations),
+    )
+
+    for annotation in annotations:
+        async with db_session_factory() as db:
+            try:
+                # Fetch image bytes from storage
+                image_bytes = await storage.download(annotation.image_uri)
+                filename = annotation.image_uri.split("/")[-1]
+
+                # Run inference
+                prediction_response, mask_bytes = await inference_service.run(
+                    image_bytes=image_bytes,
+                    filename=filename,
+                )
+
+                # Save mask to storage if the service produced one
+                mask_uri: str | None = None
+                if mask_bytes is not None:
+                    mask_key = f"masks/{annotation.id}_mask.png"
+                    mask_uri = storage.upload(mask_key, mask_bytes, content_type="image/png")
+
+                # Update annotation in DB
+                row = await db.get(Annotation, annotation.id)
+                if row is not None:
+                    row.mask_uri = mask_uri
+                    row.status = AnnotationStatus.ANNOTATED
+                    row.updated_at = datetime.now(timezone.utc)
+                    await db.commit()
+
+                succeeded += 1
+                logger.info(
+                    "run-inference: processed annotation %s successfully",
+                    annotation.id,
+                )
+            except Exception as exc:
+                failed += 1
+                logger.error(
+                    "run-inference: failed for annotation %s - %s: %s",
+                    annotation.id,
+                    type(exc).__name__,
+                    exc,
+                )
+                # Mark as review_required so it's visible in the UI
+                try:
+                    async with db_session_factory() as err_db:
+                        row = await err_db.get(Annotation, annotation.id)
+                        if row is not None:
+                            row.status = AnnotationStatus.REVIEW_REQUIRED
+                            row.updated_at = datetime.now(timezone.utc)
+                            await err_db.commit()
+                except Exception as db_exc:
+                    logger.error(
+                        "run-inference: could not mark annotation %s as review_required - %s",
+                        annotation.id,
+                        db_exc,
+                    )
+
+    logger.info(
+        "run-inference background task completed for dataset %s - %d succeeded, %d failed",
+        dataset_id,
+        succeeded,
+        failed,
     )
 
 
@@ -218,7 +326,7 @@ async def delete_dataset(
     response_model=AnnotationResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Upload an image to a dataset",
-    resopnses={
+    responses={
         401: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         412: {"model": ErrorResponse},
@@ -302,11 +410,78 @@ async def upload_dataset_image(
     return annotation
 
 
-def _ext(filename: str) -> str:
-    """Extract the file extension including the dot, e.g. '.png'."""
-    import os
+@router.post(
+    "/datasets/{dataset_id}/run-inference",
+    response_model=MessageResponse,
+    summary="Run inference on all pending images in a dataset",
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def run_dataset_inference(
+    dataset_id: UUID,
+    background_tasks: BackgroundTasks,
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    inference_service: AbstractInferenceService = Depends(get_inference_service),
+    storage: AbstractStorageBackend = Depends(get_storage),
+    db: AsyncSession = Depends(get_session),
+) -> MessageResponse:
+    """Trigger background inference on all pending annotations in a dataset.
 
-    return os.path.splittext(filename)[1].lower()
+    Returns immediately with a count of queued images. Inference runs in
+    the background - poll GET /annotations?dataset_id={id} to watch
+    individual annotations flip from 'pending' to 'annotated' or
+    'review_required'.
+
+    A single image failure never aborts the batch - failed annotations are
+    marked 'review_required' and the rest continue processing.
+
+    Args:
+        dataset_id: UUID of the dataset to process.
+        background_tasks: FastAPI background task manager.
+        user: Authenticated user from Bearer token.
+        inference_service: Injected inference service singleton.
+        storage: Injected storage backend.
+        db: Injected database session.
+
+    Returns:
+        MessageResponse with queued count.
+
+    Raises:
+        HTTPException: 404 if the dataset does not exist.
+    """
+    from api.src.db.session import get_session as session_factory
+
+    dataset = await DatasetRepository(db).get(dataset_id)
+    if dataset is None:
+        raise _404("Dataset not found.")
+
+    pending = await AnnotationRepository(db).list_pending_for_dataset(dataset_id)
+
+    if not pending:
+        return MessageResponse(message="No pending annotations found for this dataset.")
+
+    background_tasks.add_task(
+        _run_inference_background,
+        dataset_id=dataset_id,
+        annotations=pending,
+        inference_service=inference_service,
+        storage=storage,
+        db_session_factory=session_factory,
+    )
+
+    logger.info(
+        "User %s queued inference for %d image(s) in dataset %s",
+        user.sub,
+        len(pending),
+        dataset_id,
+    )
+
+    return MessageResponse(
+        message=f"Inference started for {len(pending)} image(s). "
+        f"Poll GET /annotations?dataset_id={dataset_id} for progress."
+    )
 
 
 # Annotations
@@ -321,6 +496,7 @@ def _ext(filename: str) -> str:
 async def list_annotations(
     species: str | None = Query(None, description="Filter by species name"),
     growth_stage: GrowthStage | None = Query(None, description="Filter by growth stage"),
+    dataset_id: UUID | None = Query(None, description="Filter by dataset UUID"),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=20, ge=1, le=100, description="Results per page"),
     user: Annotated[TokenData, Depends(get_current_user)] = None,
@@ -333,6 +509,7 @@ async def list_annotations(
     Args:
         species: Optional species name filter.
         growth_stage: Optional growth stage filter.
+        dataset_id: Optional dataset UUID filter.
         page: 1-indexed page number.
         page_size: Number of results per page (max 100).
         user: Authenticated user from Bearer token.
@@ -345,6 +522,7 @@ async def list_annotations(
     return await repo.list(
         species=species,
         growth_stage=growth_stage.value if growth_stage else None,
+        dataset_id=dataset_id,
         page=page,
         page_size=page_size,
     )

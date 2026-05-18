@@ -76,6 +76,20 @@ class AbstractStorageBackend(ABC):
             Exception: On any storage failiure.
         """
 
+    @abstractmethod
+    def download(self, uri: str) -> bytes:
+        """Fetch the raw bytes stored as `uri`.
+
+        Args:
+            uri: The URI returned by a previous `upload()` call.
+
+        Returns:
+            Raw bytes of the stored object.
+
+        Raises:
+            Exception: On any storage failure.
+        """
+
 
 # Local implementation - writes to disk
 
@@ -117,6 +131,18 @@ class LocalStorageBackend(AbstractStorageBackend):
         dest.write_bytes(data)
         logger.debug("LocalStorageBackend: wrote %s", dest)
         return dest.resolve().as_uri()
+
+    def download(self, uri: str) -> bytes:
+        """Read bytes from a file:// URI or absolute path.
+
+        Args:
+            uri: file:// URI or absolute path.
+
+        Returns:
+            Raw bytes of the file.
+        """
+        path = Path(uri.replace("file://", "")) if uri.startswith("file://") else Path(uri)
+        return path.read_bytes()
 
 
 # MinIO implementation
@@ -211,6 +237,35 @@ class MinIOStorageBackend(AbstractStorageBackend):
         )
         logger.debug("MinIOStorageBackend: uploaded '%s' -> %s", object_name, url[:80])
         return url
+
+    def download(self, uri: str) -> bytes:
+        """Fetch object bytes from MinIO.
+
+        Extracts the object name from the presigned URL or plain object key
+        and downloads the raw bytes.
+
+        Args:
+            uri: Presigned URL or object key previously returned by upload().
+
+        Returns:
+            Raw bytes of the stored object.
+        """
+        from urllib.parse import urlparse
+
+        client = self._get_client()
+        # Presigned URLs contain the object key as the URL path
+        parsed = urlparse(uri)
+        object_name = parsed.path.lstrip("/")
+        # Strip bucket name prefix if present in the path
+        if object_name.startswith(self._bucket + "/"):
+            object_name = object_name[len(self._bucket) + 1 :]
+
+        response = client.get_object(self._bucket, object_name)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
 
 
 # Factory - called once by dependencies

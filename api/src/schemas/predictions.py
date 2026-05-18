@@ -48,7 +48,7 @@ class Plant(BaseModel):
     root_length_mm: float
 
 
-# Request / Resopnse models
+# Request / Response models
 
 
 class PredictionResponse(BaseModel):

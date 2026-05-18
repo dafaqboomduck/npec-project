@@ -1,8 +1,8 @@
 # db/alembic/versions/0005_nullable_annotation_prediction_id.py
 """Make annotations.prediction_id nullable for upload-created annotations.
 
-Revision ID: 0005
-Revises: 0004
+Revision ID: 0004
+Revises: 0003
 Create Date: 2026-05-18
 """
 
@@ -13,8 +13,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0005"
-down_revision: Union[str, None] = "0004"
+revision: str = "0004"
+down_revision: Union[str, None] = "0003"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
