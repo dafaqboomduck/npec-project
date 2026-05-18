@@ -40,19 +40,19 @@ def count_dataset_files(root_path: str):
     # rglob('*') recursively searches all files in all subdirectories
     for file_path in root.rglob("*"):
         if file_path.is_file() and file_path.suffix.lower() in valid_exts:
-            # Check if this file lives inside an 'images' or 'masks' folder anywhere in its path
-            if "images" in file_path.parts:
-                img_count += 1
-            elif "masks" in file_path.parts:
+            # Check if file is in 'masks' folder or has 'mask' in filename
+            if "masks" in file_path.parts or "mask" in file_path.name.lower():
                 mask_count += 1
+            else:
+                img_count += 1
 
     return str(img_count), str(mask_count)
 
 
 # --- 2. Setup and Execution ---
 
-# Set this to the TOP-LEVEL folder containing your cohort folders (Y2B_23, Y2B_24, etc.)
-LOCAL_DATASET_ROOT = "C:/Users/nemev/Documents/GitHub/2025-26b-fai2-adsai-VinceNemeth242058/data/raw/Y2B_24/"
+# Set this to the TOP-LEVEL folder containing your test images
+LOCAL_DATASET_ROOT = "C:/Users/nemev/Documents/TestImages"
 
 print(f"Scanning {LOCAL_DATASET_ROOT} for files...")
 num_images, num_masks = count_dataset_files(LOCAL_DATASET_ROOT)
@@ -67,38 +67,35 @@ ml_client = MLClient(
 
 # Dynamically populated tags
 tags = {
-    "source": "hades",
-    "cohorts": "Y2B_24",  # Update this if you are uploading multiple cohorts now!
+    "source": "test",
+    "is_test_set": "true",
     "is_raw": "true",
     "num_images": num_images,  # <--- Dynamically set
     "num_masks": num_masks,  # <--- Dynamically set
     "created_by": "VinceNemeth242058",
     "created_date": datetime.today().strftime("%Y-%m-%d"),
     "git_commit": get_git_revision_short_hash(),
-    "excluded_paths": "Kaggle/,*.txt",
-    "notes": "Uploading the full Y2B_24 cohort with automated file counting.",
+    "notes": "Test image dataset for validation and development.",
 }
 
 description = (
-    "Raw HADES/NPEC plant segmentation dataset, mirrored from on-disk delivery.\n"
-    "Source pointer: Local on-disk delivery.\n"
-    "Excluded: Kaggle/ folder and lone .txt files.\n"
-    "Content details: docs/data/data_inventory.md\n"
-    "Consumer contract: docs/data/preprocessing_spec.md"
+    "Test image dataset for validation and development.\n"
+    "Source: Local test images directory.\n"
+    "Used for pipeline testing and validation."
 )
 
 # Create the Data Asset definition
-hades_raw_data = Data(
-    name="cv5_hades_raw",
-    version="1.1.0",  # Bumped version since the data footprint changed!
+test_images_data = Data(
+    name="cv5_test_images",
+    version="1.0.0",
     description=description,
-    path=LOCAL_DATASET_ROOT,  # <--- The single common root folder
+    path=LOCAL_DATASET_ROOT,  # <--- The test images root folder
     type=AssetTypes.URI_FOLDER,
     tags=tags,
 )
 
-print(f"Registering {hades_raw_data.name} v{hades_raw_data.version}...")
-registered_data = ml_client.data.create_or_update(hades_raw_data)
+print(f"Registering {test_images_data.name} v{test_images_data.version}...")
+registered_data = ml_client.data.create_or_update(test_images_data)
 
 print(f"Successfully registered: {registered_data.name}")
 print(f"Version: {registered_data.version}")
