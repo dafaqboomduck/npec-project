@@ -30,6 +30,7 @@ from api.src.routers import (
     inference,
     library,
     overview,
+    training,
 )
 from api.src.schemas.common import ErrorCode, ErrorResponse
 
@@ -166,3 +167,4 @@ app.include_router(inference.router, prefix=API_PREFIX)
 app.include_router(feedback.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(files.router, prefix=API_PREFIX)
+app.include_router(training.router, prefix=API_PREFIX)

@@ -405,6 +405,48 @@ class MonitoringMetric(Base):
 
 
 # ---------------------------------------------------------------------------
+# Training runs
+# ---------------------------------------------------------------------------
+
+
+class TrainingRun(Base):
+    """One row per training job. Matches schema §2.9.
+
+    Inserted with status='running' when a job starts. Updated to
+    'completed' or 'failed' when the subprocess exits. Can be moved
+    to 'stopped' via DELETE /training/runs/{id}.
+    """
+
+    __tablename__ = "training_runs"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    hyperparameters: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB_or_JSON, nullable=True)
+    final_f1: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    model_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'completed', 'failed', 'stopped')",
+            name="ck_training_runs_status_valid",
+        ),
+        Index("ix_training_runs_status", "status"),
+        Index("ix_training_runs_model_version_id", "model_version_id"),
+        Index("ix_training_runs_started_at", "started_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public re-exports
 # ---------------------------------------------------------------------------
 
@@ -417,4 +459,5 @@ __all__ = [
     "MonitoringMetric",
     "Dataset",
     "Annotation",
+    "TrainingRun",
 ]

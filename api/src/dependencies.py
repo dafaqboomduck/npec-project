@@ -13,6 +13,7 @@ import os
 from api.src.services.base import AbstractInferenceService
 from api.src.services.mock_inference import MockInferenceService
 from api.src.services.storage import AbstractStorageBackend, get_storage_backend
+from api.src.services.training import AbstractTrainingService, StubTrainingService
 
 logger = logging.getLogger(__name__)
 
@@ -56,3 +57,12 @@ def get_storage() -> AbstractStorageBackend:
         The configured `AbstractStorageBackend`.
     """
     return _storage_backend
+
+
+def get_training_service() -> AbstractTrainingService:
+    """Return the active training service.
+
+    Returns:
+      The configured AbstractTrainingService.
+    """
+    return StubTrainingService()
