@@ -167,8 +167,7 @@ export default function Inference() {
                 {/* Active Session */}
                 <section className="sidebar-section">
                   <span className="sidebar-section-label">ACTIVE SESSION</span>
-                  <div className="session-status">
-                  </div>
+                  <div className="session-status"></div>
                 </section>
 
                 {/* Running Processes */}

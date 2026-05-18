@@ -856,10 +856,18 @@
   font-size: 0.75rem;
 }
 
-.lib-upload-item-status.pending { color: var(--color-text-muted); }
-.lib-upload-item-status.uploading { color: var(--color-primary); }
-.lib-upload-item-status.success { color: var(--color-primary-dark); }
-.lib-upload-item-status.failed { color: var(--color-danger); }
+.lib-upload-item-status.pending {
+  color: var(--color-text-muted);
+}
+.lib-upload-item-status.uploading {
+  color: var(--color-primary);
+}
+.lib-upload-item-status.success {
+  color: var(--color-primary-dark);
+}
+.lib-upload-item-status.failed {
+  color: var(--color-danger);
+}
 
 .lib-btn-add-scans {
   background: var(--color-primary);
@@ -1100,4 +1108,3 @@
   display: flex;
   justify-content: space-between;
 }
-

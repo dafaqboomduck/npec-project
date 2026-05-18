@@ -220,13 +220,17 @@ export default function Overview() {
                     ).padStart(2, '0')}
               </span>
               <div className="model-badges">
-                {deployedModels.length > 0
-                  ? deployedModels.slice(0, 3).map((m) => (
-                      <span className="model-badge" key={m.model_id}>
-                        {m.name}
-                      </span>
-                    ))
-                  : <span className="model-badge model-badge--empty">No models active</span>}
+                {deployedModels.length > 0 ? (
+                  deployedModels.slice(0, 3).map((m) => (
+                    <span className="model-badge" key={m.model_id}>
+                      {m.name}
+                    </span>
+                  ))
+                ) : (
+                  <span className="model-badge model-badge--empty">
+                    No models active
+                  </span>
+                )}
               </div>
             </div>
 

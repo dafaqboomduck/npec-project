@@ -66,17 +66,17 @@ export async function deleteDataset(id: string): Promise<void> {
   });
 }
 
-/** 
- * POST /datasets/:id/images — upload images to a dataset. 
+/**
+ * POST /datasets/:id/images — upload images to a dataset.
  * NOTE: Currently mocked as backend is not implemented yet.
  */
 export async function uploadDatasetImages(
   datasetId: string,
-  files: File[]
+  files: File[],
 ): Promise<{ success: number; failed: number }> {
   // Simulate network delay
   await new Promise((resolve) => setTimeout(resolve, 1500));
-  
+
   // Since the backend endpoint doesn't exist yet, we'll mock a successful response.
   // In reality, this would use FormData to send files to the backend:
   /*
@@ -88,7 +88,7 @@ export async function uploadDatasetImages(
     // Note: apiClient automatically removes Content-Type for FormData
   });
   */
-  
+
   return { success: files.length, failed: 0 };
 }
 
@@ -113,7 +113,7 @@ export async function importDataset(
     description?: string;
     species?: string;
     growthStage?: string;
-  }
+  },
 ): Promise<DatasetImportResponse> {
   // Simulate extraction & processing network delay
   await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -135,7 +135,10 @@ export async function importDataset(
   });
   */
 
-  const datasetName = config.targetMode === 'new' ? (config.name || 'Imported Dataset') : 'Existing Dataset';
+  const datasetName =
+    config.targetMode === 'new'
+      ? config.name || 'Imported Dataset'
+      : 'Existing Dataset';
   return {
     dataset_id: config.datasetId || '00000000-0000-0000-0000-000000000000',
     dataset_name: datasetName,
@@ -147,4 +150,3 @@ export async function importDataset(
     errors: [],
   };
 }
-

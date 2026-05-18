@@ -17,8 +17,19 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       <aside className="settings-panel">
         <div className="settings-header">
           <h2>Settings</h2>
-          <button className="settings-close" onClick={onClose} aria-label="Close settings">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <button
+            className="settings-close"
+            onClick={onClose}
+            aria-label="Close settings"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -30,7 +41,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             <h3>Appearance</h3>
             <div className="settings-row">
               <span>Dark Mode</span>
-              <button 
+              <button
                 className={`theme-toggle ${theme === 'dark' ? 'active' : ''}`}
                 onClick={toggleTheme}
                 aria-label="Toggle dark mode"
@@ -42,7 +53,9 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
           <div className="settings-section">
             <h3>Account</h3>
-            <p className="settings-info">Manage your profile and preferences.</p>
+            <p className="settings-info">
+              Manage your profile and preferences.
+            </p>
           </div>
         </div>
 
