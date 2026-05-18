@@ -71,7 +71,7 @@ export async function deleteDataset(id: string): Promise<void> {
  * NOTE: Currently mocked as backend is not implemented yet.
  */
 export async function uploadDatasetImages(
-  datasetId: string,
+  _datasetId: string,
   files: File[],
 ): Promise<{ success: number; failed: number }> {
   // Simulate network delay
@@ -105,7 +105,7 @@ export interface DatasetImportResponse {
  * NOTE: Mocked for now because backend endpoint does not exist.
  */
 export async function importDataset(
-  zipFile: File,
+  _zipFile: File,
   config: {
     targetMode: 'new' | 'existing';
     datasetId?: string;
@@ -119,24 +119,12 @@ export async function importDataset(
   await new Promise((resolve) => setTimeout(resolve, 3000));
 
   // Log usage to satisfy unused parameter TypeScript compile check
-  console.log(`Importing dataset archive ${zipFile.name} with config:`, config);
+  console.log(
+    `Importing dataset archive ${_zipFile.name} with config:`,
+    config,
+  );
 
   return apiClient<DatasetImportResponse>('/datasets/import', {
     method: 'POST',
   });
-
-  const datasetName =
-    config.targetMode === 'new'
-      ? config.name || 'Imported Dataset'
-      : 'Existing Dataset';
-  return {
-    dataset_id: config.datasetId || '00000000-0000-0000-0000-000000000000',
-    dataset_name: datasetName,
-    scans_imported: 18,
-    warnings: [
-      'Skipped non-image file: instructions.txt',
-      'Skipped unsupported format: thumbnail.bmp',
-    ],
-    errors: [],
-  };
 }
