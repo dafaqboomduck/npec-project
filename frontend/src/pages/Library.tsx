@@ -8,7 +8,7 @@
  * Route: /library (protected)
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import NavBar from '../components/NavBar';
 import { getUsername, getRole } from '../api/auth';
 import {
@@ -16,8 +16,10 @@ import {
   createDataset,
   deleteDataset,
   getDatasetDetail,
+  uploadDatasetImages,
+  importDataset,
 } from '../api/libraryApi';
-import type { DatasetSummary, DatasetDetail } from '../api/libraryApi';
+import type { DatasetSummary, DatasetDetail, DatasetImportResponse } from '../api/libraryApi';
 import './Library.css';
 
 type LibraryTab = 'datasets' | 'annotations' | 'exports';
@@ -66,6 +68,31 @@ export default function Library() {
     null,
   );
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Upload Modal State
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Import Dataset Wizard State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
+  const [importZipFile, setImportZipFile] = useState<File | null>(null);
+  const [importTargetMode, setImportTargetMode] = useState<'new' | 'existing'>('new');
+  const [importDatasetId, setImportDatasetId] = useState<string>('');
+  const [importNewName, setImportNewName] = useState('');
+  const [importNewDesc, setImportNewDesc] = useState('');
+  const [importNewSpecies, setImportNewSpecies] = useState('');
+  const [importNewGrowth, setImportNewGrowth] = useState('');
+  const [importProgress, setImportProgress] = useState(0);
+  const [importProcessing, setImportProcessing] = useState(false);
+  const [importReport, setImportReport] = useState<DatasetImportResponse | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
+
 
   useEffect(() => {
     const fetchDatasets = async () => {
@@ -171,6 +198,154 @@ export default function Library() {
       setDeleting(false);
     }
   }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setUploadFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
+    }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files && e.target.files.length > 0) {
+      setUploadFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+    }
+  }
+
+  async function handleUpload() {
+    if (!selectedDatasetId || uploadFiles.length === 0) return;
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      await uploadDatasetImages(selectedDatasetId, uploadFiles);
+      setShowUploadModal(false);
+      setUploadFiles([]);
+      // Refresh detail
+      const detail = await getDatasetDetail(selectedDatasetId);
+      setDatasetDetail(detail);
+      // Refresh list
+      const data = await getDatasets({
+        species: speciesFilter || undefined,
+        growth_stage: growthStages.length === 1 ? growthStages[0] : undefined,
+      });
+      setDatasets(data);
+    } catch (err) {
+      setUploadError((err as Error).message);
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  function handleZipDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleZipDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+  }
+
+  function handleZipDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file.name.endsWith('.zip')) {
+        setImportZipFile(file);
+        setImportStep(2);
+      } else {
+        setImportError('Please select a valid .zip file.');
+      }
+    }
+  }
+
+  function handleZipSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      if (file.name.endsWith('.zip')) {
+        setImportZipFile(file);
+        setImportStep(2);
+      } else {
+        setImportError('Please select a valid .zip file.');
+      }
+    }
+  }
+
+  async function handleImportSubmit() {
+    if (!importZipFile) return;
+    setImportStep(3);
+    setImportProcessing(true);
+    setImportProgress(10);
+    setImportError(null);
+
+    // Animate progress up to 90% while uploading/waiting
+    const interval = setInterval(() => {
+      setImportProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(interval);
+          return 90;
+        }
+        return prev + 15;
+      });
+    }, 400);
+
+    try {
+      const res = await importDataset(importZipFile, {
+        targetMode: importTargetMode,
+        datasetId: importTargetMode === 'existing' ? importDatasetId : undefined,
+        name: importTargetMode === 'new' ? importNewName : undefined,
+        description: importTargetMode === 'new' ? importNewDesc : undefined,
+        species: importTargetMode === 'new' ? importNewSpecies : undefined,
+        growthStage: importTargetMode === 'new' ? importNewGrowth : undefined,
+      });
+
+      clearInterval(interval);
+      setImportProgress(100);
+      setImportReport(res);
+
+      // Refresh list
+      const data = await getDatasets({
+        species: speciesFilter || undefined,
+        growth_stage: growthStages.length === 1 ? growthStages[0] : undefined,
+      });
+      setDatasets(data);
+    } catch (err) {
+      clearInterval(interval);
+      setImportError((err as Error).message);
+      setImportStep(2); // Go back to config
+    } finally {
+      setImportProcessing(false);
+    }
+  }
+
+  function resetImportWizard() {
+    setShowImportModal(false);
+    setImportStep(1);
+    setImportZipFile(null);
+    setImportTargetMode('new');
+    setImportDatasetId('');
+    setImportNewName('');
+    setImportNewDesc('');
+    setImportNewSpecies('');
+    setImportNewGrowth('');
+    setImportProgress(0);
+    setImportProcessing(false);
+    setImportReport(null);
+    setImportError(null);
+  }
+
 
   const filteredDatasets = datasets
     .filter((ds) => {
@@ -290,15 +465,25 @@ export default function Library() {
               </div>
             </div>
 
-            {/* New Dataset button */}
+            {/* New Dataset & Import buttons */}
             {role === 'admin' && (
-              <button
-                className="lib-btn-new"
-                id="btn-new-dataset"
-                onClick={() => setShowCreateModal(true)}
-              >
-                + New Dataset
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1.5rem', width: '100%' }}>
+                <button
+                  className="lib-btn-new"
+                  id="btn-new-dataset"
+                  onClick={() => setShowCreateModal(true)}
+                >
+                  + New Dataset
+                </button>
+                <button
+                  className="lib-btn-import"
+                  id="btn-import-dataset"
+                  onClick={() => setShowImportModal(true)}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Import Dataset
+                </button>
+              </div>
             )}
 
             {/* Navigation */}
@@ -395,7 +580,16 @@ export default function Library() {
                     >
                       ← DATASETS
                     </button>
-                    <h1 className="lib-content-title">{datasetDetail.name}</h1>
+                    <div className="lib-detail-header-top">
+                      <h1 className="lib-content-title">{datasetDetail.name}</h1>
+                      <button 
+                        className="lib-btn-add-scans" 
+                        onClick={() => setShowUploadModal(true)}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Add Scans
+                      </button>
+                    </div>
                     <div className="lib-ds-list-meta">
                       <span className="lib-ds-list-meta-item">
                         <span className="lib-ds-meta-label">created at:</span>{' '}
@@ -912,6 +1106,345 @@ export default function Library() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Images Upload Modal ─────────────────────────────────── */}
+      {showUploadModal && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isUploading) {
+              setShowUploadModal(false);
+            }
+          }}
+        >
+          <div className="modal-card">
+            <h2 className="modal-title">Upload Scans</h2>
+            <p className="modal-body">
+              Add new root scans to <strong>{datasetDetail?.name}</strong>. 
+              These will automatically be processed by the current active model.
+            </p>
+
+            <div
+              className={`lib-upload-dropzone ${isDragging ? 'lib-upload-dropzone--active' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="lib-upload-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <p className="lib-upload-text">Click or drag images here to upload</p>
+              <p className="lib-upload-hint">Supported formats: PNG, JPG, TIFF</p>
+              <input
+                type="file"
+                multiple
+                accept=".png,.jpg,.jpeg,.tiff"
+                className="lib-file-input-hidden"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+              />
+            </div>
+
+            {uploadFiles.length > 0 && (
+              <div className="lib-upload-list">
+                {uploadFiles.map((file, idx) => (
+                  <div key={`${file.name}-${idx}`} className="lib-upload-item">
+                    <span className="lib-upload-item-name" title={file.name}>{file.name}</span>
+                    <span className={`lib-upload-item-status ${isUploading ? 'uploading' : 'pending'}`}>
+                      {isUploading ? 'Uploading...' : 'Ready'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {uploadError && <p className="lib-form-error">{uploadError}</p>}
+
+            <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+              <button
+                type="button"
+                className="modal-close modal-close--secondary"
+                onClick={() => {
+                  setShowUploadModal(false);
+                  setUploadFiles([]);
+                }}
+                disabled={isUploading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => void handleUpload()}
+                disabled={isUploading || uploadFiles.length === 0}
+              >
+                {isUploading ? 'Uploading...' : `Upload ${uploadFiles.length > 0 ? uploadFiles.length + ' ' : ''}Images`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Import Dataset Wizard Modal ───────────────────────────────── */}
+      {showImportModal && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !importProcessing) {
+              resetImportWizard();
+            }
+          }}
+        >
+          <div className="modal-card">
+            <h2 className="modal-title">Import Dataset Wizard</h2>
+            
+            {/* Wizard Steps Indicator */}
+            <div className="wizard-steps">
+              <div className={`wizard-step ${importStep >= 1 ? 'wizard-step--completed' : ''} ${importStep === 1 ? 'wizard-step--active' : ''}`}>1</div>
+              <div className={`wizard-step ${importStep >= 2 ? 'wizard-step--completed' : ''} ${importStep === 2 ? 'wizard-step--active' : ''}`}>2</div>
+              <div className={`wizard-step ${importStep === 3 ? 'wizard-step--completed' : ''} ${importStep === 3 ? 'wizard-step--active' : ''}`}>3</div>
+            </div>
+
+            {/* STEP 1: UPLOAD ZIP */}
+            {importStep === 1 && (
+              <div>
+                <p className="modal-body" style={{ marginBottom: '1.25rem' }}>
+                  Upload a single <strong>.zip</strong> archive containing your raw root scan images. 
+                  Pre-existing masks matching filenames (e.g. <code>image_mask.png</code>) will be imported as validated annotations.
+                </p>
+                <div
+                  className={`lib-upload-dropzone ${isDragging ? 'lib-upload-dropzone--active' : ''}`}
+                  onDragOver={handleZipDragOver}
+                  onDragLeave={handleZipDragLeave}
+                  onDrop={handleZipDrop}
+                  onClick={() => zipInputRef.current?.click()}
+                >
+                  <div className="lib-upload-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  </div>
+                  <p className="lib-upload-text">Click or drag ZIP archive here</p>
+                  <p className="lib-upload-hint">Supported archive: ZIP up to 200MB</p>
+                  <input
+                    type="file"
+                    accept=".zip"
+                    className="lib-file-input-hidden"
+                    ref={zipInputRef}
+                    onChange={handleZipSelect}
+                  />
+                </div>
+                {importError && <p className="lib-form-error">{importError}</p>}
+                
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="modal-close modal-close--secondary"
+                    onClick={resetImportWizard}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: CONFIGURATION & TARGET */}
+            {importStep === 2 && (
+              <div>
+                <p className="modal-body" style={{ marginBottom: '1.25rem' }}>
+                  Choose where to import the root scans from <strong>{importZipFile?.name}</strong>:
+                </p>
+
+                <div className="target-mode-options">
+                  <div 
+                    className={`target-mode-card ${importTargetMode === 'new' ? 'selected' : ''}`}
+                    onClick={() => setImportTargetMode('new')}
+                  >
+                    <span className="target-card-title">
+                      <input 
+                        type="radio" 
+                        name="importTargetMode" 
+                        checked={importTargetMode === 'new'} 
+                        onChange={() => setImportTargetMode('new')} 
+                      />
+                      Create New
+                    </span>
+                    <span className="target-card-desc">Extract files into a brand new dataset collection.</span>
+                  </div>
+
+                  <div 
+                    className={`target-mode-card ${importTargetMode === 'existing' ? 'selected' : ''}`}
+                    onClick={() => setImportTargetMode('existing')}
+                  >
+                    <span className="target-card-title">
+                      <input 
+                        type="radio" 
+                        name="importTargetMode" 
+                        checked={importTargetMode === 'existing'} 
+                        onChange={() => setImportTargetMode('existing')} 
+                      />
+                      Add to Existing
+                    </span>
+                    <span className="target-card-desc">Append scans directly into a previously created dataset.</span>
+                  </div>
+                </div>
+
+                {importTargetMode === 'new' ? (
+                  <div className="lib-create-form">
+                    <div className="lib-form-group">
+                      <label htmlFor="import-name">Dataset Name *</label>
+                      <input
+                        type="text"
+                        id="import-name"
+                        required
+                        placeholder="e.g. Arabidopsis Salt Treatment"
+                        value={importNewName}
+                        onChange={(e) => setImportNewName(e.target.value)}
+                      />
+                    </div>
+                    <div className="lib-form-group">
+                      <label htmlFor="import-desc">Description</label>
+                      <textarea
+                        id="import-desc"
+                        rows={2}
+                        placeholder="Details about salt concentration, stage, etc."
+                        value={importNewDesc}
+                        onChange={(e) => setImportNewDesc(e.target.value)}
+                      />
+                    </div>
+                    <div className="lib-form-row">
+                      <div className="lib-form-group">
+                        <label htmlFor="import-species">Species</label>
+                        <input
+                          type="text"
+                          id="import-species"
+                          placeholder="e.g. Arabidopsis thaliana"
+                          value={importNewSpecies}
+                          onChange={(e) => setImportNewSpecies(e.target.value)}
+                        />
+                      </div>
+                      <div className="lib-form-group">
+                        <label htmlFor="import-growth">Growth Stage</label>
+                        <select
+                          id="import-growth"
+                          value={importNewGrowth}
+                          onChange={(e) => setImportNewGrowth(e.target.value)}
+                        >
+                          <option value="">(None)</option>
+                          <option value="seedling">Seedling</option>
+                          <option value="mature">Mature</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="lib-create-form">
+                    <div className="lib-form-group">
+                      <label htmlFor="import-target-ds">Select Destination Dataset *</label>
+                      <select
+                        id="import-target-ds"
+                        required
+                        value={importDatasetId}
+                        onChange={(e) => setImportDatasetId(e.target.value)}
+                      >
+                        <option value="">-- Choose a Dataset --</option>
+                        {datasets.map(ds => (
+                          <option key={ds.dataset_id} value={ds.dataset_id}>
+                            {ds.name} ({ds.count} scans)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {importError && <p className="lib-form-error">{importError}</p>}
+
+                <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+                  <button
+                    type="button"
+                    className="modal-close modal-close--secondary"
+                    onClick={() => setImportStep(1)}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    className="modal-close"
+                    onClick={() => void handleImportSubmit()}
+                    disabled={
+                      importTargetMode === 'new' 
+                        ? !importNewName.trim() 
+                        : !importDatasetId
+                    }
+                  >
+                    Start Import
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3: PROGRESS & LOGS / REPORT */}
+            {importStep === 3 && (
+              <div>
+                {importProcessing ? (
+                  <div className="import-progress-container">
+                    <div className="import-progress-text">
+                      <span>Importing & Processing scans...</span>
+                      <span>{importProgress}%</span>
+                    </div>
+                    <div className="import-progress-bar-bg">
+                      <div 
+                        className="import-progress-bar-fill" 
+                        style={{ width: `${importProgress}%` }}
+                      ></div>
+                    </div>
+                    <p className="modal-body" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                      Extracting files, executing U-Net models for segmentations, and writing metadata records. Please do not close this modal.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="import-success-summary">
+                      <div className="import-success-number">{importReport?.scans_imported}</div>
+                      <div className="import-success-label">Scans Successfully Imported</div>
+                      <p className="modal-body" style={{ marginTop: '0.5rem', fontSize: '0.82rem' }}>
+                        All root scans are loaded into the dataset <strong>{importReport?.dataset_name}</strong>.
+                      </p>
+                    </div>
+
+                    {importReport && importReport.warnings.length > 0 && (
+                      <div className="import-report-box">
+                        <div className="import-report-title">Import Warnings ({importReport.warnings.length})</div>
+                        <ul className="import-report-list">
+                          {importReport.warnings.map((warn, idx) => (
+                            <li key={idx} className="import-report-item">
+                              <span>⚠️</span> {warn}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+                      <button
+                        type="button"
+                        className="modal-close"
+                        onClick={resetImportWizard}
+                      >
+                        Finish
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
       )}
