@@ -47,4 +47,5 @@ dist/
 
 # Azure ML workspace config — contains real subscription/resource IDs
 config.json
+config.json
 azure-ml/check-data.py
