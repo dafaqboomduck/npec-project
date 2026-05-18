@@ -25,7 +25,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
-
 from npec_cv.models import ImageResult
 from npec_cv.models.plant_master import PlantResult
 

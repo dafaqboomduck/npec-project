@@ -35,7 +35,7 @@ pip install -e src/npec_cv[cuda]
 Install from package index after publishing:
 
 ```bash
-pip install npec_cv
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ npec-cv
 ```
 
 ## Build And Publish Wheels
@@ -45,6 +45,12 @@ Build npec_cv wheel:
 ```bash
 mkdir -p build dist
 TMPDIR=$PWD/build python -m build --outdir dist src/npec_cv
+```
+
+Or more simply:
+
+```bash
+python -m build
 ```
 
 Upload each dist directory separately with twine (TestPyPI example):

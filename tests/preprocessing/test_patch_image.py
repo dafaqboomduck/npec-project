@@ -32,7 +32,6 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-
 from npec_cv.exceptions import ConfigurationError
 from npec_cv.helpers.extract_petri_dish import extract_petri_dish
 from npec_cv.inference.inference_manager import InferenceManager

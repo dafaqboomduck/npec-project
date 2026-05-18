@@ -33,7 +33,6 @@ Test coverage
 from __future__ import annotations
 
 import numpy as np
-
 from npec_cv.helpers.extract_petri_dish import extract_petri_dish
 
 

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from npec_cv.configs.lengths import (
     RETURN_EMPTY_MASK,
     RETURN_INSUFFICIENT_PIXELS,

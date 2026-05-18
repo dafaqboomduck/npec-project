@@ -27,7 +27,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
 from npec_cv.models import ImageResult
 from npec_cv.pipeline import CVPipeline

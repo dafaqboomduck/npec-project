@@ -24,7 +24,6 @@ test_prediction.py is run on demand or on a nightly schedule.
 from __future__ import annotations
 
 import numpy as np
-
 from npec_cv.models import ImageResult
 from npec_cv.models.plant_master import PlantResult
 

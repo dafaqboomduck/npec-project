@@ -31,7 +31,6 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-
 from npec_cv.configs.inference import ANCHOR_MODEL_CONFIG, ROOT_MODEL_CONFIG
 from npec_cv.helpers.patchify import patchify
 from npec_cv.pipeline import CVPipeline

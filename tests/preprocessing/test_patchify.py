@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from npec_cv.helpers.patchify import NonUniformStepSizeError, patchify, unpatchify
 
 

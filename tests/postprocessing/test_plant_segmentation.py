@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from npec_cv.core.plant_segmentation import PlantSegmentation
 from npec_cv.exceptions import ConfigurationError
 from npec_cv.models import Anchor, SegmentationResult

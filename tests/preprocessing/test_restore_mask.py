@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from npec_cv.inference.inference_manager import InferenceManager
 from npec_cv.models.inference import ModelConfig
 

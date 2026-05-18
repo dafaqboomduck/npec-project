@@ -27,9 +27,8 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from typer.testing import CliRunner
-
 from npec_cv.cli.main import app
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

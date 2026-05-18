@@ -26,7 +26,6 @@ Test coverage
 from __future__ import annotations
 
 import pytest
-
 from npec_cv.helpers.sort_keys import extract_sort_keys
 
 

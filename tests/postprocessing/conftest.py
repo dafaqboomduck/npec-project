@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from npec_cv.models import Anchor, LengthCalculatorConfig, SegmentationConfig
 
 # ---------------------------------------------------------------------------
