@@ -148,8 +148,6 @@
   gap: var(--space-2);
 }
 
-
-
 /* Toggle switch */
 .param-row--toggle {
   margin-top: var(--space-1);

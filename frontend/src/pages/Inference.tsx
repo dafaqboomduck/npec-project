@@ -119,8 +119,6 @@ export default function Inference() {
     }
   }
 
-
-
   return (
     <div className="inference-page">
       <NavBar />
@@ -161,8 +159,6 @@ export default function Inference() {
                     </div>
                   </div>
                 </section>
-
-
 
                 {/* Active Session */}
                 <section className="sidebar-section">
