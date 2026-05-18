@@ -235,7 +235,7 @@ def download_models(
     force: bool = typer.Option(False, "--force", help="Re-download even if cached."),
 ) -> None:
     """Download .keras models for this package version into the local cache."""
-    from src.npec_cv.helpers.model_loader import get_models_dir
+    from npec_cv.helpers.model_loader import get_models_dir
 
     path = get_models_dir(force_download=force)
     typer.echo(f"Models available at: {path}")
