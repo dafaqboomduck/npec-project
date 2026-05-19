@@ -11,6 +11,7 @@ Exposes the four inference-related endpoints defined in api_spec.yaml:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Annotated
 from uuid import UUID
@@ -356,8 +357,29 @@ async def confirm_prediction(
             ).model_dump(),
         )
 
+    asyncio.create_task(
+        _trigger_retraining_check(),
+        name="retraining-check-feedback",
+    )
+
     logger.info("Confirmed prediction %s by user %s", prediction_id, user.sub)
     return ConfirmPredictionResponse(
         message="Prediction confirmed and annotation created.",
         prediction_id=prediction_id,
     )
+
+
+async def _trigger_retraining_check() -> None:
+    """Fire-and-forget wrapper for the retraining threshold check.
+
+    Uses a fresh DB session for the retraining check so it is not
+    tied to the request session which may be closed before the task runs.
+    """
+    from api.src.db.session import get_sessionmaker
+    from api.src.services.retraining import RetrainingService
+
+    try:
+        async with get_sessionmaker()() as fresh_db:
+            await RetrainingService(fresh_db).check_and_trigger()
+    except Exception as exc:
+        logger.warning("Retraining check failed after confirm: %s", exc)

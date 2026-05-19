@@ -24,8 +24,10 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.src.db.orm import TrainingRun
 from api.src.repositories.training import TrainingRunRepository
 from api.src.schemas.training import (
     TrainingRunDetail,
@@ -238,10 +240,6 @@ class LocalTrainingService(AbstractTrainingService):
         Returns:
             UUID of the running run, or None.
         """
-        from sqlalchemy import select
-
-        from api.src.db.orm import TrainingRun
-
         result = await self._db.execute(
             select(TrainingRun.id).where(TrainingRun.status == TrainingRunStatus.RUNNING.value).limit(1)
         )
@@ -306,21 +304,50 @@ class LocalTrainingService(AbstractTrainingService):
         if proc.returncode == 0:
             # Parse final_f1 from stdout if the script printed it
             final_f1 = _parse_final_f1(stdout.decode())
+            final_f1_value = final_f1 or 0.0
+
+            model_version_id = await _register_model_if_better(
+                run_id=run_id,
+                output_dir=Path(os.getenv("NPEC_OUTPUT_DIR", "/app/data/training_output")),
+                final_f1=final_f1_value,
+                session_factory=session_factory,
+            )
+
             await _update_run_status(
                 run_id=run_id,
                 status=TrainingRunStatus.COMPLETED,
                 final_f1=final_f1,
+                model_version_id=model_version_id,
                 session_factory=session_factory,
             )
+
+            # Backfill model_version_id on epoch metrics if registration succeeded
+            if model_version_id is not None:
+                await _backfill_metric_model_version(
+                    run_id=run_id,
+                    model_version_id=model_version_id,
+                    session_factory=session_factory,
+                )
+
             # Throughput benchmark
             await _write_throughput_metric(
                 run_id=run_id,
                 session_factory=session_factory,
             )
-            logger.info("Training run %s completed (final_f1=%s)", run_id, final_f1)
+            logger.info(
+                "Training run %s completed (final_f1=%s, model_version_id=%s)",
+                run_id,
+                final_f1,
+                model_version_id,
+            )
         else:
             logger.error("Training run %s failed (returncode=%s)", run_id, proc.returncode)
-            await _update_run_status(run_id=run_id, status=TrainingRunStatus.FAILED, session_factory=session_factory)
+            await _update_run_status(
+                run_id=run_id,
+                status=TrainingRunStatus.FAILED,
+                model_version_id=model_version_id,
+                session_factory=session_factory,
+            )
 
 
 # Module-level helpers
@@ -356,6 +383,7 @@ async def _update_run_status(
     run_id: uuid.UUID,
     status: TrainingRunStatus,
     final_f1: float | None = None,
+    model_version_id: uuid.UUID | None = None,
     session_factory=None,
 ) -> None:
     """Update a training_runs row status using a fresh DB session.
@@ -367,12 +395,11 @@ async def _update_run_status(
         run_id: UUID of the run to update.
         status: New status to set.
         final_f1: Optional final F1 score to record on completion.
+        model_version_id: Optional UUID of the registered model version.
         session_factory: The async_sessionmaker to create a session from.
     """
     try:
         async with session_factory() as db:
-            from api.src.db.orm import TrainingRun
-
             row = await db.get(TrainingRun, run_id)
             if row is None:
                 logger.warning(
@@ -384,6 +411,8 @@ async def _update_run_status(
             row.completed_at = datetime.now(timezone.utc)
             if final_f1 is not None:
                 row.final_f1 = final_f1
+            if model_version_id is not None:
+                row.model_version_id = model_version_id
             await db.commit()
             logger.debug("Updated training run %s to status=%s", run_id, status.value)
     except Exception as exc:
@@ -455,8 +484,6 @@ async def _write_throughput_metric(
         throughput = round(len(image_paths) / elapsed, 2) if elapsed > 0 else 0.0
 
         async with session_factory() as db:
-            from sqlalchemy import select
-
             from api.src.db.orm import ModelVersion, MonitoringMetric
             from api.src.schemas.library import ModelStatus
 
@@ -486,3 +513,97 @@ async def _write_throughput_metric(
 
     except Exception as exc:
         logger.error("Throughput benchmark failed for run %s: %s", run_id, exc)
+
+
+async def _register_model_if_better(
+    run_id: uuid.UUID,
+    output_dir: Path,
+    final_f1: float,
+    session_factory,
+) -> uuid.UUID | None:
+    """Conditionally register the trained model if it beats the deployed one.
+
+    Reads MODEL_PROMOTION_MIN_IMPROVEMENT from env (default 0.01).
+    Uses a versioned name based on timestamp so versions never collide.
+
+    Args:
+        run_id: UUID of the completed training run (for the version string).
+        output_dir: Directory where the training script saved its output.
+        final_f1: F1 score achieved during training.
+        session_factory: The async_sessionmaker to use.
+
+    Returns:
+        UUID of the registered model version, or None if not registered.
+    """
+    min_improvement = float(os.getenv("MODEL_PROMOTION_MIN_IMPROVEMENT", "0.01"))
+    artifact_uri = str(output_dir / "root_det_model_512px.keras")
+
+    if not Path(artifact_uri).exists():
+        logger.warning(
+            "Training output not found at '%s' - skipping registration.",
+            artifact_uri,
+        )
+        return None
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    version = f"unet-npec-local-{timestamp}"
+    name = f"Local fine-tune {timestamp}"
+
+    try:
+        async with session_factory() as db:
+            from api.src.repositories.models import ModelRepository
+
+            model_id, was_registered = await ModelRepository(db).register_and_promote_if_better(
+                version=version,
+                name=name,
+                artifact_uri=artifact_uri,
+                final_f1=final_f1,
+                min_improvement=min_improvement,
+            )
+            return model_id if was_registered else None
+    except Exception as exc:
+        logger.error("Model registration failed for run %s: %s", run_id, exc)
+        return None
+
+
+async def _backfill_metric_model_version(
+    run_id: uuid.UUID,
+    model_version_id: uuid.UUID,
+    session_factory,
+) -> None:
+    """Link all f1_validation rows for this run to the registered model.
+
+    Called after successful model registration so the dashboard can
+    filter metrics by model version.
+
+    Args:
+        run_id: UUID of the completed training run.
+        model_version_id: UUID of the newly registered model version.
+        session_factory: The async_sessionmaker to use.
+    """
+    try:
+        async with session_factory() as db:
+            from sqlalchemy import update
+
+            from api.src.db.orm import MonitoringMetric
+
+            await db.execute(
+                update(MonitoringMetric)
+                .where(
+                    MonitoringMetric.metric_name == "f1_validation",
+                    MonitoringMetric.labels["run_id"].astext == str(run_id),
+                )
+                .values(model_version_id=model_version_id)
+            )
+            await db.commit()
+            logger.info(
+                "Backfilled model_version_id=%s on f1_validation metrics for run %s",
+                model_version_id,
+                run_id,
+            )
+    except Exception as exc:
+        logger.error(
+            "Failed to backfill metric model_version_id for run %s: %s",
+            run_id,
+            exc,
+        )

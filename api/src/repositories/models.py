@@ -7,6 +7,7 @@ are admin only.
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -166,6 +167,100 @@ class ModelRepository:
             select(ModelVersion.artifact_uri).where(ModelVersion.status == ModelStatus.DEPLOYED.value).limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def get_deployed_f1(self) -> float | None:
+        """Return the f1_score of the currently deployed model, or None.
+
+        Used by conditional registration to compare against the new model.
+
+        Returns:
+            f1_score float if a deployed model with a non-null f1_score exists,
+            otherwise None.
+        """
+        result = await self._db.execute(
+            select(ModelVersion.f1_score).where(ModelVersion.status == ModelStatus.DEPLOYED.value).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def register_and_promote_if_better(
+        self,
+        version: str,
+        name: str,
+        artifact_uri: str,
+        final_f1: float,
+        min_improvement: float = 0.01,
+    ) -> tuple[uuid.UUID | None, bool]:
+        """Register a new model version if it improves on the deployed model.
+
+        Compares final_f1 against the deployed model's f1_score. If the
+        improvement exceeds min_improvement, inserts a new model_versions row
+        with status='registered' and writes a model_promoted monitoring metric.
+
+        Does not deploy the model - deployment is separate step via
+        POST /models/{id}/deploy. This keeps promotion (quality gate) and
+        deployment (operational step) decoupled.
+
+        Args:
+            version: Unique version string for the new model.
+            name: Human-readable model name.
+            artifact_uri: Path to the .keras file on disk.
+            final_f1: F1 score achieved by the new model.
+            min_improvement: Minimum absolute F1 improvement required.
+
+        Returns:
+            (model_id, was_registered) - model_id is None if not registered.
+        """
+        deployed_f1 = await self.get_deployed_f1()
+
+        # If no deployed model has an F1 score, register unconditionally
+        if deployed_f1 is None or final_f1 >= deployed_f1 + min_improvement:
+            row = ModelVersion(
+                id=uuid.uuid4(),
+                version=version,
+                name=name,
+                artifact_uri=artifact_uri,
+                status=ModelStatus.REGISTERED.value,
+                f1_score=final_f1,
+            )
+            self._db.add(row)
+
+            # Write model_promoted monitoring metric
+            from api.src.db.orm import MonitoringMetric
+
+            self._db.add(
+                MonitoringMetric(
+                    metric_name="model_promoted",
+                    metric_value=1.0,
+                    model_version_id=None,  # not yet deployed
+                    labels={
+                        "new_version": version,
+                        "new_f1": final_f1,
+                        "deployed_f1": deployed_f1 or 0.0,
+                        "improvement": round(final_f1 - (deployed_f1 or 0.0), 4),
+                    },
+                    recorded_at=datetime.now(timezone.utc),
+                )
+            )
+
+            await self._db.commit()
+            await self._db.refresh(row)
+            logger.info(
+                "Registered new model version '%s' (f1=%.4f, improvement=%.4f over %.4f)",
+                version,
+                final_f1,
+                final_f1 - (deployed_f1 or 0.0),
+                deployed_f1 or 0.0,
+            )
+            return row.id, True
+
+        else:
+            logger.info(
+                "New model f1=%.4f did not improve over deployed f1=%.4f " "(min_improvement=%.4f) - not registering.",
+                final_f1,
+                deployed_f1,
+                min_improvement,
+            )
+            return None, False
 
     async def exists(self, model_id: uuid.UUID) -> bool:
         """Return `True` if a model with `model_id` exists.

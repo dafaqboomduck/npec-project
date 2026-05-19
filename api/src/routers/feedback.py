@@ -6,6 +6,8 @@ on the same prediction are allowed.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -19,6 +21,7 @@ from api.src.schemas.auth import TokenData
 from api.src.schemas.common import ErrorCode, ErrorResponse, MessageResponse
 from api.src.schemas.feedback import FeedbackRequest
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Feedback"])
 
 
@@ -41,6 +44,9 @@ async def submit_feedback(
     Multiple submissions from the same user are allowed - each is recorded
     independently. For structured mask corrections use
     POST /annotations/{id}/confirm instead.
+
+    When signal='incorrect', checks the retraining threshold and triggers
+    a new training run if enough incorrect signal have accumulated.
 
     Args:
         body: Request body with `prediction_id`, `signal`, and optional
@@ -73,4 +79,26 @@ async def submit_feedback(
         comment=body.comment,
     )
 
+    if body.signal == "incorrect":
+        asyncio.create_task(
+            _trigger_retraining_check(),
+            name="retraining-check-feedback",
+        )
+
     return MessageResponse(message="Feedback recorded.")
+
+
+async def _trigger_retraining_check() -> None:
+    """Fire-and-forget wrapper for the retraining threshold check.
+
+    Creates a fresh DB session for the retraining check so it is not
+    tied to the request session which may be closed before the task runs.
+    """
+    from api.src.db.session import get_sessionmaker
+    from api.src.services.retraining import RetrainingService
+
+    try:
+        async with get_sessionmaker()() as fresh_db:
+            await RetrainingService(fresh_db).check_and_trigger()
+    except Exception as exc:
+        logger.warning("Retraining check failed after feedback: %s", exc)
