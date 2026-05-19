@@ -11,11 +11,15 @@ import logging
 import os
 from pathlib import Path
 
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.src.db.session import get_session
 from api.src.services.base import AbstractInferenceService
 from api.src.services.deployment import AbstractDeploymentService
 from api.src.services.mock_inference import MockInferenceService
 from api.src.services.storage import AbstractStorageBackend, get_storage_backend
-from api.src.services.training import AbstractTrainingService, StubTrainingService
+from api.src.services.training import AbstractTrainingService, LocalTrainingService
 
 logger = logging.getLogger(__name__)
 
@@ -72,13 +76,18 @@ def get_storage() -> AbstractStorageBackend:
     return _storage_backend
 
 
-def get_training_service() -> AbstractTrainingService:
+def get_training_service(
+    db: AsyncSession = Depends(get_session),
+) -> AbstractTrainingService:
     """Return the active training service.
 
+    Args:
+        db: Injected database session.
+
     Returns:
-      The configured AbstractTrainingService.
+      The configured AbstractTrainingService implementation.
     """
-    return StubTrainingService()
+    return LocalTrainingService(db)
 
 
 def get_deployment_service(db) -> AbstractDeploymentService:

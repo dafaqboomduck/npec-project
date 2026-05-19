@@ -1,17 +1,54 @@
-"""Training service interface and stub implementation.
+"""Training service interface and local implementation.
 
 AbstractTrainingService defines the interface the router depends on.
+
+LocalTrainingService:
+    - Inserts a training_runs row with status='running'
+    - Launches the training script as a subprocess via asyncio
+    - The subprocess writes per-epoch f1_validation metrics to
+        monitoring_metrics during training
+    - After the subprocess exits, writes the throughput benchmark
+        metric and updates the run row to completed/failed
+    - Exposes stop() which sends SIGTERM to the subprocess
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import uuid
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 from uuid import UUID
 
-from api.src.schemas.training import TrainingRunDetail, TrainingRunSummary, TrainingStartRequest, TrainingStartResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.src.repositories.training import TrainingRunRepository
+from api.src.schemas.training import (
+    TrainingRunDetail,
+    TrainingRunStatus,
+    TrainingRunSummary,
+    TrainingStartRequest,
+    TrainingStartResponse,
+)
 
 logger = logging.getLogger(__name__)
+
+# Path to the training script inside the container.
+_TRAINING_SCRIPT = Path(
+    os.getenv(
+        "NPEC_TRAINING_SCRIPT",
+        "/app/scripts/train_and_report.py",
+    )
+)
+
+# In-memory registry of running subprocesses keyed by run_id.
+# Lives in the API process because asyncio subprocess handles
+# cannot be serialised. On restart all entries are lost.
+_running_processes: dict[uuid.UUID, asyncio.subprocess.Process] = {}
 
 
 class AbstractTrainingService(ABC):
@@ -63,21 +100,389 @@ class AbstractTrainingService(ABC):
         """
 
 
-class StubTrainingService(AbstractTrainingService):
-    """Placeholder implementation - all methods raise NotImplementedError."""
+class LocalTrainingService(AbstractTrainingService):
+    """Training service for local and on-premise deployments.
+
+    Runs the training script as an asyncio subprocess. The subprocess
+    communicates back by writing rows directly to monitoring_metrics
+    using its own DB connection - it does not share the FastAPI session.
+
+    After the subprocess exits:
+        - The run is updated to 'completed' or 'failed'.
+        - A throughput benchmark is run and written to monitoring_metrics.
+    """
+
+    def __init__(self, db: AsyncSession) -> None:
+        """Initialise with a DB session for run row management.
+
+        Args:
+            db: An open async SQLAlchemy session.
+        """
+        self._db = db
 
     async def start(self, hyperparameters: TrainingStartRequest | None) -> TrainingStartResponse:
-        """Not implemented yet."""
-        raise NotImplementedError
+        """Insert a training_runs row and launch the training subprocess.
+
+        Returns immediately - training runs in the background.
+
+        Args:
+            hyperparameters: Optional hyperparameter overridess.
+
+        Returns:
+            TrainingStartResponse with the new run_id.
+
+        Raises:
+            RuntimeError: If a training run is already in progress.
+        """
+        # Prevent concurrent training runs
+        existing = await self._get_running_id()
+        if existing is not None:
+            raise RuntimeError(
+                f"A training run ({existing}) is already in progress. "
+                "Stop it via DELETE /training/runs/{id} before starting a new one."
+            )
+
+        repo = TrainingRunRepository(self._db)
+        params = hyperparameters.model_dump(exclude_none=True) if hyperparameters else {}
+        row = await repo.create(hyperparameters=params or None)
+        await self._db.commit()
+
+        run_id = row.id
+
+        # Launch the subprocess in the background
+        asyncio.create_task(
+            self._run_training_subprocess(run_id=run_id, hyperparameters=params),
+            name=f"training-{run_id}",
+        )
+
+        logger.info("Training run %s started (hyperparameters=%s)", run_id, params)
+        return TrainingStartResponse(
+            run_id=run_id,
+            message=f"Training run {run_id} started. Call GET /training/runs/{run_id} for progress.",
+        )
 
     async def get_runs(self) -> list[TrainingRunSummary]:
-        """Not implemented yet."""
-        raise NotImplementedError
+        """Return all training runs ordered by started_at descending.
+
+        Returns:
+            List of TrainingRunSummary.
+        """
+        return await TrainingRunRepository(self._db).list()
 
     async def get_run(self, run_id: UUID) -> TrainingRunDetail | None:
-        """Not implemented yet."""
-        raise NotImplementedError
+        """Return training run detail, or None if not found.
+
+        Args:
+            run_id: UUID of the training run.
+
+        Returns:
+            TrainingRunDetail or None.
+        """
+        return await TrainingRunRepository(self._db).get(run_id)
 
     async def stop(self, run_id: UUID) -> bool:
-        """Not implemented yet."""
-        raise NotImplementedError
+        """Terminate the running subprocess and set status to 'stopped'.
+
+        Args:
+            run_id: UUID of the training run to stop.
+
+        Returns:
+            True if the run was found and stopped, False if not found.
+
+        Raises:
+            ValueError: If the run exists but is not in 'running' state.
+        """
+        repo = TrainingRunRepository(self._db)
+        row = await repo.get_raw(run_id)
+
+        if row is None:
+            return False
+
+        if row.status != TrainingRunStatus.RUNNING.value:
+            raise ValueError(f"Training run {run_id} is in state '{row.status}' - " "only running runs can be stopped.")
+
+        # Terminate the subprocess if we have a handle
+        proc = _running_processes.pop(run_id, None)
+        if proc is not None:
+            try:
+                proc.terminate()
+                # Give it 5 seconds to exit cleanly, then kill
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                logger.info("Terminated subprocess for training run %s", run_id)
+            except ProcessLookupError:
+                # Process already exited on its own
+                logger.debug("Subprocess for run %s already exited", run_id)
+        else:
+            logger.warning(
+                "No subprocess handle found for %s - "
+                "updating DB status only (process may have been lost on restart).",
+                run_id,
+            )
+
+        row.status = TrainingRunStatus.STOPPED.value
+        row.completed_at = datetime.now(timezone.utc)
+        await self._db.commit()
+
+        logger.info("Training run %s stopped", run_id)
+        return True
+
+    # Internal helpers
+
+    async def _get_running_id(self) -> uuid.UUID | None:
+        """Return the run_id of any currently running training run, or None.
+
+        Returns:
+            UUID of the running run, or None.
+        """
+        from sqlalchemy import select
+
+        from api.src.db.orm import TrainingRun
+
+        result = await self._db.execute(
+            select(TrainingRun.id).where(TrainingRun.status == TrainingRunStatus.RUNNING.value).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _run_training_subprocess(
+        self,
+        run_id: uuid.UUID,
+        hyperparameters: dict[str, Any],
+    ) -> None:
+        """Launch the training script and monitor it to completion.
+
+        1. Builds the subprocess command with hyperparameters as env vars.
+        2. Registers the process in _running_processes so stop() can find it.
+        3. Awaits process exit.
+        4. Updates the run row to 'completed' or 'failed'.
+        5. On success, runs the throughput bechmark.
+
+        Args:
+            run_id: UUID of the training_runs row to update.
+            hyperparameters: Hyperparameter overrides passed as env vars.
+        """
+        from api.src.db.session import get_sessionmaker
+
+        env = _build_subprocess_env(run_id=run_id, hyperparameters=hyperparameters)
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "python",
+                str(_TRAINING_SCRIPT),
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _running_processes[run_id] = proc
+            logger.info(
+                "Training subprocess started (run_id=%s, pid=%s)",
+                run_id,
+                proc.pid,
+            )
+
+            stdout, stderr = await proc.communicate()
+
+            if stdout:
+                logger.info("Training stdout [%s]:\n%s", run_id, stdout.decode())
+            if stderr:
+                logger.warning("Training stderr [%s]:\n%s", run_id, stderr.decode())
+
+        except Exception as exc:
+            logger.error("Failed to launch training subprocess for run %s: %s", run_id, exc)
+            await _update_run_status(
+                run_id=run_id,
+                status=TrainingRunStatus.FAILED,
+                session_factory=get_sessionmaker(),
+            )
+            return
+        finally:
+            _running_processes.pop(run_id, None)
+
+        session_factory = get_sessionmaker()
+
+        if proc.returncode == 0:
+            # Parse final_f1 from stdout if the script printed it
+            final_f1 = _parse_final_f1(stdout.decode())
+            await _update_run_status(
+                run_id=run_id,
+                status=TrainingRunStatus.COMPLETED,
+                final_f1=final_f1,
+                session_factory=session_factory,
+            )
+            # Throughput benchmark
+            await _write_throughput_metric(
+                run_id=run_id,
+                session_factory=session_factory,
+            )
+            logger.info("Training run %s completed (final_f1=%s)", run_id, final_f1)
+        else:
+            logger.error("Training run %s failed (returncode=%s)", run_id, proc.returncode)
+            await _update_run_status(run_id=run_id, status=TrainingRunStatus.FAILED, session_factory=session_factory)
+
+
+# Module-level helpers
+def _build_subprocess_env(
+    run_id: uuid.UUID,
+    hyperparameters: dict[str, Any],
+) -> dict[str, str]:
+    """Build the environment for the training subprcess.
+
+    Passes DATABASE_URL and hyperparameters as environment variables so the
+    training script can write metrics back to the DB and apply overrides
+    without needing a config file.
+
+    Args:
+        run_id: UUID of the training run.
+        hyperparameters: Hyperparameter overrides dict.
+
+    Returns:
+        Dict of environment variables for the subprocess.
+    """
+    env = {**os.environ}
+    env["TRAINING_RUN_ID"] = str(run_id)
+    if "learning_rate" in hyperparameters:
+        env["NPEC_LEARNING_RATE"] = str(hyperparameters["learning_rate"])
+    if "batch_size" in hyperparameters:
+        env["NPEC_BATCH_SIZE"] = str(hyperparameters["batch_size"])
+    if "epochs" in hyperparameters:
+        env["NPEC_EPOCHS"] = str(hyperparameters["epochs"])
+    return env
+
+
+async def _update_run_status(
+    run_id: uuid.UUID,
+    status: TrainingRunStatus,
+    final_f1: float | None = None,
+    session_factory=None,
+) -> None:
+    """Update a training_runs row status using a fresh DB session.
+
+    Uses its own session so this can be called from an asyncio Task that
+    otulives the original request session.
+
+    Args:
+        run_id: UUID of the run to update.
+        status: New status to set.
+        final_f1: Optional final F1 score to record on completion.
+        session_factory: The async_sessionmaker to create a session from.
+    """
+    try:
+        async with session_factory() as db:
+            from api.src.db.orm import TrainingRun
+
+            row = await db.get(TrainingRun, run_id)
+            if row is None:
+                logger.warning(
+                    "_update_run_status: run %s not found in DB",
+                    run_id,
+                )
+                return
+            row.status = status.value
+            row.completed_at = datetime.now(timezone.utc)
+            if final_f1 is not None:
+                row.final_f1 = final_f1
+            await db.commit()
+            logger.debug("Updated training run %s to status=%s", run_id, status.value)
+    except Exception as exc:
+        logger.error("Failed to update training run %s status to %s: %s", run_id, status.value, exc)
+
+
+def _parse_final_f1(stdout: str) -> float | None:
+    """Parse the final F1 score from training script stdout.
+
+    The training script is expected to print a line in the fromat:
+        FINAL_F1=0.923
+
+    Args:
+        stdout: Decoded stdout from the training subprocess.
+
+    Returns:
+        Parsed float or None if the line is missing or malformed.
+    """
+    for line in stdout.splitlines():
+        if line.startswith("FINAL_F1="):
+            try:
+                return float(line.split("=", 1)[1].strip())
+            except ValueError:
+                logger.warning("Could not parse FINAL_F1 from line: %r", line)
+    return None
+
+
+async def _write_throughput_metric(
+    run_id: uuid.UUID,
+    session_factory=None,
+) -> None:
+    """Run a quick throughput benchmark and write the result to monitoring_metrics.
+
+    Passes a small batch of validation images through the inference service,
+    measures wall-clock time, and computes images per second.
+
+    Args:
+        run_id: UUID of the training run that just completed (for logging).
+        session_factory: The async_sessionmaker to use.
+    """
+    import time
+    from pathlib import Path
+
+    try:
+        # Find validation images
+        val_dir = Path(os.getenv("NPEC_VALIDATION_DIR", "/app/npec_cv/artifacts/validation"))
+        if not val_dir.exists():
+            logger.warning(
+                "Throughput benchmark skipped - validation dir not found at %s",
+                val_dir,
+            )
+            return
+
+        image_paths = list(val_dir.glob("*.png"))[:10]
+        if not image_paths:
+            logger.warning("Throughput benchmark skipped - no .png images in %s", val_dir)
+            return
+
+        from api.src.dependencies import get_inference_service
+
+        service = get_inference_service()
+
+        start = time.perf_counter()
+        for path in image_paths:
+            image_bytes = path.read_bytes()
+            await service.run(image_bytes=image_bytes, filename=path.name)
+        elapsed = time.perf_counter() - start
+
+        throughput = round(len(image_paths) / elapsed, 2) if elapsed > 0 else 0.0
+
+        async with session_factory() as db:
+            from sqlalchemy import select
+
+            from api.src.db.orm import ModelVersion, MonitoringMetric
+            from api.src.schemas.library import ModelStatus
+
+            result = await db.execute(
+                select(ModelVersion.id).where(ModelVersion.status == ModelStatus.DEPLOYED.value).limit(1)
+            )
+            model_version_id = result.scalar_one_or_none()
+
+            db.add(
+                MonitoringMetric(
+                    metric_name="throughput_img_per_s",
+                    metric_value=throughput,
+                    model_version_id=model_version_id,
+                    labels={"run_id": str(run_id)},
+                    recorded_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+
+        logger.info(
+            "Throughput benchmark for run %s: %.2f img/s (%d images in %.2fs)",
+            run_id,
+            throughput,
+            len(image_paths),
+            elapsed,
+        )
+
+    except Exception as exc:
+        logger.error("Throughput benchmark failed for run %s: %s", run_id, exc)

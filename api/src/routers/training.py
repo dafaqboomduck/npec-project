@@ -20,25 +20,12 @@ from api.src.core.security import require_admin
 from api.src.dependencies import get_training_service
 from api.src.schemas.auth import TokenData
 from api.src.schemas.common import ErrorCode, ErrorResponse, MessageResponse
-from api.src.schemas.training import TrainingRunDetail, TrainingRunSummary, TrainingStartResponse
+from api.src.schemas.training import TrainingRunDetail, TrainingRunSummary, TrainingStartRequest, TrainingStartResponse
 from api.src.services.training import AbstractTrainingService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/training", tags=["Training"])
-
-# Shared 501 response used by all stubs
-_NOT_IMPLEMENTED = ErrorResponse(
-    error_code=ErrorCode.INTERNAL_ERROR,
-    message="Not implemented yet. This endpoint will be live after Task 2097.",
-)
-
-
-def _501() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=_NOT_IMPLEMENTED.model_dump(),
-    )
 
 
 @router.post(
@@ -49,22 +36,18 @@ def _501() -> HTTPException:
     responses={
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
-        501: {
-            "model": ErrorResponse,
-            "description": "Not yet implemented",
-        },
+        409: {"model": ErrorResponse, "description": "A training run is already in progress"},
     },
 )
 async def start_training(
-    body: TrainingStartResponse | None = None,
+    body: TrainingStartRequest | None = None,
     user: Annotated[TokenData, Depends(require_admin)] = None,
     service: AbstractTrainingService = Depends(get_training_service),
 ) -> TrainingStartResponse:
     """Trigger a new background training run.
 
-    Inserts a training_runs row with status='running', launches
-    npec_cv training script as a subprocess, and returns the run_id
-    immediately without blocking.
+    Returns immediately with the run_id - training continues in the
+    background. Poll GET /training/runs/{run_id} for status.
 
     Args:
         body: Optional hyperparameter overrides. Uses pipeline defaults
@@ -77,12 +60,18 @@ async def start_training(
 
     Raises:
         HTTPException: 403 for non-admin tokens.
-        HTTPException: 501 until Task 2097 is implemented.
+        HTTPException: 409 if a run is already in progress.
     """
     try:
         return await service.start(body)
-    except NotImplementedError:
-        raise _501()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ErrorResponse(
+                error_code=ErrorCode.CONFLICT,
+                message=str(exc),
+            ).model_dump(),
+        )
 
 
 @router.get(
@@ -92,10 +81,6 @@ async def start_training(
     responses={
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
-        501: {
-            "model": ErrorResponse,
-            "description": "Not yet implemented.",
-        },
     },
 )
 async def list_training_runs(
@@ -113,12 +98,8 @@ async def list_training_runs(
 
     Raises:
         HTTPException: 403 for non-admin tokens.
-        HTTPException: 501 until Task 2097 is implemented.
     """
-    try:
-        return await service.get_runs()
-    except NotImplementedError:
-        raise _501()
+    return await service.get_runs()
 
 
 @router.get(
@@ -129,10 +110,6 @@ async def list_training_runs(
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
-        501: {
-            "model": ErrorResponse,
-            "description": "Not yet implemented",
-        },
     },
 )
 async def get_training_run(
@@ -153,13 +130,8 @@ async def get_training_run(
     Raises:
         HTTPException: 403 for non-admin tokens
         HTTPException: 404 if the run does not exist.
-        HTTPException: 501 until Task 2097 is implemented.
     """
-    try:
-        run = await service.get_run(run_id)
-    except NotImplementedError:
-        raise _501()
-
+    run = await service.get_run(run_id)
     if run is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -182,10 +154,6 @@ async def get_training_run(
         409: {
             "model": ErrorResponse,
             "description": "Run is not in running state",
-        },
-        501: {
-            "model": ErrorResponse,
-            "description": "Not yet implemented",
         },
     },
 )
@@ -212,12 +180,9 @@ async def stop_training_run(
         HTTPException: 403 for non-admin tokens.
         HTTPException: 404 if the run does not exist.
         HTTPException: 409 if the run is not in running state.
-        HTTPException: 501 until Task 2099 is implemented.
     """
     try:
         found = await service.stop(run_id)
-    except NotImplementedError:
-        raise _501()
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

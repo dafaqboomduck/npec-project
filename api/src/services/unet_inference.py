@@ -95,7 +95,7 @@ class UNetInferenceService(AbstractInferenceService):
             from npec_cv.configs.inference import build_inference_config
             from npec_cv.models.inference import ModelConfig
 
-            artifact_dir = self._artifact_path if self.self._artifact_path.is_dir() else self._artifact_path.parent
+            artifact_dir = self._artifact_path if self._artifact_path.is_dir() else self._artifact_path.parent
 
             root_base_cfg, anchor_cfg = build_inference_config(artifact_dir)
             root_cfg = ModelConfig(
