@@ -54,7 +54,7 @@ def save_annotation_mask(
     mask_bytes: bytes,
     backend: AbstractStorageBackend,
 ) -> str:
-    """Write a .tiff mask to disk and return a file URL.
+    """Write a .tiff mask to disk and return a file key.
 
     Args:
         annotation_id: UUID of the annotation - used as the filename.
@@ -62,16 +62,16 @@ def save_annotation_mask(
         backend: Storage backend to upload to.
 
     Returns:
-        URL of the uploaded mask.
+        Key of the uploaded mask.
 
     Raises:
         Exception: On any upload failure.
     """
     object_name = f"annotation-masks/{annotation_id}_mask.tiff"
-    url = backend.upload(
+    key = backend.upload(
         object_name=object_name,
         data=mask_bytes,
         content_type="image/tiff",
     )
     logger.debug("Saved annotation mask: %s", object_name)
-    return url
+    return key

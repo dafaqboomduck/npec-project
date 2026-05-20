@@ -15,15 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.db.orm import Annotation
 from api.src.schemas.library import AnnotationResponse, AnnotationStatus
+from api.src.services.storage import AbstractStorageBackend
 
 logger = logging.getLogger(__name__)
 
 
-def _row_to_schema(row: Annotation) -> AnnotationResponse:
+def _row_to_schema(row: Annotation, storage: AbstractStorageBackend) -> AnnotationResponse:
     """Convert a `Annotation` ORM row to a `AnnotationResponse`.
 
     Args:
         row: The ORM row from the database.
+        storage: The injected backend storage.
 
     Returns:
         AnnotationResponse
@@ -34,7 +36,7 @@ def _row_to_schema(row: Annotation) -> AnnotationResponse:
         dataset_id=row.dataset_id,
         status=AnnotationStatus(row.status),
         image_uri=row.image_uri,
-        mask_url=row.mask_uri,
+        mask_url=storage.sign(row.mask_uri) if row.mask_uri else None,
         species=row.species,
         age_days=row.age_days,
         treatment=row.treatment,
@@ -46,13 +48,15 @@ def _row_to_schema(row: Annotation) -> AnnotationResponse:
 class AnnotationRepository:
     """Paginated, filtered read access to the `annotations` table."""
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(self, db: AsyncSession, storage: AbstractStorageBackend) -> None:
         """Paginated, filtered read access to the `annotations` table.
 
         Args:
             db: An open async SQLAlchemy session injected by ``get_session``.
+            storage: Injected storage backend.
         """
         self._db = db
+        self._storage = storage
 
     async def list(
         self,
@@ -86,7 +90,7 @@ class AnnotationRepository:
         q = q.order_by(Annotation.created_at.desc()).offset(offset).limit(page_size)
 
         result = await self._db.execute(q)
-        return [_row_to_schema(r) for r in result.scalars().all()]
+        return [_row_to_schema(r, self._storage) for r in result.scalars().all()]
 
     async def list_pending_for_dataset(
         self,
@@ -124,7 +128,7 @@ class AnnotationRepository:
         row = await self._db.get(Annotation, annotation_id)
         if row is None:
             return None
-        return _row_to_schema(row)
+        return _row_to_schema(row, self._storage)
 
     async def delete(self, annotation_id: uuid.UUID) -> bool:
         """Delete the annotation with `annotation_id`.
@@ -171,7 +175,7 @@ class AnnotationRepository:
         await self._db.commit()
         await self._db.refresh(row)
         logger.info("Confirmed annotation %s", annotation_id)
-        return _row_to_schema(row)
+        return _row_to_schema(row, self._storage)
 
     async def create_from_prediction(
         self,
@@ -256,4 +260,4 @@ class AnnotationRepository:
             annotation.id,
             dataset_id,
         )
-        return _row_to_schema(annotation)
+        return _row_to_schema(annotation, self._storage)

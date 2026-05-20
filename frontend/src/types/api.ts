@@ -169,7 +169,9 @@ export interface PredictionResponse {
   status: 'ok' | 'error';
   input_filename?: string;
   metadata: PredictionMetadata;
+  input_url?: string;
   segmentation_mask_url?: string;
+  tip_photo_url?: string;
   plants: Plant[];
   overall_confidence: number;
   warnings: string[];

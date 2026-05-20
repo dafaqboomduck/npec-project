@@ -367,7 +367,7 @@ async def upload_dataset_image(
     )
 
     dataset_repo = DatasetRepository(db)
-    annotation_repo = AnnotationRepository(db)
+    annotation_repo = AnnotationRepository(db, storage)
 
     # Verify dataset exists
     dataset = await dataset_repo.get(dataset_id)
@@ -457,7 +457,7 @@ async def run_dataset_inference(
     if dataset is None:
         raise _404("Dataset not found.")
 
-    pending = await AnnotationRepository(db).list_pending_for_dataset(dataset_id)
+    pending = await AnnotationRepository(db, storage).list_pending_for_dataset(dataset_id)
 
     if not pending:
         return MessageResponse(message="No pending annotations found for this dataset.")
@@ -503,6 +503,7 @@ async def list_annotations(
     page_size: int = Query(default=20, ge=1, le=100, description="Results per page"),
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
 ) -> list[AnnotationResponse]:
     """Return a paginated list of annotations.
 
@@ -516,11 +517,12 @@ async def list_annotations(
         page_size: Number of results per page (max 100).
         user: Authenticated user from Bearer token.
         db: Injected database session.
+        storage: Injected backend storage.
 
     Returns:
         Paginated list of `AnnotationResponse`.
     """
-    repo = AnnotationRepository(db)
+    repo = AnnotationRepository(db, storage)
     return await repo.list(
         species=species,
         growth_stage=growth_stage.value if growth_stage else None,
@@ -543,6 +545,7 @@ async def get_annotation(
     annotation_id: UUID,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
 ) -> AnnotationResponse:
     """Return the annotation with `annotation_id`.
 
@@ -550,6 +553,7 @@ async def get_annotation(
         annotation_id: UUID of the annotation.
         user: Authenticated user from Bearer token.
         db: Injected database session.
+        storage: Injected backend storage.
 
     Returns:
         AnnotationResponse
@@ -557,7 +561,7 @@ async def get_annotation(
     Raises:
         HTTPException: 404 if the annotation does not exist.
     """
-    repo = AnnotationRepository(db)
+    repo = AnnotationRepository(db, storage)
     annotation = await repo.get(annotation_id)
     if annotation is None:
         raise _404()
@@ -577,6 +581,7 @@ async def delete_annotation(
     annotation_id: UUID,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
 ) -> MessageResponse:
     """Remove the annotation with `annotation_id`.
 
@@ -584,6 +589,7 @@ async def delete_annotation(
         annotation_id: UUID of the annotation to remove.
         user: Authenticated user from Bearer token.
         db: Injected database session.
+        storage: Injected backend storage.
 
     Returns:
         `MessageResponse` confirming deletion.
@@ -591,7 +597,7 @@ async def delete_annotation(
     Raises:
         HTTPException: 404 if the annotation does not exist.
     """
-    deleted = await AnnotationRepository(db).delete(annotation_id)
+    deleted = await AnnotationRepository(db, storage).delete(annotation_id)
     if not deleted:
         raise _404("Annotation not found.")
     logger.info("Deleted annotation %s by use %s", annotation_id, user.sub)
@@ -655,7 +661,7 @@ async def confirm_annotation(
         )
 
     try:
-        mask_url = save_annotation_mask(
+        mask_key = save_annotation_mask(
             annotation_id,
             mask_bytes,
             backend=storage,

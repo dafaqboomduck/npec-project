@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 STORAGE_BACKEND: str = os.getenv("STORAGE_BACKEND", "minio")
 
 MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+MINIO_PUBLIC_ENDPOINT: str = os.getenv("MINIO_PUBLIC_ENDPOINT", MINIO_ENDPOINT)
 MINIO_ROOT_USER: str = os.getenv("MINIO_ROOT_USER", "minioadmin")
 MINIO_ROOT_PASSWORD: str = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin")
 MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "npec-artifacts")
@@ -60,7 +61,7 @@ class AbstractStorageBackend(ABC):
         data: bytes,
         content_type: str = "application/octet-stream",
     ) -> str:
-        """Upload `data` and return a URL the frontend can fetch.
+        """Upload `data` and return a key of the object.
 
         Args:
             object_name: Logical path/name for the object.
@@ -88,6 +89,17 @@ class AbstractStorageBackend(ABC):
 
         Raises:
             Exception: On any storage failure.
+        """
+
+    @abstractmethod
+    def sign(self, object_name: str) -> str:
+        """Return a fresh URL for an already-uploaded object.
+
+        Args:
+            object_name: The key returned by upload().
+
+        Returns:
+            A URL the frontend can fetch.
         """
 
 
@@ -130,7 +142,7 @@ class LocalStorageBackend(AbstractStorageBackend):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
         logger.debug("LocalStorageBackend: wrote %s", dest)
-        return dest.resolve().as_uri()
+        return object_name
 
     def download(self, uri: str) -> bytes:
         """Read bytes from a file:// URI or absolute path.
@@ -143,6 +155,17 @@ class LocalStorageBackend(AbstractStorageBackend):
         """
         path = Path(uri.replace("file://", "")) if uri.startswith("file://") else Path(uri)
         return path.read_bytes()
+
+    def sign(self, object_name: str) -> str:
+        """Return a proxy route for an already-uploaded object.
+
+        Args:
+            object_name: The key returned by upload().
+
+        Returns:
+            The existing proxy route.
+        """
+        return f"/api/v1/files/{object_name}"
 
 
 # MinIO implementation
@@ -180,7 +203,8 @@ class MinIOStorageBackend(AbstractStorageBackend):
         self._bucket = bucket
         self._secure = secure
         self._ttl = timedelta(seconds=presign_ttl_seconds)
-        self._client = None
+        self._client = None  # for put_object / get_object
+        self._public_client = None  # for presign only
 
     def _get_client(self):
         """Return the MinIO client, initialising it on first call.
@@ -204,6 +228,29 @@ class MinIOStorageBackend(AbstractStorageBackend):
                 logger.info("MinIOStorageBackend: created bucket '%s'", self._bucket)
         return self._client
 
+    def _get_public_client(self):
+        """Return the public MinIO client, initialising it on first call.
+
+        Returns:
+            An initialised `minio.Minio` client.
+        """
+        if self._public_client is None:
+            from minio import Minio
+
+            client = Minio(
+                MINIO_PUBLIC_ENDPOINT,
+                access_key=self._access_key,
+                secret_key=self._secret_key,
+                secure=self._secure,
+            )
+            # Pre-seed the region from the internal client
+            internal = self._get_client()
+            region = internal._get_region(self._bucket)
+            client._region_map[self._bucket] = region
+
+            self._public_client = client
+        return self._public_client
+
     def upload(
         self,
         object_name: str,
@@ -222,20 +269,31 @@ class MinIOStorageBackend(AbstractStorageBackend):
         """
         import io
 
-        client = self._get_client()
-        client.put_object(
+        self._get_client().put_object(
             bucket_name=self._bucket,
             object_name=object_name,
             data=io.BytesIO(data),
             length=len(data),
             content_type=content_type,
         )
-        url = client.presigned_get_object(
+        logger.debug("MinIOStorageBackend: uploaded '%s'", object_name)
+        return object_name
+
+    def sign(self, object_name: str) -> str:
+        """Return a fresh URL for an already-uploaded object.
+
+        Args:
+            object_name: The key returned by upload().
+
+        Returns:
+            A URL the frontend can fetch.
+        """
+        url = self._get_public_client().presigned_get_object(
             bucket_name=self._bucket,
             object_name=object_name,
             expires=self._ttl,
         )
-        logger.debug("MinIOStorageBackend: uploaded '%s' -> %s", object_name, url[:80])
+        logger.debug("MinIOStorageBackend: signed '%s' -> %s", object_name, url[:80])
         return url
 
     def download(self, uri: str) -> bytes:

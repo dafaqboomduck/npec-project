@@ -25,6 +25,7 @@ from api.src.schemas.predictions import (
     PredictionResponse,
     PredictionStatus,
 )
+from api.src.services.storage import AbstractStorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +36,17 @@ _UNKNOWN_MODEL_VERSION_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 class DatabasePredictionRepository(AbstractPredictionRepository):
     """Persists predictions to the `predictions` table."""
 
-    def __init__(self, db: AsyncSession, user_id: uuid.UUID) -> None:
+    def __init__(self, db: AsyncSession, user_id: uuid.UUID, storage: AbstractStorageBackend) -> None:
         """Persists predictions to the `predictions` table.
 
         Args:
             db: An open SQLAlchemy `AsyncSession` injected by `get_session`.
             user_id: The UUID of the authenticated user making the request.
+            storage: Injected storage backend.
         """
         self._db = db
         self._user_id = user_id
+        self._storage = storage
 
     # Internal helpers
 
@@ -93,9 +96,9 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
                 normalisation_applied=row.normalisation_applied,
                 scale_factor_mm_per_px=row.scale_factor_mm_per_px or 0.0,
             ),
-            segmentation_mask_url=row.segmentation_mask_uri,
-            input_url=row.input_uri,
-            tip_photo_url=getattr(row, "tip_photo_uri", None),
+            segmentation_mask_url=self._storage.sign(row.segmentation_mask_uri) if row.segmentation_mask_uri else None,
+            input_url=self._storage.sign(row.input_uri) if row.input_uri else None,
+            tip_photo_url=self._storage.sign(row.tip_photo_uri) if row.tip_photo_uri else None,
             plants=plants,
             warnings=list(row.warnings or []),
         )
@@ -170,9 +173,13 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         )
         self._db.add(row)
         await self._db.commit()
-        await self._db.refresh(row)
+
+        result = await self._db.execute(
+            select(Prediction).options(selectinload(Prediction.model_version)).where(Prediction.id == row.id)
+        )
+        saved_row = result.scalar_one()
         logger.debug("Persisted prediction %s to DB", prediction.prediction_id)
-        return prediction
+        return self._orm_to_schema(saved_row)
 
     async def get(self, prediction_id: uuid.UUID) -> PredictionResponse | None:
         """Fetch the prediction with `prediction_id` from the DB.

@@ -79,3 +79,32 @@ export async function apiClient<T>(
 
   return response.json() as Promise<T>;
 }
+
+/**
+ * Resolves an artifact URL or path returned by the backend storage service.
+ * - Absolute URLs (MinIO presigned URLs) are returned as-is.
+ * - Relative paths (Local storage proxy paths "/api/v1/files/...") are prefixed
+ *   with the backend origin so they route to port 8000 instead of port 3000.
+ */
+export function getArtifactUrl(url: string | undefined | null): string {
+  if (!url) return '';
+  if (url.startsWith('data:')) {
+    return url;
+  }
+
+  // Already an absolute URL (e.g. MinIO presigned URL, external URL)
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+
+  // Local storage proxy path (starts with /api/v1/files/... or similar)
+  if (url.startsWith('/')) {
+    if (BASE_URL.startsWith('http')) {
+      const origin = new URL(BASE_URL).origin;
+      return `${origin}${url}`;
+    }
+    return `${window.location.origin}${url}`;
+  }
+
+  return url;
+}

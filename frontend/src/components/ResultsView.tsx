@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getArtifactUrl } from '../api/client';
 import type { PredictionResponse, Plant } from '../types/api';
 import './ResultsView.css';
 
@@ -34,10 +35,16 @@ export default function ResultsView({
 
   const overlayModes: OverlayMode[] = ['scan', 'mask', 'tips'];
 
+  // Prefer backend-served URLs, fall back to local object URL from upload
+  const inputDisplayUrl =
+    getArtifactUrl(result.input_url) || (filePreviewUrl ?? '');
+
   const displayImageUrl =
     overlayMode === 'mask' && result.segmentation_mask_url
-      ? result.segmentation_mask_url
-      : filePreviewUrl;
+      ? getArtifactUrl(result.segmentation_mask_url)
+      : overlayMode === 'tips' && result.tip_photo_url
+      ? getArtifactUrl(result.tip_photo_url)
+      : inputDisplayUrl;
 
   return (
     <div className="results-view">

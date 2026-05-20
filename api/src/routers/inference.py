@@ -114,7 +114,7 @@ async def predict(
         HTTPException: 415 if the file format is not accepted.
         HTTPException: 422 if the image is corrupt or has an invalid resolution.
     """
-    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
     image_bytes = await file.read()
     original_filename = file.filename or "upload"
@@ -167,7 +167,7 @@ async def predict(
     prediction = prediction.model_copy(update={"segmentation_mask_url": mask_uri})
 
     # Persist to repository
-    await repo.save(
+    prediction = await repo.save(
         prediction,
         filename=original_filename,
         input_uri=input_uri,
@@ -206,6 +206,7 @@ async def list_predictions(
     ),
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
 ) -> list[PredictionResponse]:
     """Return a paginated list of predictions.
 
@@ -217,11 +218,12 @@ async def list_predictions(
         confirmed: Boolean determining the confirmation status.
         user: Authenticated user from Bearer token.
         db: Injected database session.
+        storage: Injected storage backend.
 
     Returns:
         Paginated list of `AnnotationResponse`.
     """
-    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
     return await repo.list_by_user(
         page=page,
@@ -240,6 +242,7 @@ async def get_prediction(
     prediction_id: UUID,
     user: Annotated[TokenData, Depends(get_current_user)],
     db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
 ) -> PredictionResponse:
     """Return a previously stored prediction by its UUID.
 
@@ -247,6 +250,7 @@ async def get_prediction(
         prediction_id: UUID of the prediction to retrieve.
         user: The authenticated user extracted from the Bearer token.
         db: Injected database session.
+        storage: Injected storage backend.
 
     Returns:
         The stored `PredictionResponse`.
@@ -254,7 +258,7 @@ async def get_prediction(
     Raises:
         HTTPException: 404 if no prediction with `prediction_id` exists.
     """
-    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
     prediction = await repo.get(prediction_id)
     if prediction is None:
@@ -272,6 +276,7 @@ async def delete_prediction(
     prediction_id: UUID,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
 ) -> MessageResponse:
     """Remove a prediction from the store.
 
@@ -279,6 +284,7 @@ async def delete_prediction(
         prediction_id: UUID of the prediction to discard.
         user: The authenticated user extracted from the Bearer token.
         db: Injected database session.
+        storage: Injected storage backend.
 
     Returns:
         MessageResponse confirming deletion.
@@ -286,7 +292,7 @@ async def delete_prediction(
     Raises:
         HTTPException: 404 if no prediction with `prediction_id` exists.
     """
-    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
     deleted = await repo.delete(prediction_id)
     if not deleted:
@@ -313,6 +319,7 @@ async def confirm_prediction(
     body: ConfirmPredictionRequest | None = None,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
 ) -> ConfirmPredictionResponse:
     """Confirm a prediction and create a linked annotation.
 
@@ -326,6 +333,7 @@ async def confirm_prediction(
         body: Optional body with `species`, `age_days`, and `treatment`.
         user: Authenticated user from Bearer token.
         db: Injected database session.
+        storage: Injected storage backend.
 
     Returns:
         `ConfirmPredictionResponse`
@@ -335,7 +343,7 @@ async def confirm_prediction(
         HTTPException: 404 if dataset_id is provided but the dataset does not exist.
         HTTPException: 409 if the prediction is already confirmed.
     """
-    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub))
+    repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
     try:
         _, already_confirmed = await repo.confirm(
