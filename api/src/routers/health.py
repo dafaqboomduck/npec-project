@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.src.config import settings
 from api.src.db.orm import ModelVersion
 from api.src.db.session import get_session
 from api.src.schemas.health import HealthResponse, ServiceStatus
@@ -21,8 +22,6 @@ from api.src.schemas.library import ModelStatus
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Health"])
-
-API_VERSION = "0.1.0"
 
 
 async def _check_db(db: AsyncSession) -> bool:
@@ -125,6 +124,6 @@ async def get_health(
 
     return HealthResponse(
         status=service_status,
-        version=API_VERSION,
+        version=settings.api_version,
         timestamp=datetime.now(timezone.utc),
     )

@@ -184,7 +184,10 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             The matching prediction, or `None` if not found.
         """
         result = await self._db.execute(
-            select(Prediction).options(selectinload(Prediction.model_version)).where(Prediction.id == prediction_id)
+            select(Prediction)
+            .options(selectinload(Prediction.model_version))
+            .where(Prediction.id == prediction_id)
+            .where(Prediction.user_id == self._user_id)
         )
         row = result.scalar_one_or_none()
 
@@ -214,6 +217,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         self,
         page: int = 1,
         page_size: int = 20,
+        confirmed: bool | None = None,
     ) -> list[PredictionResponse]:
         """Return a paginated list of predictions for the authenticated user.
 
@@ -223,22 +227,28 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         Args:
             page: 1-indexed page number.
             page_size: Number of record per page (1-100).
+            confirmed: Boolean determining the confirmation status.
 
         Returns:
             `list[PredictionResponse]`
         """
         offset = (page - 1) * page_size
 
-        # Paginated rows
-        result = await self._db.execute(
+        q = (
             select(Prediction)
             .options(selectinload(Prediction.model_version))
             .where(Prediction.user_id == self._user_id)
-            .order_by(Prediction.created_at.desc())
-            .offset(offset)
-            .limit(page_size)
         )
 
+        if confirmed is True:
+            q = q.where(Prediction.confirmed_at.isnot(None))
+        elif confirmed is False:
+            q = q.where(Prediction.confirmed_at.is_(None))
+
+        # Paginated rows
+        q = q.rder_by(Prediction.created_at.desc()).offset(offset).limit(page_size)
+
+        result = await self._db.execute(q)
         return [self._orm_to_schema(r) for r in result.scalars().all()]
 
     async def confirm(
@@ -268,7 +278,10 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             ValueError: If dataset_id is provided but the dataset does not exist.
         """
         result = await self._db.execute(
-            select(Prediction).options(selectinload(Prediction.model_version)).where(Prediction.id == prediction_id)
+            select(Prediction)
+            .options(selectinload(Prediction.model_version))
+            .where(Prediction.id == prediction_id)
+            .where(Prediction.user_id == self._user_id)
         )
         row = result.scalar_one_or_none()
 
@@ -282,6 +295,12 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         row.confirmed_at = now
         await self._db.flush()  # write confirmed_at before annotation insert
 
+        if dataset_id is not None:
+            dataset_repo = DatasetRepository(self._db)
+            dataset = await dataset_repo.get(dataset_id)
+            if dataset is None:
+                raise ValueError(f"Dataset {dataset_id} not found.")
+
         annotation_repo = AnnotationRepository(self._db)
         await annotation_repo.create_from_prediction(
             prediction_id=prediction_id,
@@ -293,7 +312,6 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         )
 
         if dataset_id is not None:
-            dataset_repo = DatasetRepository(self._db)
             await dataset_repo.increment_count(dataset_id)
 
         logger.info(f"Confirmed prediction {prediction_id} and created annotation")

@@ -436,6 +436,7 @@ class TrainingRun(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     status: Mapped[str] = mapped_column(String(16), nullable=False)
+    pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

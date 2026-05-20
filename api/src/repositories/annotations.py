@@ -161,6 +161,10 @@ class AnnotationRepository:
         row = await self._db.get(Annotation, annotation_id)
         if row is None:
             return None
+
+        if row.status == AnnotationStatus.ANNOTATED:
+            raise ValueError("Annotation has already been confirmed.")
+
         row.mask_uri = mask_url
         row.status = AnnotationStatus.ANNOTATED
         row.updated_at = datetime.now(timezone.utc)

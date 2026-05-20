@@ -95,7 +95,7 @@ async def predict(
 ) -> PredictionResponse:
     """Accept a root scan image and run U-Net inference.
 
-    Validates file sizie, MIME type, image integrity, and resolution before
+    Validates file size, MIME type, image integrity, and resolution before
     dispatching to the inference service. The result is persisted in the
     repository and returned to the caller.
 
@@ -125,7 +125,7 @@ async def predict(
     validate_image(image_bytes, original_filename)
 
     logger.info(
-        "Running inference on '%s' (%d bytes, threshold=%.2f)",
+        "Running inference on '%s' (%d bytes)",
         file.filename,
         len(image_bytes),
     )
@@ -200,6 +200,10 @@ async def predict(
 async def list_predictions(
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=20, ge=1, le=100, description="Results per page"),
+    confirmed: bool | None = Query(
+        default=None,
+        description="Fitler by confirmation status. True=confirmed, False=unconfirmed, omit=all.",
+    ),
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
 ) -> list[PredictionResponse]:
@@ -210,6 +214,7 @@ async def list_predictions(
     Args:
         page: 1-indexed page number.
         page_size: Number of results per page (max 100).
+        confirmed: Boolean determining the confirmation status.
         user: Authenticated user from Bearer token.
         db: Injected database session.
 
@@ -221,6 +226,7 @@ async def list_predictions(
     return await repo.list_by_user(
         page=page,
         page_size=page_size,
+        confirmed=confirmed,
     )
 
 

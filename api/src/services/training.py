@@ -128,7 +128,7 @@ class LocalTrainingService(AbstractTrainingService):
         Returns immediately - training runs in the background.
 
         Args:
-            hyperparameters: Optional hyperparameter overridess.
+            hyperparameters: Optional hyperparameter overrides.
 
         Returns:
             TrainingStartResponse with the new run_id.
@@ -218,6 +218,25 @@ class LocalTrainingService(AbstractTrainingService):
             except ProcessLookupError:
                 # Process already exited on its own
                 logger.debug("Subprocess for run %s already exited", run_id)
+        elif row.pid is not None:
+            import os
+            import signal
+
+            try:
+                os.kill(row.pid, signal.SIGTERM)
+                logger.info("Sent SIGTERM to pid %s for training run %s (no in-memory handle)", row.pid, run_id)
+            except ProcessLookupError:
+                logger.debug(
+                    "Pid %s for run %s already exited (no in-memory handle)",
+                    row.pid,
+                    run_id,
+                )
+            except PermissionError:
+                logger.error(
+                    "No permission to signal pid %s for run %s",
+                    row.pid,
+                    run_id,
+                )
         else:
             logger.warning(
                 "No subprocess handle found for %s - "
@@ -227,6 +246,7 @@ class LocalTrainingService(AbstractTrainingService):
 
         row.status = TrainingRunStatus.STOPPED.value
         row.completed_at = datetime.now(timezone.utc)
+        row.pid = None
         await self._db.commit()
 
         logger.info("Training run %s stopped", run_id)
@@ -275,6 +295,15 @@ class LocalTrainingService(AbstractTrainingService):
                 stderr=asyncio.subprocess.PIPE,
             )
             _running_processes[run_id] = proc
+
+            async with get_sessionmaker()() as pid_db:
+                from api.src.db.orm import TrainingRun
+
+                pid_row = await pid_db.get(TrainingRun, run_id)
+                if pid_row is not None:
+                    pid_row.pid = proc.pid
+                    await pid_db.commit()
+
             logger.info(
                 "Training subprocess started (run_id=%s, pid=%s)",
                 run_id,
@@ -407,6 +436,7 @@ async def _update_run_status(
                     run_id,
                 )
                 return
+            row.pid = None
             row.status = status.value
             row.completed_at = datetime.now(timezone.utc)
             if final_f1 is not None:

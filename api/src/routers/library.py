@@ -5,7 +5,7 @@ Read and write endpoints for datasets, annotations, and model versions.
 Read endpoints :
 - GET  /datasets                            — list datasets
 - GET  /datasets/{dataset_id}               — single dataset detail
-- GET  /datasets/{dataset_id}/upload        - add a pending image to a dataset
+- POST  /datasets/{dataset_id}/upload        - add a pending image to a dataset
 - POST /datasets/{dataset_id}/run-inference - run inference on all pending images
 - GET  /annotations                         — paginated annotation list
 - GET  /annotations/{annotation_id}         — single annotation detail
@@ -18,7 +18,7 @@ Write endpoints:
 - DELETE /models/{id}                       — remove model version (admin only)
 - POST   /models/{id}/deploy                — deploy model version (admin only)
 
-All endpoints require a valid Bearer token. Repositoreis are initiated per-request
+All endpoints require a valid Bearer token. Repositories are initiated per-request
 from the injected DB session.
 """
 
@@ -54,6 +54,7 @@ from api.src.schemas.library import (
     ModelSummary,
 )
 from api.src.services.base import AbstractInferenceService
+from api.src.services.deployment import AbstractDeploymentService
 from api.src.services.mask_storage import save_annotation_mask, validate_tiff_mask
 from api.src.services.storage import AbstractStorageBackend
 
@@ -79,12 +80,12 @@ def _ext(filename: str) -> str:
     """Extract the file extension including the dot, e.g. '.png'."""
     import os
 
-    return os.path.splittext(filename)[1].lower()
+    return os.path.splitext(filename)[1].lower()
 
 
 async def _run_inference_background(
     dataset_id: uuid.UUID,
-    annotations: list,
+    annotations: list[dict],
     inference_service: AbstractInferenceService,
     storage: AbstractStorageBackend,
     db_session_factory,
@@ -100,7 +101,7 @@ async def _run_inference_background(
 
     Args:
         dataset_id: UUID of the dataset being processed (for logging).
-        annotations: List of pending Annotation ORM rows to process.
+        annotations: List of pending Annotation rows to process as a dictionary.
         inference_service: The active inference service singleton.
         storage: The active storage backend.
         db_session_factory: Callable that returns a new AsyncSession.
@@ -118,8 +119,8 @@ async def _run_inference_background(
         async with db_session_factory() as db:
             try:
                 # Fetch image bytes from storage
-                image_bytes = await storage.download(annotation.image_uri)
-                filename = annotation.image_uri.split("/")[-1]
+                image_bytes = storage.download(annotation["image_uri"])
+                filename = annotation["image_uri"].split("/")[-1]
 
                 # Run inference
                 prediction_response, mask_bytes = await inference_service.run(
@@ -130,11 +131,11 @@ async def _run_inference_background(
                 # Save mask to storage if the service produced one
                 mask_uri: str | None = None
                 if mask_bytes is not None:
-                    mask_key = f"masks/{annotation.id}_mask.png"
+                    mask_key = f"masks/{annotation['id']}_mask.png"
                     mask_uri = storage.upload(mask_key, mask_bytes, content_type="image/png")
 
                 # Update annotation in DB
-                row = await db.get(Annotation, annotation.id)
+                row = await db.get(Annotation, annotation["id"])
                 if row is not None:
                     row.mask_uri = mask_uri
                     row.status = AnnotationStatus.ANNOTATED
@@ -144,20 +145,20 @@ async def _run_inference_background(
                 succeeded += 1
                 logger.info(
                     "run-inference: processed annotation %s successfully",
-                    annotation.id,
+                    annotation["id"],
                 )
             except Exception as exc:
                 failed += 1
                 logger.error(
                     "run-inference: failed for annotation %s - %s: %s",
-                    annotation.id,
+                    annotation["id"],
                     type(exc).__name__,
                     exc,
                 )
                 # Mark as review_required so it's visible in the UI
                 try:
                     async with db_session_factory() as err_db:
-                        row = await err_db.get(Annotation, annotation.id)
+                        row = await err_db.get(Annotation, annotation["id"])
                         if row is not None:
                             row.status = AnnotationStatus.REVIEW_REQUIRED
                             row.updated_at = datetime.now(timezone.utc)
@@ -165,7 +166,7 @@ async def _run_inference_background(
                 except Exception as db_exc:
                     logger.error(
                         "run-inference: could not mark annotation %s as review_required - %s",
-                        annotation.id,
+                        annotation["id"],
                         db_exc,
                     )
 
@@ -381,7 +382,7 @@ async def upload_dataset_image(
     # Save to storage
     storage_key = f"datasets/{dataset_id}/{uuid.uuid4()}{_ext(file.filename or '')}"
     try:
-        image_uri = await storage.save(storage_key, image_bytes)
+        image_uri = storage.upload(storage_key, image_bytes)
     except Exception as exc:
         logger.error("Storage save failed for dataset %s: %s", dataset_id, exc)
         raise HTTPException(
@@ -461,10 +462,12 @@ async def run_dataset_inference(
     if not pending:
         return MessageResponse(message="No pending annotations found for this dataset.")
 
+    pending_data = [{"id": ann.id, "image_uri": ann.image_uri} for ann in pending]
+
     background_tasks.add_task(
         _run_inference_background,
         dataset_id=dataset_id,
-        annotations=pending,
+        annotations=pending_data,
         inference_service=inference_service,
         storage=storage,
         db_session_factory=session_factory,
@@ -602,7 +605,14 @@ async def delete_annotation(
     responses={
         401: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
-        422: {"model": ErrorResponse},
+        409: {
+            "model": ErrorResponse,
+            "description": "Annotation already confirmed",
+        },
+        422: {
+            "model": ErrorResponse,
+            "description": "Uploaded file is not a valid single-frame TIFF",
+        },
     },
 )
 async def confirm_annotation(
@@ -628,6 +638,7 @@ async def confirm_annotation(
 
     Raises:
         HTTPException: 404 if the annotation does not exist.
+        HTTPException: 409 if the annotation has already been confirmed.
         HTTPException: 422 if the uploaded file is not a valid single-frame TIFF.
     """
     mask_bytes = await mask.read()
@@ -658,7 +669,17 @@ async def confirm_annotation(
             ).model_dump(),
         )
 
-    updated = await AnnotationRepository(db).confirm(annotation_id, mask_url=mask_url)
+    try:
+        updated = await AnnotationRepository(db).confirm(annotation_id, mask_url=mask_url)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ErrorResponse(
+                error_code=ErrorCode.CONFLICT,
+                message="Annotation has already been confirmed.",
+            ).model_dump(),
+        )
+
     if updated is None:
         raise _404("Annotation not found.")
 
@@ -868,6 +889,7 @@ async def deploy_model(
     model_id: UUID,
     user: Annotated[TokenData, Depends(require_admin)] = None,
     db: AsyncSession = Depends(get_session),
+    deployment_service: AbstractDeploymentService = Depends(get_deployment_service),
 ) -> MessageResponse:
     """Trigge deployment for the model with `model_id`.
 
@@ -877,6 +899,7 @@ async def deploy_model(
         model_id: UUID of the model to deploy.
         user: Admin-role authenticated user.
         db: Injected database session.
+        deployment_service: Injected deployment service.
 
     Returns:
         `MessageResponse` confirming the deployment.
@@ -885,13 +908,11 @@ async def deploy_model(
         HTTPException: 403 for non-admin tokens.
         HTTPException: 404 if the model does not exist.
     """
-    service = get_deployment_service(db)
-
     try:
-        await service.deploy(model_id)
+        await deployment_service.deploy(model_id)
     except FileNotFoundError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ErrorResponse(
                 error_code=ErrorCode.INVALID_REQUEST,
                 message=str(exc),
