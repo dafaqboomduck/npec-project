@@ -50,3 +50,6 @@ dist/
 config.json
 config.json
 azure-ml/check-data.py
+
+# Training outputs
+artifacts/models

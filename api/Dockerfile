@@ -1,6 +1,5 @@
 # 1. Dependencies
 FROM python:3.11-slim AS deps
-
 WORKDIR /app
 
 # tensorflow is ~620 MB — keep pip patient
@@ -15,14 +14,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements/api.txt requirements/api.txt
-RUN pip install --no-cache-dir -r requirements/api.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements/api.txt
 
 # Install npec_cv from TestPyPI (transitive deps resolve via real PyPI)
 ARG NPEC_CV_VERSION
-RUN pip install --no-cache-dir \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
         --index-url https://test.pypi.org/simple/ \
         --extra-index-url https://pypi.org/simple/ \
-        "npec-cv${NPEC_CV_VERSION:+==$NPEC_CV_VERSION}"
+"npec-cv${NPEC_CV_VERSION:+==$NPEC_CV_VERSION}"
 
 # Download models from the matching GitHub release.
 # Token comes in as a BuildKit secret so it never lands in a layer.
@@ -35,10 +36,8 @@ RUN --mount=type=secret,id=github_token,required=true \
         python -c 'from npec_cv.helpers.model_loader import get_models_dir; print(get_models_dir())')" \
         /opt/npec_models/current
 
-
 # 2. Runtime
 FROM python:3.11-slim AS runtime
-
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -59,7 +58,6 @@ COPY api/ ./api/
 RUN adduser --disabled-password --gecos "" --uid 1001 appuser \
     && mkdir -p /tmp/npec_masks /tmp/npec_annotation_masks \
     && chown -R appuser:appuser /tmp/npec_masks /tmp/npec_annotation_masks /opt/npec_models
-
 USER appuser
 
 ENV PYTHONUNBUFFERED=1 \
@@ -68,8 +66,7 @@ ENV PYTHONUNBUFFERED=1 \
     NPEC_ARTIFACT_DIR=/opt/npec_models/current
 
 EXPOSE 8000
-
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
+CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
 
 CMD ["uvicorn", "api.src.main:app", "--host", "0.0.0.0", "--port", "8000"]
