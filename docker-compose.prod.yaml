@@ -68,4 +68,8 @@ services:
 
 volumes:
   cv5_npec_pgdata:
+    external: true
+    name: cv5_pgdata_prod
   minio_data:
+    external: true
+    name: cv5_minio_prod

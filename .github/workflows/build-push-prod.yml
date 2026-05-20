@@ -52,6 +52,10 @@ jobs:
           context: .
           file: api/Dockerfile
           push: true
+          build-args: |
+            NPEC_CV_VERSION=${{ vars.NPEC_CV_VERSION }}
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
           tags: |
             ${{ env.IMAGE_PREFIX }}/cv5-api:latest
             ${{ env.IMAGE_PREFIX }}/cv5-api:sha-${{ steps.sha.outputs.short }}
