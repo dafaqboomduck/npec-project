@@ -29,7 +29,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-cv5}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cv5}
-      POSTGRES_DB: ${POSTGRES_DB:-cv5}
+      POSTGRES_DB: ${POSTGRES_DB:-cv5db}
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
@@ -37,7 +37,7 @@ services:
       - ./db/seeds:/seeds:ro
       - ./db/seeds/dev_seed.sql:/docker-entrypoint-initdb.d/dev_seed.sql:ro
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5}" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5db}" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -68,7 +68,7 @@ services:
       dockerfile: db/Dockerfile
     container_name: cv5-migrations
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cv5}:${POSTGRES_PASSWORD:-cv5}@db:5432/${POSTGRES_DB:-cv5}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cv5}:${POSTGRES_PASSWORD:-cv5}@db:5432/${POSTGRES_DB:-cv5db}
     depends_on:
       db:
         condition: service_healthy
@@ -80,7 +80,7 @@ services:
       dockerfile: api/Dockerfile.dev
     container_name: cv5-api
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cv5}:${POSTGRES_PASSWORD:-cv5}@db:5432/${POSTGRES_DB:-cv5}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cv5}:${POSTGRES_PASSWORD:-cv5}@db:5432/${POSTGRES_DB:-cv5db}
       SECRET_KEY: ${SECRET_KEY:-devsecret}
       USE_MOCK_INFERENCE: ${USE_MOCK_INFERENCE:-true}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
@@ -132,7 +132,7 @@ services:
         condition: service_healthy
     environment:
       DB_USER: ${POSTGRES_USER:-cv5}
-      DB_NAME: ${POSTGRES_DB:-cv5}
+      DB_NAME: ${POSTGRES_DB:-cv5db}
       PGPASSWORD: ${POSTGRES_PASSWORD:-cv5}
     volumes:
       - ./db/seeds:/seeds:ro

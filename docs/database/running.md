@@ -2,6 +2,8 @@
 
 How to start Postgres, apply migrations, and seed dev data in each environment. Operational companion to [`schema.md`](schema.md) (what the schema *is*) and [`../../db/README.md`](../../db/README.md) (what's in the `db/` directory).
 
+The database is named **`cv5db`** in every environment. See the "Canonical database name" section of [`../../db/README.md`](../../db/README.md) for the rationale.
+
 ---
 
 ## Prerequisites
@@ -10,19 +12,19 @@ How to start Postgres, apply migrations, and seed dev data in each environment. 
 - Python 3.10+ with the `db` package installable from `db/pyproject.toml` (for bare-metal workflows)
 - A `.env` file at the repo root — copy from `.env.example` and edit if needed
 
-The default `DATABASE_URL` in `.env.example` points at the Docker Compose Postgres on `db:5432`. If you're running Postgres on bare metal, change the host to `localhost`.
+The default `DATABASE_URL` in `.env.example` points at the Docker Compose Postgres on `db:5432/cv5db`. If you're running Postgres on bare metal, change the host to `localhost`.
 
 ---
 
 ## Local development (Docker Compose) — recommended
 
-The fastest path. Brings up Postgres + MinIO + the migrations container in one command.
+The fastest path. Brings up Postgres, MinIO, pgadmin, and the migrations container.
 
 ```bash
 # 1. Copy env template
 cp .env.example .env
 
-# 2. Start Postgres (and MinIO, pgadmin)
+# 2. Start Postgres (and MinIO, pgadmin if defined in the compose file)
 docker compose -f docker-compose.dev.yml up -d db
 
 # 3. Run migrations against it
@@ -30,13 +32,13 @@ docker compose -f docker-compose.dev.yml run --rm migrations
 
 # 4. (Optional) apply dev seed
 docker compose -f docker-compose.dev.yml exec db \
-    psql -U cv5 -d cv5 -f /seeds/dev_seed.sql
+    psql -U cv5 -d cv5db -f /seeds/dev_seed.sql
 ```
 
-After step 3 you should see 9 tables in the `cv5` database:
+After step 3 you should see 10 application tables in the `cv5db` database (plus `alembic_version`):
 
 ```bash
-docker compose -f docker-compose.dev.yml exec db psql -U cv5 -d cv5 -c '\dt'
+docker compose -f docker-compose.dev.yml exec db psql -U cv5 -d cv5db -c '\dt'
 ```
 
 Expected: `users`, `refresh_tokens`, `model_versions`, `predictions`, `feedback`, `monitoring_metrics`, `datasets`, `annotations`, `training_runs`, plus `alembic_version`.
@@ -49,6 +51,12 @@ docker compose -f docker-compose.dev.yml up -d db
 docker compose -f docker-compose.dev.yml run --rm migrations
 ```
 
+> If you're upgrading from a checkout where the compose default was
+> `cv5` (not `cv5db`), you'll need this reset once. The old volume
+> still holds a `cv5` database; the new compose default creates
+> `cv5db`, and Postgres won't rename the existing DB. `down -v` drops
+> the volume so the next `up` initialises `cv5db` cleanly.
+
 ---
 
 ## Local development (bare metal)
@@ -58,10 +66,10 @@ For when you want Postgres running natively (e.g. for tighter feedback loops or 
 ```bash
 # 1. Install Postgres 16 locally (brew, apt, installer — whatever)
 # 2. Create a database
-createdb cv5
+createdb cv5db
 
 # 3. Point DATABASE_URL at it in .env, e.g.
-#    DATABASE_URL=postgresql+psycopg://you@localhost:5432/cv5
+#    DATABASE_URL=postgresql+psycopg://you@localhost:5432/cv5db
 
 # 4. Install the db package
 pip install -e ./db
@@ -84,14 +92,18 @@ alembic -c db/alembic.ini upgrade head
 
 ## On-premise (Portainer)
 
-The migrations image is the same one used locally; only the orchestration changes.
+The migrations image is the same one used locally; only the orchestration changes. The Portainer stack uses `POSTGRES_DB=cv5db` — the same name as local. Always connect with `-d cv5db`.
 
 1. Push the `db/Dockerfile` image to a registry the Portainer host can pull from (GHCR, an internal registry, or build directly on the host).
-2. Provision a Postgres 16 service in Portainer with a persistent volume.
-3. Define a one-shot stack that runs the migrations image with `DATABASE_URL` pointed at the Postgres service. Set the restart policy to `no` — migrations should run once and exit.
+2. Provision a Postgres 16 service in Portainer with a persistent volume and `POSTGRES_DB=cv5db`.
+3. Define a one-shot stack that runs the migrations image with `DATABASE_URL` pointed at the Postgres service (`.../cv5db`). Set the restart policy to `no` — migrations should run once and exit.
 4. Trigger the stack manually for each deploy, or wire it into a deploy hook.
 
-Seed data is **not** applied automatically. If a dev seed is wanted on-prem (it usually isn't), run `psql` manually inside the Postgres container.
+Seed data is **not** applied automatically. If a dev seed is wanted on-prem (it usually isn't), run `psql` manually inside the Postgres container:
+
+```bash
+psql -U cv5 -d cv5db -f /path/to/dev_seed.sql
+```
 
 ---
 
@@ -139,6 +151,9 @@ Small differences in `pg_dump` ordering or comments are expected across versions
 ---
 
 ## Troubleshooting
+
+**`database "cv5" does not exist`**
+You're connecting with `-d cv5` against a stack that uses `cv5db` (Portainer, or any environment built after the compose default was changed). Use `-d cv5db`. See the "Canonical database name" section in `db/README.md`.
 
 **`DATABASE_URL is not set`**
 The wrapper couldn't read `.env`. Check the file exists at the repo root and the variable isn't commented out.
