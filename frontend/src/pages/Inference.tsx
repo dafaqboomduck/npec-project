@@ -9,13 +9,13 @@
  * Route: /inference (protected)
  */
 
-import { useState, useRef, DragEvent, ChangeEvent, useEffect } from 'react';
+import { ChangeEvent, DragEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getModelsForInference, predict } from '../api/inferenceApi';
 import NavBar from '../components/NavBar';
-import { predict, getModelsForInference } from '../api/inferenceApi';
-import type { PredictionResponse, ModelSummary } from '../types/api';
-import { useInferenceJobs } from '../context/InferenceJobsContext';
 import ResultsView from '../components/ResultsView';
+import { useInferenceJobs } from '../context/InferenceJobsContext';
+import type { ModelSummary, PredictionResponse } from '../types/api';
 import './Inference.css';
 
 // ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ export default function Inference() {
     setResult(null);
 
     const controller = new AbortController();
-    const jobId = crypto.randomUUID();
+    const jobId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const newJob = {
       id: jobId,
       filename: file.name,
