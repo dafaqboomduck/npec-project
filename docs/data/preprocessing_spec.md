@@ -1,155 +1,129 @@
 # Preprocessing specification — HADES/NPEC root segmentation
 
-> **Status:** draft
-> **Scope:** data pipeline only. Model training, augmentation, loss
-> functions, and architecture are out of scope.
-> **Filename note:** kept as `preprocessing_spec.md` to match ADO ticket 1417
-> and the rest of the repo. The doc now covers two things: (1) what the
-> upload script does, and (2) what the training pipeline is expected to do
-> with the asset. The latter is not enforced by the upload pipeline; it is
-> documented so consumers know the contract.
+> **Status:** draft (revised)
+> **Supersedes:** the 1:1-mirror upload approach previously documented here.
+> **Scope:** what the data-upload pipeline does, and the contract that the
+> training pipeline can rely on. Model architecture, augmentation, loss
+> functions, and inference-time logic are out of scope.
 
-## 1. Scope and design decision
+## 1. Design decision
 
-- **The Azure ML data asset is a 1:1 mirror of the raw dataset.** No crop,
-  no resize, no alpha-channel removal, no format conversion, no train/val/
-  test split assignment. What's on disk goes to Azure unchanged.
-- **All transformations happen at training time.** The training pipeline
-  loads the raw asset, applies preprocessing, splits the data, patchifies,
-  and feeds the model.
-- **Why this design:** the upload runs once; preprocessing decisions evolve
-  often. Putting transforms in training code keeps the asset stable and
-  lets multiple training runs experiment with different preprocessing
-  without re-uploading 24.5 GB.
+The Azure ML data assets are **pre-split, flattened, and filtered to the
+root-segmentation working set**:
 
-## 2. Pipeline (end-to-end)
+- The cohort/annotator folder structure of the raw delivery (`Y2B_23/`,
+  `Y2B_24/`, `Y2B_25/`, annotator subfolders) is **collapsed**. The
+  workspace contains flat `images/` and `masks/` folders only.
+- The train/val/test split (80/10/10 by image stem, seed 42) is **baked
+  into the assets** at upload time, not derived at training time.
+- Only images with a `_root_mask.tif` are included. Shoot and seed masks
+  travel alongside the image when they exist; they are opportunistic, not
+  required.
+
+**Why this design.** The model owners need data they can load by name and
+train against, without re-implementing filtering, pooling, or splitting in
+training code. Baking the split in trades flexibility (one fixed split per
+asset version) for simplicity (a teammate downloads `cv5_train` and gets a
+folder of training images). The flexibility cost is mitigated by Azure ML
+versioning — a different split is a new version, not a workflow change.
+
+What stays training-side: petri-dish cropping, alpha-channel removal,
+patchification, normalisation, augmentation, integrity assertions. The
+assets are the source of bytes; transforms remain in training code.
+
+## 2. Data assets
+
+Four assets are registered per upload, all at the same version, all as
+`URI_FOLDER`:
+
+| Asset | Contents | Manifest |
+|---|---|---|
+| `cv5_raw` | Pooled working set, unsplit. | No |
+| `cv5_train` | 80% of working set. | Yes |
+| `cv5_val` | 10% of working set. | Yes |
+| `cv5_test` | 10% of working set. | Yes |
+
+`cv5_train ∪ cv5_val ∪ cv5_test` at the same version reconstitutes
+`cv5_raw` at that version exactly.
+
+Every asset has the same internal structure:
 
 ```
-raw 4K RGBA PNG image            raw mask TIFFs (root/shoot/seed/occluded_root)
-         │                                     │
-         └──────────────┬──────────────────────┘
-                        │   (uploaded as-is, no transformation)
-                        ▼
-              Azure ML data asset
-                        │
-                        ▼  (loaded by training pipeline)
-        ┌───────────────┴───────────────┐
-        ▼                               ▼
-  filter to _root_mask.tif        drop alpha (RGBA → RGB)
-        │                               │
-        └──────────────┬────────────────┘
-                       ▼
-            petri-dish crop (OpenCV)
-            via src/npec_cv/helpers/extract_petri_dish.py
-                       │
-                       ▼
-              ~2K aligned image + mask
-                       │
-                       ▼
-             train/val/test split
-                       │
-                       ▼
-            patchify to 512×512
-            via src/npec_cv/helpers/patchify.py
-                       │
-                       ▼
-              mask patches → model (binary segmentation)
-              image patches → overlay at validation
+<asset>/
+├── images/        # all images, flat, original filenames preserved
+├── masks/         # all masks, flat, original filenames preserved
+└── manifest.csv   # (train/val/test only)
 ```
 
-Everything **above** the dotted line ("uploaded as-is") is the data
-pipeline's responsibility. Everything **below** is the training pipeline.
+The manifest has four columns — `image_filename`, `root_mask_filename`,
+`shoot_mask_filename`, `seed_mask_filename` — with empty cells where a
+class of mask is absent for that image. Training code uses this to pair
+files; it does not have to parse filenames.
 
-## 3. What the upload script does
+## 3. What the upload pipeline does
 
-1. Walk the raw dataset root.
-2. Upload every file under `Y2B_23/`, `Y2B_24/`, and `Y2B_25/` to the
-   workspace blob datastore, preserving relative paths.
-3. Skip the `Kaggle/` folder (out of scope, no masks).
-4. Skip the lone `.txt` file unless it turns out to contain something useful
-   (decision deferred until its contents are known).
-5. Register the uploaded data as an Azure ML data asset following
-   `versioning_strategy.md`.
+1. Walks `raw/Y2B_23/`, `raw/Y2B_24/`, `raw/Y2B_25/`.
+2. Pairs each image with any `_root_mask.tif`, `_shoot_mask.tif`,
+   `_seed_mask.tif` sharing its stem. Drops `_occluded_root_mask.tif` and
+   any other suffixes.
+3. Drops images that lack a root mask.
+4. Checks for filename collisions across cohorts (the flattening would
+   otherwise overwrite silently). Fails loudly if any collision is found.
+5. Sorts records by stem (stable across machines), then shuffles with
+   seed 42.
+6. Splits 80/10/10 by image stem. An image and its 1–3 masks travel as a
+   unit.
+7. Stages locally into flat `images/`/`masks/` folders; writes a
+   `manifest.csv` for each split.
+8. Uploads each folder to `workspaceblobstore` and registers it as a
+   versioned `URI_FOLDER` asset with descriptive tags.
 
-The script does **not**:
-- filter masks by class
-- assign train/val/test splits
-- crop, resize, or change pixel data in any way
-- write a manifest CSV (training code derives what it needs at runtime)
+The upload script lives at `scripts/upload_data.py`. The pipeline does
+**not** crop, resize, patchify, normalise, or alpha-strip.
 
 ## 4. What the training pipeline is expected to do
 
-This section is documentation, not an enforceable contract. It describes
-how the asset is intended to be consumed so anyone writing training code
-knows the assumptions.
+This section is contract, not enforcement. Training code can rely on:
 
-### 4.1 Filter to root masks
+1. **No filtering needed.** Every image in `cv5_train|val|test` has a
+   `_root_mask.tif`. No need to filter by suffix.
+2. **No splitting needed.** Use `cv5_train` for training,
+   `cv5_val` for validation, `cv5_test` for test. Do not pool and re-split.
+3. **Use the manifest to pair files.** The image-to-mask relationship is
+   in `manifest.csv`. Do not derive it from filename string-matching at
+   runtime if you can avoid it.
+4. **Alpha-channel handling is yours.** Raw images are RGBA `uint8`; drop
+   alpha before training. The asset preserves the four-channel file.
+5. **Cropping and patchification are yours.** Use
+   `src/npec_cv/helpers/extract_petri_dish.py` and
+   `src/npec_cv/helpers/patchify.py`. Apply the same `(x, y, w, h)` crop
+   to image and mask with nearest-neighbour sampling on the mask.
+6. **Integrity checks are yours.** Per image/mask pair, training code
+   should assert matching spatial shape, mask values ⊆ `{0, 1}`, no NaN,
+   no all-zero images. The inventory found one anomalous 3D mask in the
+   raw delivery; the upload preserves it as-is, and the training-time
+   assertion is what catches it.
 
-Keep only files matching `_root_mask.tif`. Drop `_shoot_mask.tif`,
-`_seed_mask.tif`, and `_occluded_root_mask.tif`. After filtering: **492
-image/root-mask pairs** (115 Y2B_23 + 314 Y2B_24 + 63 Y2B_25). Two Y2B_24
-images have no root mask and are silently excluded.
+## 5. Reproducibility
 
-### 4.2 Drop alpha channel
+Same git commit + same raw delivery + same seed → byte-identical staged
+folders. The asset content is therefore deterministic; only the
+`created_date` tag varies between runs. The shuffle uses Python's
+`random.Random(seed)` with a sorted input list, which is stable across
+Python 3 patch versions and OS.
 
-Raw images are RGBA `uint8`. Drop the alpha channel before any further
-processing; the model takes RGB. Alpha is assumed uninformative — verify
-with a quick check on first run if not already known.
+## 6. What invalidates an asset
 
-### 4.3 Petri-dish crop
+Per `versioning_strategy.md`, the asset set gets a **major** version bump
+if any of the following change:
 
-Use `src/npec_cv/helpers/extract_petri_dish.py`. Run on the image, then
-apply the same `(x, y, w, h)` crop to the mask using **nearest-neighbour
-sampling** (not bilinear — interpolation invents class values). Output is
-~2K-resolution image + mask, pixel-aligned.
+- The raw dataset on disk gains, loses, or modifies files.
+- The inclusion rule changes (e.g. shoot-only images become acceptable).
+- The split seed or ratio changes.
+- The cohort scope changes (e.g. Y2B_26 added, or Kaggle brought in).
 
-### 4.4 Train/val/test split
+Changes to training-side preprocessing (§4) do not affect asset versions.
 
-- **70 / 15 / 15** by image (not by patch).
-- Pool all three cohorts together. Y2B_23's pre-existing train/test split
-  is discarded.
-- **Seed `42`** so the split is reproducible across training runs.
-- Split happens at training time. Two training runs with the same seed
-  must produce the same split.
-
-### 4.5 Patchify
-
-Use `src/npec_cv/helpers/patchify.py`. Window 512 × 512.
-- Stride is the training pipeline's call. Either `512` (non-overlapping)
-  or `256` (50% overlap) are reasonable starting points.
-- Whether to drop all-background patches is also a training decision (class
-  balance, wall-clock cost).
-
-## 5. Mask values
-
-After the upload, masks on Azure are TIFF `uint8` with values `{0, 1}` —
-binary, no further encoding. Training code that loads them should assert
-this and fail loudly if a mask contains anything else (the inventory found
-one anomalous 3-D mask; the assertion will catch any others).
-
-## 6. Integrity checks (training-time, recommended)
-
-The training code should, per image/mask pair:
-
-- assert image and mask have the same spatial shape **after** the crop step
-- assert mask values ⊆ `{0, 1}`
-- assert no NaN, no all-zero images
-- log and skip pairs that fail any of the above
-
-Failure handling is the training pipeline's choice. The upload pipeline
-does not validate.
-
-## 7. What invalidates the asset and forces a new version
-
-Per `versioning_strategy.md` §3, the asset gets a **major** version bump if:
-- the raw dataset on disk gains, loses, or modifies files
-- the inclusion rules in §3 change (e.g. Kaggle is brought in scope)
-
-Changes to the **training-time** preprocessing in §4 do **not** affect the
-data asset version, because none of those transforms are baked into the
-asset. They are recorded by the training pipeline (run config, MLflow
-tags, etc.).
-
-## 8. Review
+## 7. Review
 
 Reviewed: YYYY-MM-DD

@@ -1,130 +1,152 @@
 # Dataset versioning and naming strategy
 
-> **Status:** proposal — to be agreed before Sprint 3
-> **Scope:** naming and versioning of Azure ML Data Assets produced from the
-> HADES/NPEC Block B dataset.
+> **Status:** draft (revised)
+> **Supersedes:** the single-asset `cv5_hades_raw` strategy previously
+> documented here.
+> **Scope:** naming, versioning, and lifecycle of the Azure ML data assets
+> produced from the HADES/NPEC Block B dataset.
 
 ## 1. Goals
 
-- Any team member can find the right version of the data just from its name
-  and tags.
-- Every training run can be traced back to an exact, immutable data version.
-- Adding more raw data over time is easy and doesn't churn the asset name.
+- A teammate can find and load the right asset from name and version
+  alone, with no further context.
+- A training run can be traced to an exact, immutable asset version.
+- The asset set survives new cohorts, corrections, and split changes
+  without naming churn.
 
-## 2. Naming convention
+## 2. Assets
 
-### 2.1 Data asset name
+Four assets per upload, all registered at the same version:
 
-The Azure ML asset is a 1:1 mirror of the raw dataset. There is **one
-asset**, holding everything in scope, in its raw form:
-
-```
-cv5_hades_raw
-```
-
-| Component | Meaning |
+| Name | Role |
 |---|---|
-| `cv5` | project (Block B plant segmentation) |
-| `hades` | source (HADES/NPEC delivery) |
-| `raw` | unmodified — files are uploaded as-is |
+| `cv5_raw` | Pooled working set, unsplit. Source of truth for the version. |
+| `cv5_train` | 80% split, used for training. |
+| `cv5_val` | 10% split, used for validation. |
+| `cv5_test` | 10% split, used for the held-out test set. |
 
-Rules:
-- lowercase, underscores between words, no spaces, no dates
-- the name is **permanent**; new data ⇒ new version, not a new name
+All four are `URI_FOLDER` assets. All four have the same internal layout:
+flat `images/` and `masks/` folders. The three split assets additionally
+contain a `manifest.csv`. See `preprocessing_spec.md §2` for full content
+rules.
 
-There is no per-class asset (e.g. no `cv5_hades_root_*`) because filtering
-is now done at training time. If a future deliverable produces transformed
-data (cropped, patchified, embedded), that would be a separate asset with
-its own name (e.g. `cv5_hades_cropped_512`).
-
-### 2.2 File names inside the asset
-
-The asset preserves the original folder structure exactly:
-
-```
-cv5_hades_raw/
-├── Y2B_23/
-│   ├── images/
-│   │   ├── train/
-│   │   └── test/
-│   └── masks/
-├── Y2B_24/
-│   ├── images/
-│   └── masks/<annotator>/
-└── Y2B_25/
-    ├── images/
-    └── masks/<annotator>/
-```
-
-Filenames are **untouched** from the raw delivery. Spaces in filenames
-(`Fish Eye Corrected`) are preserved; consumers must handle them.
-
-The `Kaggle/` folder and the lone `.txt` file are **not** uploaded.
+The names are **permanent**. New data, new splits, or new versions of any
+kind always go to a new version under these same names, never to a new
+name.
 
 ## 3. Versioning rules
 
-Uses Azure ML's built-in asset versioning (`version="1.2.0"` etc.):
+Versions follow semantic-style `MAJOR.MINOR.PATCH`. All four assets are
+**always bumped together** to the same version. There is no scenario where
+`cv5_raw` v1.2.0 coexists with `cv5_train` v1.1.0 — that would mean the
+split no longer matches the raw working set.
 
-| Change type | Version bump | Example |
+| Change | Bump | Example |
 |---|---|---|
-| Raw dataset modified upstream (re-export, schema change, field added) | **Major** (X.0.0) | 1.4.2 → 2.0.0 |
-| Added images or masks (e.g. Y2B_26 cohort, more annotations completed) | **Minor** (x.Y.0) | 1.4.2 → 1.5.0 |
-| Removed corrupted files, fixed misnamed files, metadata-only fix | **Patch** (x.y.Z) | 1.4.2 → 1.4.3 |
-| Inclusion rules changed (e.g. Kaggle brought in scope) | **Major** | 1.x.x → 2.0.0 |
+| Raw dataset modified upstream (re-export, new corrections) | Major | 1.4.2 → 2.0.0 |
+| Inclusion rule changed (e.g. shoot-only images now allowed) | Major | 1.x.x → 2.0.0 |
+| Split seed or ratio changed | Major | 1.x.x → 2.0.0 |
+| Cohort scope changed (e.g. Y2B_26 added) | Major | 1.x.x → 2.0.0 |
+| Additional annotations completed within existing scope | Minor | 1.4.2 → 1.5.0 |
+| Corrupted files removed, metadata-only fix | Patch | 1.4.2 → 1.4.3 |
 
-Versions are **never overwritten**. Bad upload ⇒ bump patch, document the
-fix in the asset description.
+Versions are **never overwritten**. A bad upload is fixed by bumping the
+patch number and documenting the fix in the asset description.
 
-### Why no `preprocessing_version` here
+### Subset versions
 
-Earlier drafts had a `preprocessing_version` tag. That's gone — the asset
-contains no preprocessing, so there's nothing to version. Preprocessing
-decisions live in training-pipeline configs and are versioned there (git
-SHA, MLflow run params).
+`0.x.y` versions are reserved for **subset uploads** — small samples used
+to validate the upload workflow before the full run. The first production
+upload is `1.0.0`. Subset versions are tagged `is_subset=true` and remain
+in the workspace as smoke-test fixtures.
 
-## 4. Tags
+## 4. Required tags
 
-Every registered version of the asset carries:
+Every registered asset version carries the following tags:
 
-| Tag key | Values | Required? |
+| Tag | Values | Notes |
 |---|---|---|
-| `source` | `hades` | yes |
-| `cohorts` | comma-separated, e.g. `Y2B_23,Y2B_24,Y2B_25` | yes |
-| `is_raw` | `true` | yes |
-| `num_images` | integer | yes |
-| `num_masks` | integer | yes |
-| `created_by` | GitHub / ADO username | yes |
-| `created_date` | `YYYY-MM-DD` | yes |
-| `git_commit` | short SHA of the upload-script code | yes |
-| `excluded_paths` | comma-separated, e.g. `Kaggle/,*.txt` | yes |
-| `notes` | free text | optional |
+| `source` | `hades` | Origin of the raw delivery. |
+| `cohorts` | comma-separated, e.g. `Y2B_23,Y2B_24,Y2B_25` | Which cohorts are pooled. |
+| `role` | `raw`, `train`, `val`, `test` | Which asset this is. |
+| `mask_classes` | e.g. `root,shoot,seed` | Which mask classes the asset contains. |
+| `num_images` | integer | File count. |
+| `num_masks` | integer | File count. |
+| `is_subset` | `true` or `false` | Subset uploads vs full uploads. |
+| `created_by` | username | Who ran the upload script. |
+| `created_date` | `YYYY-MM-DD` | Upload date (UTC). |
+| `git_commit` | short SHA | Commit of the upload script. |
 
-### Example: `cv5_hades_raw` v1.0.0
+Split assets additionally carry:
 
-```yaml
-source: hades
-cohorts: Y2B_23,Y2B_24,Y2B_25
-is_raw: true
-num_images: 685
-num_masks: 1592
-created_by: <github-username>
-created_date: YYYY-MM-DD
-git_commit: <short-sha>
-excluded_paths: Kaggle/,*.txt
-notes: "1:1 mirror of the raw delivery. Training-time filtering and preprocessing applied by training code; see docs/data/preprocessing_spec.md."
-```
+| Tag | Values |
+|---|---|
+| `split_ratio` | `80_10_10` |
+| `split_seed` | `42` |
+| `derived_from` | `cv5_raw:<version>` |
+
+`cv5_raw` additionally carries `excluded_paths`, listing what was dropped
+from the raw delivery (e.g. `Kaggle/,*.txt,*_occluded_root_mask.tif,images_without_root_mask`).
 
 ## 5. Description field
 
-The asset description must include:
+Every asset description includes:
 
-1. One-line summary: "Raw HADES/NPEC plant segmentation dataset, mirrored
-   from on-disk delivery."
-2. Source pointer (raw dataset location + delivery date).
-3. What was excluded and why.
-4. Link to `docs/data/data_inventory.md` for content details.
-5. Link to `docs/data/preprocessing_spec.md` for the consumer contract.
+1. One-line summary of what the asset is and its role.
+2. Pooling and split policy (cohorts + seed + ratio for splits).
+3. Inclusion rule (what was kept, what was dropped).
+4. Git commit of the upload script.
+5. Whether this is a subset upload.
+6. Pointers to `docs/data/preprocessing_spec.md` and
+   `docs/data/versioning_strategy.md`.
 
-## 6. Review
+The upload script generates these descriptions automatically — they should
+not be hand-edited after registration.
+
+## 6. Legacy assets
+
+The following assets were registered under the previous strategy and are
+**archived**, not deleted (Azure ML does not support deleting assets):
+
+| Name | Versions | Status |
+|---|---|---|
+| `cv5_hades_raw` | 1.0.0, 1.1.0 | Archived. Used the now-superseded 1:1-mirror strategy with cohort/annotator folder structure preserved. |
+| `cv5_test_images` | 1.0.0, 1.1.0, 1.1.1 | Archived. Was a one-off test fixture under the old naming scheme. |
+
+The underlying datastore files for these assets are left in place. They
+take negligible storage and removing them risks breaking references from
+any training runs that pinned to those versions.
+
+New training runs should reference the new `cv5_*` asset set exclusively.
+
+## 7. Loading an asset
+
+```python
+from azure.ai.ml import MLClient
+from azure.identity import InteractiveBrowserCredential
+
+ml_client = MLClient(
+    credential=InteractiveBrowserCredential(),
+    subscription_id="...",
+    resource_group_name="buas-y2",
+    workspace_name="team-CV5-2026",
+)
+
+asset = ml_client.data.get(name="cv5_train", version="1.0.0")
+# asset.path is the URI in workspaceblobstore
+```
+
+For reading file lists without downloading:
+
+```python
+from azureml.fsspec import AzureMachineLearningFileSystem
+fs = AzureMachineLearningFileSystem(asset.path)
+images = fs.ls("images/")
+```
+
+For training jobs, pass the asset as an input to the job and let Azure ML
+mount or download it onto the compute target.
+
+## 8. Review
 
 Reviewed and agreed: YYYY-MM-DD
