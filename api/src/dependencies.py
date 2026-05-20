@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 _USE_MOCK: bool = os.getenv("USE_MOCK_INFERENCE", "true").lower() != "false"
 
 # Fallback artifact directory used when no model is deployed in the DB yet.
-_FALLBACK_ARTIFACT_DIR = Path(os.getenv("NPEC_ARTIFACT_DIR", "/app/npec_cv/artifacts/models"))
+_FALLBACK_ARTIFACT_DIR = Path(os.getenv("NPEC_ARTIFACT_DIR", "/app/artifacts/models")) / "v1"
 
 # Module-level singletons
 _storage_backend: AbstractStorageBackend = get_storage_backend()

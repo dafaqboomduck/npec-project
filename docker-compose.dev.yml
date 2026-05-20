@@ -90,7 +90,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
+      - ./artifacts:/app/artifacts
     depends_on:
       db:
         condition: service_healthy

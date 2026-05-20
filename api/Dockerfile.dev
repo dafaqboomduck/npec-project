@@ -48,6 +48,7 @@ COPY --from=deps /usr/local/bin /usr/local/bin
 # Application source
 COPY api/ ./api/
 COPY src/npec_cv/ ./npec_cv/
+COPY scripts/train_local_and_report.py /app/scripts/train_and_report.py 
 
 # Non-root user
 RUN adduser --disabled-password --gecos "" --uid 1001 appuser \

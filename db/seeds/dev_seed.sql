@@ -54,7 +54,7 @@ VALUES (
     'Dev-only placeholder. Not a real trained model. Replace via training pipeline.',
     'deployed',
     NULL, NULL, NULL, NULL,
-    '/app/npec_cv/artifacts/models',
+    '/app/artifacts/models/v1/root_det_model_512px.keras',
     NOW()
 )
 ON CONFLICT (version) DO UPDATE SET

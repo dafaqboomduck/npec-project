@@ -284,7 +284,18 @@ class LocalTrainingService(AbstractTrainingService):
         """
         from api.src.db.session import get_sessionmaker
 
-        env = _build_subprocess_env(run_id=run_id, hyperparameters=hyperparameters)
+        output_dir, version = _next_version_dir()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Training run %s will write artifacts to '%s'", run_id, output_dir)
+
+        deployed_artifact_dir = await _get_deployed_artifact_dir()
+
+        env = _build_subprocess_env(
+            run_id=run_id,
+            hyperparameters=hyperparameters,
+            output_dir=output_dir,
+            artifact_dir=deployed_artifact_dir,
+        )
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -329,6 +340,7 @@ class LocalTrainingService(AbstractTrainingService):
             _running_processes.pop(run_id, None)
 
         session_factory = get_sessionmaker()
+        model_version_id: uuid.UUID | None = None
 
         if proc.returncode == 0:
             # Parse final_f1 from stdout if the script printed it
@@ -337,7 +349,7 @@ class LocalTrainingService(AbstractTrainingService):
 
             model_version_id = await _register_model_if_better(
                 run_id=run_id,
-                output_dir=Path(os.getenv("NPEC_OUTPUT_DIR", "/app/data/training_output")),
+                output_dir=output_dir,
                 final_f1=final_f1_value,
                 session_factory=session_factory,
             )
@@ -383,6 +395,8 @@ class LocalTrainingService(AbstractTrainingService):
 def _build_subprocess_env(
     run_id: uuid.UUID,
     hyperparameters: dict[str, Any],
+    output_dir: Path,
+    artifact_dir: Path,
 ) -> dict[str, str]:
     """Build the environment for the training subprcess.
 
@@ -393,12 +407,16 @@ def _build_subprocess_env(
     Args:
         run_id: UUID of the training run.
         hyperparameters: Hyperparameter overrides dict.
+        output_dir: Path to the output directory for models.
+        artifact_dir: Path to the artifact directory.
 
     Returns:
         Dict of environment variables for the subprocess.
     """
     env = {**os.environ}
     env["TRAINING_RUN_ID"] = str(run_id)
+    env["NPEC_OUTPUT_DIR"] = str(output_dir)
+    env["NPEC_ARTIFACT_DIR"] = str(artifact_dir)
     if "learning_rate" in hyperparameters:
         env["NPEC_LEARNING_RATE"] = str(hyperparameters["learning_rate"])
     if "batch_size" in hyperparameters:
@@ -406,6 +424,60 @@ def _build_subprocess_env(
     if "epochs" in hyperparameters:
         env["NPEC_EPOCHS"] = str(hyperparameters["epochs"])
     return env
+
+
+def _next_version_dir() -> tuple[Path, str]:
+    """Return (output_dir, version_string) for the next training run.
+
+    Scans NPEC_ARTIFACT_DIR for existing v{n} directories and returns
+    the next one. v1 is reserved for the baseline model so training
+    starts at v2.
+
+    Returns:
+        tuple of (Path to new version dir, version string e.g. 'v3').
+    """
+    artifact_dir = Path(os.getenv("NPEC_ARTIFACT_DIR", "/app/artifacts/models"))
+    existing = (
+        [
+            int(p.name[1:])
+            for p in artifact_dir.iterdir()
+            if p.is_dir() and p.name.startswith("v") and p.name[1:].isdigit()
+        ]
+        if artifact_dir.exists()
+        else []
+    )
+
+    next_n = max(existing, default=1) + 1
+    version = f"v{next_n}"
+    return artifact_dir / version, version
+
+
+async def _get_deployed_artifact_dir() -> Path:
+    from api.src.db.orm import ModelVersion
+    from api.src.db.session import get_sessionmaker
+    from api.src.schemas.library import ModelStatus
+
+    fallback = Path(os.getenv("NPEC_ARTIFACT_DIR", "/app/artifacts/models")) / "v1"
+    try:
+        async with get_sessionmaker()() as db:
+            result = await db.execute(
+                select(ModelVersion.artifact_uri).where(ModelVersion.status == ModelStatus.DEPLOYED.value).limit(1)
+            )
+            uri = result.scalar_one_or_none()
+            if uri:
+                path = Path(uri)
+                if path.is_file():
+                    return path.parent
+                if path.is_dir():
+                    if (path / "root_det_model_512px.keras").exists():
+                        return path
+                    logger.warning(
+                        "artifact_uri '%s' is a directory but contains no model files - using fallback",
+                        path,
+                    )
+    except Exception as exc:
+        logger.warning("Could not resolve deployed artifact dir, using fallback: %s", exc)
+    return fallback
 
 
 async def _update_run_status(
@@ -488,7 +560,7 @@ async def _write_throughput_metric(
 
     try:
         # Find validation images
-        val_dir = Path(os.getenv("NPEC_VALIDATION_DIR", "/app/npec_cv/artifacts/validation"))
+        val_dir = Path(os.getenv("NPEC_VALIDATION_DIR", "/app/artifacts/validation"))
         if not val_dir.exists():
             logger.warning(
                 "Throughput benchmark skipped - validation dir not found at %s",

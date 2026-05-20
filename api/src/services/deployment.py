@@ -6,7 +6,7 @@ AbstractDeploymentServic.
 LocalDeploymentService (active for local + on-premise):
     - Reads artifact_uri from the model_versions row
     - Verifies the file exists on disk
-    - Copies it to the versioned path ./data/models/{version}/model.keras
+    - Copies it to the versioned path ./artifacts/models/{version}/model.keras
     - Archives the previously deployed model in the same DB transaction
     - Signals the UNetInferenceService singleton to reload on next request
 """
@@ -14,6 +14,7 @@ LocalDeploymentService (active for local + on-premise):
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -27,6 +28,7 @@ from api.src.schemas.library import ModelStatus
 from api.src.services.base import AbstractInferenceService
 
 logger = logging.getLogger(__name__)
+_ARTIFACT_DIR = Path(os.getenv("NPEC_ARTIFACT_DIR", "/app/artifacts/models"))
 
 
 class AbstractDeploymentService(ABC):
@@ -75,7 +77,7 @@ class LocalDeploymentService(AbstractDeploymentService):
         Steps:
             1. Load the model_versions row and verify artifact_uri is set.
             2. Verify the source file exists on disk.
-            3. Copy it to ./data/models/{version}/model.keras.
+            3. Copy it to ./atifacts/models/{version}/model.keras.
             4. Archive the currently deployed model.
             5. Mark this model as deployed with deployed_at = now().
             6. Commit the transaction.
@@ -111,7 +113,7 @@ class LocalDeploymentService(AbstractDeploymentService):
             )
 
         # 3. Copy to versioned active path
-        dest_dir = Path("/app/data/models") / row.version
+        dest_dir = _ARTIFACT_DIR / row.version
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_path = dest_dir / "model.keras"
 
