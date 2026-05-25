@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.src.db.orm import ModelVersion, Prediction
+from api.src.db.orm import Annotation, ModelVersion, Prediction
 from api.src.repositories.annotations import AnnotationRepository
 from api.src.repositories.base import AbstractPredictionRepository
 from api.src.repositories.datasets import DatasetRepository
@@ -234,12 +234,9 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             return None
 
         feedback_signal: str | None = None
-        print("\n1.\n")
         fb = await FeedbackRepository(self._db).get_latest_for_prediction(prediction_id)
-        print("\n2.\n")
         if fb is not None:
             feedback_signal = fb.signal
-            print("\n3.\n")
 
         return self._orm_to_schema(row, feedback_signal=feedback_signal)
 
@@ -312,7 +309,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         age_days: int | None,
         treatment: str | None,
         dataset_id: uuid.UUID | None = None,
-    ) -> tuple[PredictionResponse, bool]:
+    ) -> tuple[PredictionResponse, bool, uuid.UUID | None]:
         """Confirm a prediction and create a linked annotation record.
 
         Args:
@@ -324,7 +321,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
                 When provided, datasets.count is incremented in the transaction.
 
         Returns:
-            `(prediction, already_confirmed)` - if `already_confirmed` is
+            `(prediction, annotation_id, already_confirmed)` - if `already_confirmed` is
             `True` the router returns 409 without another DB round-trip.
 
         Raises:
@@ -346,7 +343,10 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             raise ValueError(f"Prediction {prediction_id} not found.")
 
         if row.confirmed_at is not None:
-            return self._orm_to_schema(row), True
+            existing = await self._db.execute(select(Annotation).where(Annotation.prediction_id == prediction_id))
+            existing_annotation = existing.scalar_one_or_none()
+            existing_id = existing_annotation.id if existing_annotation else None
+            return self._orm_to_schema(row), True, existing_id
 
         now = datetime.now(timezone.utc)
         row.confirmed_at = now
@@ -359,7 +359,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
                 raise ValueError(f"Dataset {dataset_id} not found.")
 
         annotation_repo = AnnotationRepository(self._db, self._storage)
-        await annotation_repo.create_from_prediction(
+        annotation_id = await annotation_repo.create_from_prediction(
             prediction_id=prediction_id,
             mask_uri=row.segmentation_mask_uri,
             tip_photo_uri=row.tip_photo_uri,
@@ -379,4 +379,4 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
 
         await self._db.commit()
         await self._db.refresh(row)
-        return self._orm_to_schema(row), False
+        return self._orm_to_schema(row), False, annotation_id

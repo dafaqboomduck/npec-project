@@ -24,6 +24,7 @@ import Inference from './pages/Inference';
 import History from './pages/History';
 import Library from './pages/Library';
 import Models from './pages/Models';
+import Lab from './pages/Lab';
 import { isAuthenticated, getRole } from './api/auth';
 import { InferenceJobsProvider } from './context/InferenceJobsContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -87,6 +88,14 @@ function App() {
           element={
             <RequireAuth>
               <Library />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/lab"
+          element={
+            <RequireAuth>
+              <Lab />
             </RequireAuth>
           }
         />

@@ -93,6 +93,7 @@ export async function getAnnotations(params?: {
   dataset_id?: string;
   page?: number;
   page_size?: number;
+  order?: 'asc' | 'desc';
 }): Promise<AnnotationResponse[]> {
   const qs = new URLSearchParams();
   if (params?.species) qs.set('species', params.species);
@@ -101,6 +102,7 @@ export async function getAnnotations(params?: {
   if (params?.dataset_id) qs.set('dataset_id', params.dataset_id);
   if (params?.page) qs.set('page', String(params.page));
   if (params?.page_size) qs.set('page_size', String(params.page_size));
+  if (params?.order) qs.set('order', params.order);
   const query = qs.toString() ? `?${qs}` : '';
   return apiClient<AnnotationResponse[]>(`/annotations${query}`);
 }

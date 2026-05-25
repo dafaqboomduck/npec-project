@@ -1757,6 +1757,56 @@
   opacity: 0.75;
 }
 
+/* Edit mask overlay button */
+.ann-edit-mask-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  z-index: 2;
+}
+
+.ann-edit-mask-btn:hover {
+  background: rgba(0, 0, 0, 0.85);
+  border-color: var(--color-primary-light);
+}
+
+/* Review in Lab button — dataset detail sidebar */
+.lib-btn-review-lab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1.5px solid #b91c1c;
+  border-radius: var(--radius-md);
+  color: #b91c1c;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.lib-btn-review-lab:hover {
+  background: #b91c1c;
+  color: #fff;
+}
+
 /* ── Lightbox ── */
 .ann-lightbox {
   position: fixed;

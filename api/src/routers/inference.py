@@ -352,13 +352,14 @@ async def confirm_prediction(
     repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
     try:
-        _, already_confirmed = await repo.confirm(
+        _, already_confirmed, annotation_id = await repo.confirm(
             prediction_id=prediction_id,
             species=body.species if body else None,
             age_days=body.age_days if body else None,
             treatment=body.treatment if body else None,
             dataset_id=body.dataset_id if body else None,
         )
+
         if body and body.feedback_signal:
             from api.src.repositories.feedback import FeedbackRepository
 
@@ -386,12 +387,10 @@ async def confirm_prediction(
         )
 
     if already_confirmed:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=ErrorResponse(
-                error_code=ErrorCode.CONFLICT,
-                message="Prediction has already been confirmed.",
-            ).model_dump(),
+        return ConfirmPredictionResponse(
+            message="Prediction already confirmed.",
+            prediction_id=prediction_id,
+            annotation_id=annotation_id,
         )
 
     asyncio.create_task(
@@ -403,6 +402,7 @@ async def confirm_prediction(
     return ConfirmPredictionResponse(
         message="Prediction confirmed and annotation created.",
         prediction_id=prediction_id,
+        annotation_id=annotation_id,
     )
 
 

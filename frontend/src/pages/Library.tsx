@@ -36,6 +36,7 @@ import type { AnnotationResponse, PredictionResponse } from '../types/api';
 import { getPrediction } from '../api/inferenceApi';
 import { getArtifactUrl } from '../api/client';
 import './Library.css';
+import { useNavigate } from 'react-router-dom';
 
 // ---------------------------------------------------------------------------
 // Annotations Tab sub-component
@@ -271,6 +272,7 @@ const _inferenceRunningAnnotations = new Set<string>();
 type LibraryTab = 'datasets' | 'annotations';
 
 export default function Library() {
+  const navigate = useNavigate();
   const username = getUsername();
   const role = getRole();
   const displayName = username.includes('@')
@@ -1528,6 +1530,21 @@ export default function Library() {
                           )}
                         </div>
                       )}
+                      {/* Review in Lab button */}
+                      {detailScans.some(s => s.status === 'review_required') && (
+                        <button
+                          className="lib-btn-review-lab"
+                          onClick={() => navigate(`/lab?dataset_id=${selectedDatasetId}`)}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                          Review {detailScans.filter(s => s.status === 'review_required').length} in Lab
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2465,16 +2482,38 @@ export default function Library() {
                       }}
                     />
                   ) : imageView === 'mask' && selectedAnnotation.mask_url ? (
-                    <img
-                      src={getArtifactUrl(selectedAnnotation.mask_url)}
-                      alt="Segmentation Mask"
-                      className="ann-image"
-                      onClick={() => setLightboxSrc(getArtifactUrl(selectedAnnotation.mask_url!))}
-                      title="Click to enlarge"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23222"/><text x="100" y="105" font-family="sans-serif" font-size="14" fill="%23666" text-anchor="middle">No Mask</text></svg>';
-                      }}
-                    />
+                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                      <img
+                        src={
+                          selectedAnnotation.mask_url
+                            ? getArtifactUrl(selectedAnnotation.mask_url)
+                            : getArtifactUrl(linkedPrediction?.segmentation_mask_url)
+                        } alt="Segmentation Mask"
+                        className="ann-image"
+                        onClick={() => setLightboxSrc(getArtifactUrl(selectedAnnotation.mask_url!))}
+                        title="Click to enlarge"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23222"/><text x="100" y="105" font-family="sans-serif" font-size="14" fill="%23666" text-anchor="middle">No Mask</text></svg>';
+                        }}
+                      />
+                      <button
+                        className="ann-edit-mask-btn"
+                        title="Edit mask in Lab"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedAnnotation(null);
+                          navigate(`/lab?annotation_id=${selectedAnnotation.annotation_id}`);
+                        }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2.5"
+                          strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                        Edit in Lab
+                      </button>
+                    </div>
                   ) : imageView === 'tip' && selectedAnnotation.tip_photo_url ? (
                     <img
                       src={selectedAnnotation.tip_photo_url}
@@ -2744,6 +2783,13 @@ export default function Library() {
                             setAnnotationFeedback(next);
                             setSelectedAnnotation(prev => prev ? { ...prev, status: 'review_required' } : null);
                             setAnnotRefreshKey(k => k + 1);  // triggers list re-fetch
+                            setDetailScans(prev =>
+                              prev.map(s =>
+                                s.annotation_id === selectedAnnotation.annotation_id
+                                  ? { ...s, status: 'review_required' }
+                                  : s
+                              )
+                            );
                           } finally {
                             setFeedbackSaving(false);
                           }
@@ -2763,6 +2809,13 @@ export default function Library() {
                             setAnnotationFeedback(next);
                             setSelectedAnnotation(prev => prev ? { ...prev, status: 'annotated' } : null);
                             setAnnotRefreshKey(k => k + 1);  // triggers list re-fetch
+                            setDetailScans(prev =>
+                              prev.map(s =>
+                                s.annotation_id === selectedAnnotation.annotation_id
+                                  ? { ...s, status: 'annotated' }
+                                  : s
+                              )
+                            );
                           } finally {
                             setFeedbackSaving(false);
                           }

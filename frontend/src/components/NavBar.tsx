@@ -52,6 +52,15 @@ export default function NavBar() {
             Dashboard
           </NavLink>
           <NavLink
+            to="/library"
+            id="nav-library"
+            className={({ isActive }) =>
+              `navbar-tab${isActive ? ' navbar-tab--active' : ''}`
+            }
+          >
+            Library
+          </NavLink>
+          <NavLink
             to="/inference"
             id="nav-inference"
             className={({ isActive }) =>
@@ -61,6 +70,15 @@ export default function NavBar() {
             Inference
           </NavLink>
           <NavLink
+            to="/lab"
+            className={({ isActive }) =>
+              `navbar-link${isActive ? ' navbar-link--active' : ''}`
+            }
+            id="nav-lab"
+          >
+            Lab
+          </NavLink>
+          <NavLink
             to="/history"
             id="nav-history"
             className={({ isActive }) =>
@@ -68,15 +86,6 @@ export default function NavBar() {
             }
           >
             History
-          </NavLink>
-          <NavLink
-            to="/library"
-            id="nav-library"
-            className={({ isActive }) =>
-              `navbar-tab${isActive ? ' navbar-tab--active' : ''}`
-            }
-          >
-            Library
           </NavLink>
           {getRole() === 'admin' && (
             <NavLink

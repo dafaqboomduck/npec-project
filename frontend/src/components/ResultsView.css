@@ -103,26 +103,6 @@
   opacity: 0.88;
 }
 
-.rv-actions-secondary {
-  display: flex;
-  justify-content: center;
-  margin-top: -0.5rem;
-}
-
-.rv-btn--secondary-ghost {
-  background: transparent;
-  border: 1px dashed var(--color-border);
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
-  padding: 0.4rem 1rem;
-}
-
-.rv-btn--secondary-ghost:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: var(--color-bg-subtle);
-}
-
 /* ── Stats row ── */
 .rv-stats-row {
   display: grid;
@@ -231,6 +211,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  position: relative;
 }
 
 .rv-overlay-img {

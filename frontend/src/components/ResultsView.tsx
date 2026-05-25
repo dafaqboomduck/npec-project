@@ -3,6 +3,8 @@ import { getArtifactUrl } from '../api/client';
 import MaskEditor from './MaskEditor';
 import type { PredictionResponse, Plant } from '../types/api';
 import './ResultsView.css';
+import { confirmPrediction } from '../api/inferenceApi';
+import { submitCorrectedMask } from '../api/labApi';
 
 export type OverlayMode = 'scan' | 'mask' | 'tips';
 
@@ -34,8 +36,9 @@ export default function ResultsView({
     null,
   );
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [maskSaving, setMaskSaving] = useState(false);
+  const [maskSaveError, setMaskSaveError] = useState<string | null>(null);
   const meta = result.metadata;
-  const predIdShort = result.prediction_id.slice(0, 6);
 
   const overlayModes: OverlayMode[] = ['scan', 'mask', 'tips'];
 
@@ -67,7 +70,6 @@ export default function ResultsView({
             </span>
           </div>
           <p className="rv-subtitle">
-            prediction p_{predIdShort} ·{' '}
             {result.input_filename || file?.name || 'scan'} ·{' '}
             {deployedModelName}
           </p>
@@ -156,6 +158,21 @@ export default function ResultsView({
                 segmentation_mask.png · {result.plants.length} tip markers
               </span>
             )}
+            {overlayMode === 'mask' && result.segmentation_mask_url && (
+              <button
+                className="ann-edit-mask-btn"
+                title="Fine-tune segmentation mask"
+                onClick={() => setIsEditorOpen(true)}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.5"
+                  strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                Edit Mask
+              </button>
+            )}
           </div>
         </div>
 
@@ -185,15 +202,6 @@ export default function ResultsView({
                 ))}
               </tbody>
             </table>
-          </div>
-
-          <div className="rv-actions-secondary">
-            <button
-              className="rv-btn rv-btn--secondary-ghost"
-              onClick={() => setIsEditorOpen(true)}
-            >
-              🖌 Fine-tune Mask
-            </button>
           </div>
 
           {/* Feedback widget */}
@@ -227,16 +235,43 @@ export default function ResultsView({
 
       <MaskEditor
         isOpen={isEditorOpen}
-        onClose={() => setIsEditorOpen(false)}
-        onSave={(blob) => {
-          console.log('User submitted corrected mask:', blob);
+        onClose={() => {
           setIsEditorOpen(false);
-          setFeedback('incorrect');
-          alert('Mask correction captured! (Note: Backend upload currently in development)');
+          setMaskSaveError(null);
         }}
-        originalImageUrl={getArtifactUrl(result.input_url) ?? filePreviewUrl ?? ''}
-        maskImageUrl={getArtifactUrl(result.segmentation_mask_url) ?? ''}
+        onSave={async (blob) => {
+          setMaskSaving(true);
+          setMaskSaveError(null);
+          try {
+            // 1. Save the prediction and create the annotation (no metadata needed)
+            const confirmed = await confirmPrediction(result.prediction_id);
+            // 2. Submit the corrected mask against the new annotation
+            await submitCorrectedMask(confirmed.annotation_id, blob);
+            // 3. Close everything silently
+            setIsEditorOpen(false);
+            setFeedback('incorrect');
+            onFeedbackChange?.('incorrect');
+            onNewScan?.();
+          } catch (err) {
+            setMaskSaveError((err as Error).message || 'Failed to save mask.');
+          } finally {
+            setMaskSaving(false);
+          }
+        }}
+        originalImageUrl={getArtifactUrl(result.input_url) || filePreviewUrl || ''}
+        maskImageUrl={getArtifactUrl(result.segmentation_mask_url) || ''}
+        saveLabel={maskSaving ? 'Saving…' : 'Apply Correction'}
       />
+      {maskSaveError && (
+        <p style={{
+          color: '#b91c1c',
+          fontSize: '0.8rem',
+          marginTop: '0.5rem',
+          textAlign: 'center',
+        }}>
+          {maskSaveError}
+        </p>
+      )}
     </div>
   );
 }

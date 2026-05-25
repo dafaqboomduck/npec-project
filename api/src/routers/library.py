@@ -62,7 +62,7 @@ from api.src.services.artifact_storage import (
 from api.src.services.base import AbstractInferenceService
 from api.src.services.deployment import AbstractDeploymentService
 from api.src.services.image_validation import validate_image
-from api.src.services.mask_storage import save_annotation_mask, validate_tiff_mask
+from api.src.services.mask_storage import save_annotation_mask, validate_mask
 from api.src.services.monitoring import MonitoringService
 from api.src.services.storage import AbstractStorageBackend
 
@@ -673,6 +673,11 @@ async def list_annotations(
     dataset_id: UUID | None = Query(None, description="Filter by dataset UUID"),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=20, ge=1, le=100, description="Results per page"),
+    order: str = Query(
+        default="desc",
+        pattern="^(asc|desc)$",
+        description="Sort order for created_at: 'asc' or 'desc'",
+    ),
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
     storage: AbstractStorageBackend = Depends(get_storage),
@@ -688,6 +693,7 @@ async def list_annotations(
         dataset_id: Optional dataset UUID filter.
         page: 1-indexed page number.
         page_size: Number of results per page (max 100).
+        order: Sort direction for the list.
         user: Authenticated user from Bearer token.
         db: Injected database session.
         storage: Injected backend storage.
@@ -704,6 +710,7 @@ async def list_annotations(
         page_size=page_size,
         role=user.role,
         requesting_user_id=UUID(user.sub),
+        order=order,
     )
 
 
@@ -900,13 +907,9 @@ async def delete_annotation(
     responses={
         401: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
-        409: {
-            "model": ErrorResponse,
-            "description": "Annotation already confirmed",
-        },
         422: {
             "model": ErrorResponse,
-            "description": "Uploaded file is not a valid single-frame TIFF",
+            "description": "Uploaded file is not a valid single-frame TIFF or PNG",
         },
     },
 )
@@ -917,13 +920,16 @@ async def confirm_annotation(
     storage: AbstractStorageBackend = Depends(get_storage),
     db: AsyncSession = Depends(get_session),
 ) -> AnnotationResponse:
-    """Upload a corrected .tiff mask and mark the annotation as annotated.
+    """Upload a corrected mask and mark the annotation as annotated.
 
-    The submitted mask becomes ground truth for model retraining.
+    Accepts .tiff or .png. PNG inputs are converted to single-frame
+    grayscale TIFF before storage so the retraining pipeline always
+    receives a consistent format. Re-submitting an already-confirmed
+    annotation overwrites the existing mask.
 
     Args:
         annotation_id: UUID of the annotation to confirm.
-        mask: The corrected segmentation mask (.tiff, single-frame only).
+        mask: The corrected segmentation mask (.tiff or .png, single-frame).
         user: Authenticated user from Bearer token.
         storage: Injected backend storage.
         db: Injected database session.
@@ -933,13 +939,12 @@ async def confirm_annotation(
 
     Raises:
         HTTPException: 404 if the annotation does not exist.
-        HTTPException: 409 if the annotation has already been confirmed.
-        HTTPException: 422 if the uploaded file is not a valid single-frame TIFF.
+        HTTPException: 422 if the uploaded file is not a valid single-frame TIFF or PNG.
     """
     mask_bytes = await mask.read()
 
     try:
-        validate_tiff_mask(mask_bytes, mask.filename or "")
+        validate_mask(mask_bytes, mask.filename or "")
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

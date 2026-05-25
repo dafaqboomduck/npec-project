@@ -1,4 +1,4 @@
-.mask_editor-overlay {
+.mask-editor-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -25,6 +25,13 @@
   box-shadow: var(--shadow-2xl);
 }
 
+.mask-editor-window--inline {
+  max-width: none;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .me-header {
   padding: 1.25rem 2rem;
   border-bottom: 1px solid var(--color-border);
@@ -32,6 +39,7 @@
   justify-content: space-between;
   align-items: center;
   background: #ffffff;
+  flex-shrink: 0;
 }
 
 .me-header-left h3 {
@@ -56,6 +64,7 @@
   display: grid;
   grid-template-columns: 280px 1fr;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* Sidebar */
@@ -140,6 +149,7 @@ input[type="range"] {
   justify-content: center;
   overflow: auto;
   padding: 2rem;
+  min-height: 0;
 }
 
 .me-background-img {
@@ -161,7 +171,7 @@ input[type="range"] {
   touch-action: none;
   image-rendering: pixelated;
   /* Filter makes the white mask pixels look botanical green */
-  filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)) brightness(1.2) sepia(0.3) hue-rotate(80deg) saturate(2);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.5)) brightness(1.2) sepia(0.3) hue-rotate(80deg) saturate(2);
 }
 
 .me-loading {
@@ -177,6 +187,11 @@ input[type="range"] {
   font-size: 0.85rem;
   cursor: pointer;
   transition: opacity var(--transition-fast);
+}
+
+.me-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .me-btn--primary {

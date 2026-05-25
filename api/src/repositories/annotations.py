@@ -79,6 +79,7 @@ class AnnotationRepository:
         page_size: int = 20,
         role: UserRole = UserRole.USER,
         requesting_user_id: uuid.UUID | None = None,
+        order: str = "desc",
     ) -> list[AnnotationResponse]:
         """Return a paginated, filtered list of annotations.
 
@@ -91,6 +92,8 @@ class AnnotationRepository:
             page_size: Number of records per page (1-100).
             role: `UserRole` of the logged in user.
             requesting_user_id: ID of the logged in user.
+            order: Sort direction for `created_at` - `"asc"` for oldest
+                first, `"desc"` for newest first.
 
         Returns:
             A list of `AnnotationResponse`.
@@ -110,8 +113,8 @@ class AnnotationRepository:
             q = q.where(Annotation.dataset_id == dataset_id)
 
         offset = (page - 1) * page_size
-        q = q.order_by(Annotation.created_at.desc()).offset(offset).limit(page_size)
-
+        sort = Annotation.created_at.asc() if order == "asc" else Annotation.created_at.desc()
+        q = q.order_by(sort, Annotation.id.asc()).offset(offset).limit(page_size)
         result = await self._db.execute(q)
         return [_row_to_schema(r, self._storage) for r in result.scalars().all()]
 
@@ -232,9 +235,6 @@ class AnnotationRepository:
         row = await self._db.get(Annotation, annotation_id)
         if row is None:
             return None
-
-        if row.status == AnnotationStatus.ANNOTATED:
-            raise ValueError("Annotation has already been confirmed.")
 
         row.mask_uri = mask_url
         row.status = AnnotationStatus.ANNOTATED

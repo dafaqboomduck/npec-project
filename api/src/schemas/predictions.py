@@ -109,3 +109,4 @@ class ConfirmPredictionResponse(BaseModel):
 
     message: str
     prediction_id: UUID
+    annotation_id: UUID

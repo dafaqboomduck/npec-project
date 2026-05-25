@@ -211,6 +211,7 @@ export interface ConfirmPredictionRequest {
 export interface ConfirmPredictionResponse {
   message: string;
   prediction_id: string;
+  annotation_id: string;
 }
 
 // ===========================================================================
