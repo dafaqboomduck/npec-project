@@ -36,6 +36,16 @@ def _get_memory_percent() -> int:
         return 0
 
 
+def _get_cpu_percent() -> float | None:
+    """Return the current system-wide CPU utilization as a percentage."""
+    try:
+        import psutil
+
+        return round(psutil.cpu_percent(interval=None), 1)
+    except Exception:
+        return None
+
+
 def _get_gpu_temp() -> float | None:
     """Return the GPU temperature in degrees Celsius, or `None`.
 
@@ -52,6 +62,57 @@ def _get_gpu_temp() -> float | None:
     except Exception:
         # No GPU, driver not installed, or pynvml not available
         return
+
+
+def _get_gpu_utilisation() -> float | None:
+    """Return GPU utilisation (0-100%) or None."""
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        rates = pynvml.nvmlDeviceGetUtilizationRates(handle)
+        return float(rates.gpu)
+    except Exception:
+        return None
+
+
+def _get_disk_percent() -> int | None:
+    """Returns the disk usage as a percentage.
+
+    Returns:
+        Disk usage as an int.
+    """
+    try:
+        import psutil
+
+        return int(psutil.disk_usage("/").percent)
+    except Exception:
+        return None
+
+
+def _get_vram_percent() -> float | None:
+    """Return VRAM used as a percentage or None."""
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        return round((mem.used / mem.total) * 100, 1)
+    except Exception:
+        return None
+
+
+def _cuda_available() -> bool:
+    """Returns True if cuda is available, otherwise False."""
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        return pynvml.nvmlDeviceGetCount() > 0
+    except Exception:
+        return False
 
 
 def _system_status(memory_percent: int) -> SystemStatus:
@@ -79,10 +140,13 @@ def get_environment_stats() -> EnvironmentResponse:
         memory usage.
     """
     memory_percent = _get_memory_percent()
-    gpu_temp = _get_gpu_temp()
-
     return EnvironmentResponse(
-        gpu_temp_celsius=gpu_temp,
+        gpu_temp_celsius=_get_gpu_temp(),
+        gpu_utilisation_percent=_get_gpu_utilisation(),
+        vram_percent=_get_vram_percent(),
+        cpu_percent=_get_cpu_percent(),
+        disk_percent=_get_disk_percent(),
+        cuda_available=_cuda_available(),
         memory_percent=memory_percent,
         system_status=_system_status(memory_percent),
     )

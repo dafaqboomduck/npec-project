@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.src.config import settings
+from api.src.dependencies import warmup_inference_service
 from api.src.routers import (
     auth,
     dashboard,
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     model weights.
     """
     logger.info("ROOTR API starting up - docs at /docs")
+    await warmup_inference_service()
     yield
     logger.info("ROOTR API shutting down")
 

@@ -79,5 +79,10 @@ class EnvironmentResponse(BaseModel):
     """Returned by GET /overview/environment (admin only)."""
 
     gpu_temp_celsius: float | None = None
-    memory_percent: int = Field(..., ge=0, le=100)
+    gpu_utilisation: float | None = None
+    vram_percent: float | None = None
+    cpu_percent: float | None = None
+    disk_percent: int | None = None
+    cuda_available: bool = False
+    memory_percent: int
     system_status: SystemStatus

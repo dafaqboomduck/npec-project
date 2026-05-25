@@ -204,6 +204,7 @@ class Prediction(Base):
 
     # Input image metadata
     input_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    input_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     input_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     input_width_px: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     input_height_px: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -297,6 +298,11 @@ class Dataset(Base):
     growth_stage: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # Denormalised count — updated by the application layer or a DB trigger.
     count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = _created_at()
     modified_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -306,6 +312,7 @@ class Dataset(Base):
     )
 
     annotations: Mapped[list["Annotation"]] = relationship(back_populates="dataset")
+    creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])  # ADD
 
     __table_args__ = (
         CheckConstraint(
@@ -339,12 +346,19 @@ class Annotation(Base):
         nullable=True,
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="'pending'")
+    image_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     image_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     mask_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tip_photo_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     species: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     age_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     treatment: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     growth_stage: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -352,6 +366,7 @@ class Annotation(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])
 
     dataset: Mapped[Optional["Dataset"]] = relationship(back_populates="annotations")
 

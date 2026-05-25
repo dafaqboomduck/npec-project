@@ -11,11 +11,14 @@
 
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getModelsForInference, predict } from '../api/inferenceApi';
 import NavBar from '../components/NavBar';
-import ResultsView from '../components/ResultsView';
+import { predict, getModelsForInference, confirmPrediction, deletePrediction } from '../api/inferenceApi';
+import type { PredictionResponse, ModelSummary } from '../types/api';
 import { useInferenceJobs } from '../context/InferenceJobsContext';
-import type { ModelSummary, PredictionResponse } from '../types/api';
+import { getUsername, getRole } from '../api/auth';
+import { getAnnotations, getDatasets, runDatasetInference } from '../api/libraryApi';
+import type { DatasetSummary } from '../api/libraryApi';
+import ResultsView from '../components/ResultsView';
 import './Inference.css';
 
 // ---------------------------------------------------------------------------
@@ -42,8 +45,111 @@ export default function Inference() {
   const { jobs, addJob, removeJob, cancelJob } = useInferenceJobs();
 
   // ── Modals ──
-  const [showComingSoon, setShowComingSoon] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
+  // ── Select Dataset Modal States ──
+  const [showSelectDatasetModal, setShowSelectDatasetModal] = useState(false);
+  const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
+
+  // ── Batch Inference Progress States ──
+  const [showBatchProgress, setShowBatchProgress] = useState(false);
+  const [batchDatasetName, setBatchDatasetName] = useState('');
+  const [batchTotalCount, setBatchTotalCount] = useState(0);
+  const [batchCurrentIndex, setBatchCurrentIndex] = useState(0);
+  const [batchPercent, setBatchPercent] = useState(0);
+  const [batchCompleted, setBatchCompleted] = useState(false);
+
+  // ── Save form fields ──
+  const [saveSpecies, setSaveSpecies] = useState('');
+  const [saveAgeDays, setSaveAgeDays] = useState('');
+  const [saveTreatment, setSaveTreatment] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [discarding, setDiscarding] = useState(false);
+  const [pendingFeedback, setPendingFeedback] = useState<'correct' | 'incorrect' | null>(null);
+  const [datasetPendingCounts, setDatasetPendingCounts] = useState<Record<string, number>>({});
+
+  // ── Active Session Stats ──
+  const username = getUsername();
+  const role = getRole();
+  const displayName = username.includes('@')
+    ? username.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    : username;
+
+  async function runBatchInference(dsId: string, dsName: string, count: number) {
+    setShowSelectDatasetModal(false);
+    setShowBatchProgress(true);
+    setBatchDatasetName(dsName);
+    setBatchTotalCount(count);
+    setBatchCurrentIndex(0);
+    setBatchPercent(0);
+    setBatchCompleted(false);
+
+    try {
+      // Trigger background inference
+      const res = await runDatasetInference(dsId);
+
+      // If no pending images
+      if (res.message.toLowerCase().includes('no pending')) {
+        setBatchCompleted(true);
+        setBatchPercent(100);
+        setBatchCurrentIndex(count);
+        return;
+      }
+
+      const initialAnnotations = await getAnnotations({
+        dataset_id: dsId,
+        page_size: 100,
+      });
+      const realTotal = initialAnnotations.length;
+      setBatchTotalCount(realTotal);
+
+      const initialPending = initialAnnotations.filter(a => a.status === 'pending').length;
+      const initialDone = realTotal - initialPending;
+      setBatchCurrentIndex(initialDone);
+      setBatchPercent(realTotal > 0 ? Math.round((initialDone / realTotal) * 100) : 0);
+
+      // Poll annotations until none are pending
+      const MAX_POLLS = 120; // 10 minutes at 5s intervals
+      let polls = 0;
+
+      const interval = setInterval(async () => {
+        polls++;
+        try {
+          const annotations = await getAnnotations({
+            dataset_id: dsId,
+            page_size: 100,
+          });
+
+          const total = annotations.length;
+          const pending = annotations.filter(a => a.status === 'pending').length;
+          const done = total - pending;
+
+          setBatchTotalCount(total);
+          setBatchCurrentIndex(done);
+          setBatchPercent(Math.round((done / total) * 100));
+
+          if (pending === 0 || polls >= MAX_POLLS) {
+            clearInterval(interval);
+            setBatchCurrentIndex(total);
+            setBatchPercent(100);
+            setBatchCompleted(true);
+          }
+        } catch {
+          clearInterval(interval);
+          setBatchCompleted(true);
+        }
+      }, 5000);
+
+    } catch (err) {
+      setBatchCompleted(true);
+      setBatchPercent(100);
+      // Show error in completed state
+      setBatchDatasetName(`Error: ${(err as Error).message}`);
+    }
+  }
 
   useEffect(() => {
     void getModelsForInference()
@@ -104,9 +210,19 @@ export default function Inference() {
     };
     addJob(newJob);
 
+    // Capture file in local scope and clear dropzone immediately to support concurrent runs!
+    const currentFile = file;
+    setFile(null);
+    setFilePreviewUrl(null);
+    setRunning(false);
+
     try {
-      const res = await predict(file, controller.signal);
+      const res = await predict(currentFile, controller.signal);
       setResult(res);
+      setFile(currentFile);
+      if (currentFile.type.startsWith('image/')) {
+        setFilePreviewUrl(URL.createObjectURL(currentFile));
+      }
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
         setError('Inference was cancelled.');
@@ -114,8 +230,45 @@ export default function Inference() {
         setError((err as Error).message);
       }
     } finally {
-      setRunning(false);
       removeJob(jobId);
+    }
+  }
+
+  async function handleSave() {
+    if (!result) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await confirmPrediction(result.prediction_id, {
+        species: saveSpecies.trim() || undefined,
+        age_days: saveAgeDays ? parseInt(saveAgeDays, 10) : undefined,
+        treatment: saveTreatment.trim() || undefined,
+        feedback_signal: pendingFeedback ?? undefined,
+      });
+      setShowSaveModal(false);
+      setResult(null);
+      setFile(null);
+      setFilePreviewUrl(null);
+    } catch (err) {
+      setSaveError((err as Error).message || 'Failed to save prediction.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDiscard() {
+    if (!result) return;
+    setDiscarding(true);
+    try {
+      await deletePrediction(result.prediction_id);
+    } catch {
+      // Ignore errors on discard — clear locally regardless
+    } finally {
+      setDiscarding(false);
+      setResult(null);
+      setFile(null);
+      setFilePreviewUrl(null);
+      setShowDiscardConfirm(false);
     }
   }
 
@@ -163,7 +316,39 @@ export default function Inference() {
                 {/* Active Session */}
                 <section className="sidebar-section">
                   <span className="sidebar-section-label">ACTIVE SESSION</span>
-                  <div className="session-status"></div>
+                  <div className="session-status" style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flexFlow: 'wrap',
+                    gap: '8px',
+                    padding: '12px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border-subtle)',
+                    fontSize: '12px',
+                    color: 'var(--color-text-muted)',
+                    lineHeight: '1.4'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: '#10b981',
+                        boxShadow: '0 0 8px #10b981',
+                        display: 'inline-block',
+                      }} />
+                      <span style={{ color: '#10b981', fontWeight: 600 }}>API Connected (TLS secured)</span>
+                    </div>
+                    <div>
+                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Model: </span>
+                      <span>{deployedModel ? deployedModel.name : 'Placeholder U-Net'}</span>
+                    </div>
+                    <div>
+                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Operator: </span>
+                      <span>{displayName} ({role})</span>
+                    </div>
+                  </div>
                 </section>
 
                 {/* Running Processes */}
@@ -220,7 +405,8 @@ export default function Inference() {
                     setFilePreviewUrl(null);
                   }}
                   onDiscard={() => setShowDiscardConfirm(true)}
-                  onSave={() => setShowComingSoon(true)}
+                  onSave={() => setShowSaveModal(true)}
+                  onFeedbackChange={setPendingFeedback}
                 />
               ) : (
                 /* Dropzone */
@@ -272,7 +458,7 @@ export default function Inference() {
 
                       <h2 className="dropzone-title">Drop Root Scans Here</h2>
                       <p className="dropzone-subtitle">
-                        Support for high-fidelity TIFF, PNG, and DICOM formats.
+                        Support for high-fidelity TIFF, PNG, and JPG formats.
                         <br />
                         Max file size <strong>256 MB</strong> per scan.
                       </p>
@@ -299,9 +485,32 @@ export default function Inference() {
                     <button
                       className="btn-select btn-select--server"
                       id="btn-select-server"
-                      onClick={() => setShowComingSoon(true)}
+                      onClick={async () => {
+                        setLoadingDatasets(true);
+                        setShowSelectDatasetModal(true);
+                        try {
+                          const data = await getDatasets();
+                          setDatasets(data);
+                          // Fetch pending count per dataset in parallel
+                          const counts = await Promise.all(
+                            data.map(async (ds) => {
+                              const pending = await getAnnotations({
+                                dataset_id: ds.dataset_id,
+                                status: 'pending',
+                                page_size: 100,
+                              });
+                              return [ds.dataset_id, pending.length] as [string, number];
+                            })
+                          );
+                          setDatasetPendingCounts(Object.fromEntries(counts));
+                        } catch (err) {
+                          console.error("Failed to load datasets:", err);
+                        } finally {
+                          setLoadingDatasets(false);
+                        }
+                      }}
                     >
-                      + Select From Server
+                      + Select Dataset
                     </button>
                   </div>
 
@@ -350,73 +559,205 @@ export default function Inference() {
         </div>
       </main>
 
-      {/* ── Floating action button ───────────────────────────────────────── */}
-      <button
-        className="fab"
-        id="fab-back-overview"
-        aria-label="Back to Overview"
-        title="Back to Overview"
-        onClick={() => navigate('/overview')}
-      >
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
-      </button>
-
-      {/* ── "Coming Soon" modal ──────────────────────────────────────────── */}
-      {showComingSoon && (
+      {/* ── Select Dataset modal ──────────────────────────────────────────── */}
+      {showSelectDatasetModal && (
         <div
           className="modal-overlay"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="coming-soon-title"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setShowComingSoon(false);
+            if (e.target === e.currentTarget) setShowSelectDatasetModal(false);
           }}
         >
-          <div className="modal-card">
-            <div className="modal-icon" aria-hidden="true">
-              <svg
-                width="32"
-                height="32"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="2" y="3" width="20" height="14" rx="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-              </svg>
-            </div>
-            <h2 id="coming-soon-title" className="modal-title">
-              Coming Soon
-            </h2>
+          <div className="modal-card" style={{ maxWidth: '500px' }}>
+            <h2 className="modal-title">Select Dataset</h2>
             <p className="modal-body">
-              Server-side file browsing is not yet available.
-              <br />
-              This feature will allow you to select scans directly from the NPEC
-              data store.
+              Select a dataset from the library to run U-Net batch inference on all of its scans.
             </p>
+            {loadingDatasets ? (
+              <div style={{ textAlign: 'center', padding: '24px' }}>
+                <span className="spinner" aria-hidden="true" />
+                <p style={{ marginTop: '12px' }}>Loading available datasets...</p>
+              </div>
+            ) : datasets.length === 0 ? (
+              <p style={{ textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)' }}>
+                No datasets found. Create a dataset in the Library first.
+              </p>
+            ) : (
+              <div style={{
+                maxHeight: '300px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                margin: '16px 0'
+              }}>
+                {datasets.map((ds) => (
+                  <button
+                    key={ds.dataset_id}
+                    disabled={datasetPendingCounts[ds.dataset_id] === 0}
+                    onClick={() => void runBatchInference(ds.dataset_id, ds.name, ds.count)}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px 16px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid var(--color-border-subtle)',
+                      borderRadius: '8px',
+                      opacity: datasetPendingCounts[ds.dataset_id] === 0 ? 0.4 : 1,
+                      cursor: datasetPendingCounts[ds.dataset_id] === 0 ? 'not-allowed' : 'pointer',
+                      textAlign: 'left',
+                      color: 'var(--color-text)',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--color-primary-light)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--color-border-subtle)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                    }}
+                  >
+
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{ds.name}</div>
+                      {ds.species || ds.owner_email && (
+                        <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                          {ds.species ?? `Owner: ${ds.owner_email}`}
+                        </div>
+                      )}
+                    </div>
+                    <span className="model-badge" style={{ marginLeft: '10px', background: 'var(--color-primary-light' }}>
+                      {datasetPendingCounts[ds.dataset_id] !== undefined
+                        ? `${datasetPendingCounts[ds.dataset_id]} pending`
+                        : `${ds.count} scans`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="modal-actions">
+              <button
+                className="modal-close modal-close--secondary"
+                onClick={() => setShowSelectDatasetModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Batch Progress modal ─────────────────────────────────────────── */}
+      {showBatchProgress && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="modal-card" style={{ maxWidth: '450px', textAlign: 'center' }}>
             <button
-              className="modal-close"
-              id="coming-soon-close"
-              onClick={() => setShowComingSoon(false)}
+              onClick={() => setShowBatchProgress(false)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-text-muted)',
+                cursor: 'pointer',
+                padding: '4px',
+                lineHeight: 1,
+                borderRadius: 'var(--radius-sm)',
+                transition: 'color 0.15s',
+              }}
+              aria-label="Close"
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-text-primary)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-text-muted)')}
             >
-              Got it
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2.5"
+                strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
+
+            <h2 className="modal-title" style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              {!batchCompleted && <span className="spinner" style={{ width: '20px', height: '20px' }} aria-hidden="true" />}
+              {batchCompleted ? 'Batch Inference Completed!' : 'Running U-Net Inference'}
+            </h2>
+            <p className="modal-body" style={{ margin: '8px 0 16px 0' }}>
+              {batchCompleted
+                ? `Successfully processed all ${batchTotalCount || 15} root scan images in "${batchDatasetName}".`
+                : `Processing root scans for dataset "${batchDatasetName}"...`}
+            </p>
+
+            <div style={{ margin: '24px 0' }}>
+              <div style={{
+                display: 'block',
+                fontSize: '14px',
+                marginBottom: '8px'
+              }}>
+                <span>{batchCompleted ? 'All Scans Processed' : `Scan ${batchCurrentIndex} of ${batchTotalCount || 15}`}</span>
+                <div style={{
+                  height: '8px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '4px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${batchPercent}%`,
+                    height: '100%',
+                    background: 'var(--color-primary-light)',
+                    boxShadow: '0 0 8px var(--color-primary-light)',
+                    borderRadius: '4px',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+                <span style={{ fontWeight: 600, color: 'var(--color-primary-light)' }}>{batchPercent}%</span>
+              </div>
+            </div>
+
+            {batchCompleted ? (
+              <div className="modal-actions" style={{ justifyContent: 'center', gap: '12px' }}>
+                <button
+                  className="modal-close modal-close--secondary"
+                  onClick={() => setShowBatchProgress(false)}
+                >
+                  Close Panel
+                </button>
+                <button
+                  className="modal-close"
+                  onClick={() => {
+                    setShowBatchProgress(false);
+                    navigate('/history');
+                  }}
+                >
+                  Go to History ↗
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>
+                  U-Net segmenter performing primary segmentation analysis. Please wait...
+                </p>
+                <button
+                  className="modal-close modal-close--secondary"
+                  onClick={() => setShowBatchProgress(false)}
+                  style={{ fontSize: '12px', padding: '4px 16px' }}
+                >
+                  Hide
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -469,14 +810,86 @@ export default function Inference() {
               <button
                 className="modal-close modal-close--danger"
                 id="discard-confirm"
-                onClick={() => {
-                  setResult(null);
-                  setFile(null);
-                  setFilePreviewUrl(null);
-                  setShowDiscardConfirm(false);
-                }}
+                disabled={discarding}
+                onClick={() => void handleDiscard()}
               >
-                Discard
+                {discarding ? 'Discarding...' : 'Discard'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Save to Library modal ─────────────────────────────────────────── */}
+      {showSaveModal && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="save-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowSaveModal(false);
+          }}
+        >
+          <div className="modal-card">
+            <h2 id="save-modal-title" className="modal-title">Save to Library</h2>
+            <p className="modal-body">
+              Optionally add biological metadata before saving this scan as an annotation.
+            </p>
+            {saveError && <p style={{ color: '#b91c1c', fontSize: 'var(--text-sm)', marginBottom: '0.5rem' }}>{saveError}</p>}
+            <div className="lib-create-form" style={{ marginTop: '1rem' }}>
+              <div className="lib-form-group">
+                <label htmlFor="save-species">Species</label>
+                <input
+                  id="save-species"
+                  type="text"
+                  placeholder="e.g. Arabidopsis thaliana"
+                  value={saveSpecies}
+                  onChange={(e) => setSaveSpecies(e.target.value)}
+                  disabled={saving}
+                />
+              </div>
+              <div className="lib-form-row">
+                <div className="lib-form-group">
+                  <label htmlFor="save-age">Age (days)</label>
+                  <input
+                    id="save-age"
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 14"
+                    value={saveAgeDays}
+                    onChange={(e) => setSaveAgeDays(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+                <div className="lib-form-group">
+                  <label htmlFor="save-treatment">Treatment</label>
+                  <input
+                    id="save-treatment"
+                    type="text"
+                    placeholder="e.g. control"
+                    value={saveTreatment}
+                    onChange={(e) => setSaveTreatment(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="modal-close modal-close--secondary"
+                onClick={() => setShowSaveModal(false)}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-close"
+                id="save-confirm"
+                disabled={saving}
+                onClick={() => void handleSave()}
+              >
+                {saving ? 'Saving...' : 'Save to Library'}
               </button>
             </div>
           </div>

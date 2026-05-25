@@ -148,13 +148,19 @@ def save_tip_photo(
 
         from PIL import Image, ImageDraw
 
+        detected = [pr for pr in image_result.plant_results.values() if pr.detected and pr.end_point is not None]
+        if not detected:
+            logger.debug(
+                "No detected plants for prediction %s - skipping tip photo save.",
+                prediction_id,
+            )
+            return None
+
         img = Image.open(io.BytesIO(original_image_bytes)).convert("RGB")
         draw = ImageDraw.Draw(img)
 
         radius = max(8, min(img.width, img.height) // 100)
-        for plant_id, pr in image_result.plant_results.items():
-            if not pr.detected or pr.end_point is None:
-                continue
+        for pr in detected:
             row, col = int(pr.end_point[0]), int(pr.end_point[1])
             bbox = [col - radius, row - radius, col + radius, row + radius]
             draw.ellipse(bbox, outline="red", fill="red", width=2)

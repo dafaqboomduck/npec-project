@@ -99,13 +99,28 @@
   background: #fef2f2;
 }
 
-.rv-btn--primary {
-  background: var(--color-primary);
-  color: var(--color-card-dark-text);
-}
-
 .rv-btn--primary:hover {
   opacity: 0.88;
+}
+
+.rv-actions-secondary {
+  display: flex;
+  justify-content: center;
+  margin-top: -0.5rem;
+}
+
+.rv-btn--secondary-ghost {
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  padding: 0.4rem 1rem;
+}
+
+.rv-btn--secondary-ghost:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-bg-subtle);
 }
 
 /* ── Stats row ── */

@@ -345,6 +345,9 @@ class LocalTrainingService(AbstractTrainingService):
         if proc.returncode == 0:
             # Parse final_f1 from stdout if the script printed it
             final_f1 = _parse_final_f1(stdout.decode())
+            if final_f1 is None:
+                final_f1 = await _recover_best_f1_from_metrics(run_id, session_factory)
+
             final_f1_value = final_f1 or 0.0
 
             model_version_id = await _register_model_if_better(
@@ -363,10 +366,15 @@ class LocalTrainingService(AbstractTrainingService):
             )
 
             # Backfill model_version_id on epoch metrics if registration succeeded
-            if model_version_id is not None:
+            effective_model_version_id = model_version_id
+            if effective_model_version_id is None:
+                # Link metrics to the currently deployed model
+                effective_model_version_id = await _get_deployed_model_id_async(session_factory)
+
+            if effective_model_version_id is not None:
                 await _backfill_metric_model_version(
                     run_id=run_id,
-                    model_version_id=model_version_id,
+                    model_version_id=effective_model_version_id,
                     session_factory=session_factory,
                 )
 
@@ -383,9 +391,14 @@ class LocalTrainingService(AbstractTrainingService):
             )
         else:
             logger.error("Training run %s failed (returncode=%s)", run_id, proc.returncode)
+            # Recover best F1 from epoch metrics written before the crash
+            recovered_f1 = await _recover_best_f1_from_metrics(run_id, session_factory)
+            if recovered_f1 is not None:
+                logger.info("Recovered best F1=%.4f for failed run %s", recovered_f1, run_id)
             await _update_run_status(
                 run_id=run_id,
                 status=TrainingRunStatus.FAILED,
+                final_f1=recovered_f1,
                 model_version_id=model_version_id,
                 session_factory=session_factory,
             )
@@ -450,6 +463,18 @@ def _next_version_dir() -> tuple[Path, str]:
     next_n = max(existing, default=1) + 1
     version = f"v{next_n}"
     return artifact_dir / version, version
+
+
+async def _get_deployed_model_id_async(session_factory) -> uuid.UUID | None:
+    try:
+        async with session_factory() as db:
+            from api.src.db.orm import ModelVersion
+
+            result = await db.execute(select(ModelVersion.id).where(ModelVersion.status == "deployed").limit(1))
+            return result.scalar_one_or_none()
+    except Exception as exc:
+        logger.warning("Could not fetch deployed model ID: %s", exc)
+        return None
 
 
 async def _get_deployed_artifact_dir() -> Path:
@@ -540,6 +565,29 @@ def _parse_final_f1(stdout: str) -> float | None:
             except ValueError:
                 logger.warning("Could not parse FINAL_F1 from line: %r", line)
     return None
+
+
+async def _recover_best_f1_from_metrics(
+    run_id: uuid.UUID,
+    session_factory,
+) -> float | None:
+    """Read the best f1_validation metric for this run from monitoring_metrics."""
+    try:
+        from sqlalchemy import func
+
+        async with session_factory() as db:
+            from api.src.db.orm import MonitoringMetric
+
+            result = await db.execute(
+                select(func.max(MonitoringMetric.metric_value))
+                .where(MonitoringMetric.metric_name == "f1_validation")
+                .where(MonitoringMetric.labels["run_id"].astext == str(run_id))
+            )
+            value = result.scalar_one_or_none()
+            return float(value) if value is not None else None
+    except Exception as exc:
+        logger.warning("Could not recover F1 from metrics for run %s: %s", run_id, exc)
+        return None
 
 
 async def _write_throughput_metric(

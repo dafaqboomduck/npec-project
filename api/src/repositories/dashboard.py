@@ -15,6 +15,7 @@ Metric name conventions (must match what MonitoringService writes):
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,7 +56,7 @@ class DashboardRepository:
         )
         return result.first()
 
-    async def get_metrics(self) -> DashboardMetricsResponse:
+    async def get_metrics(self, run_id: UUID | None = None) -> DashboardMetricsResponse:
         """Return top-level KPIs for the deployed model.
 
         Reads the latest `f1_validation` and `throughput_img_per_s`
@@ -65,6 +66,9 @@ class DashboardRepository:
 
         Returns sensible zero defaults when no deployed model or metrics exists.
 
+        Args:
+            run_id: Optional UUID of the run to filter on.
+
         Returns:
             `DashboardMetricsResponse`
         """
@@ -72,42 +76,53 @@ class DashboardRepository:
 
         if deployed is None:
             logger.warning("get_metrics: no deployed model.")
-            return DashboardMetricsResponse(f1_score=0.0, throughput_img_per_s=0)
+            return DashboardMetricsResponse(f1_score=0.0, throughput_img_per_s=0.0)
 
         model_id, version, model_f1 = deployed
 
-        # Latest f1_validation metric - fall back to model.f1_score if absent
-        f1_result = await self._db.execute(
-            select(MonitoringMetric.metric_value)
-            .where(
-                MonitoringMetric.metric_name == "f1_validation",
-                MonitoringMetric.model_version_id == model_id,
+        # F1 score — always use the best epoch, not the last
+        # When run_id given: best epoch of that specific run
+        # When no run_id: best epoch ever recorded for the deployed model
+        if run_id is not None:
+            f1_query = (
+                select(func.max(MonitoringMetric.metric_value))
+                .where(MonitoringMetric.metric_name == "f1_validation")
+                .where(MonitoringMetric.labels["run_id"].astext == str(run_id))
             )
-            .order_by(MonitoringMetric.recorded_at.desc())
-            .limit(1)
-        )
+        else:
+            f1_query = (
+                select(func.max(MonitoringMetric.metric_value))
+                .where(MonitoringMetric.metric_name == "f1_validation")
+                .where(MonitoringMetric.model_version_id == model_id)
+            )
+
+        f1_result = await self._db.execute(f1_query)
         f1_score = f1_result.scalar_one_or_none()
         if f1_score is None:
             f1_score = float(model_f1 or 0.0)
 
-        # Latest throughput metric
-        throughput_result = await self._db.execute(
+        # Throughput — filter by run if given, otherwise latest globally
+        tp_query = (
             select(MonitoringMetric.metric_value)
-            .where(
-                MonitoringMetric.metric_name == "throughput_img_per_s",
-                MonitoringMetric.model_version_id == model_id,
-            )
+            .where(MonitoringMetric.metric_name == "throughput_img_per_s")
             .order_by(MonitoringMetric.recorded_at.desc())
             .limit(1)
         )
-        throughput = int(throughput_result.scalar_one_or_none() or 0)
+        if run_id is not None:
+            tp_query = tp_query.where(MonitoringMetric.labels["run_id"].astext == str(run_id))
+
+        throughput_result = await self._db.execute(tp_query)
+        throughput = round(float(throughput_result.scalar_one_or_none() or 0.0), 2)
 
         return DashboardMetricsResponse(
             f1_score=round(float(f1_score), 4),
             throughput_img_per_s=throughput,
         )
 
-    async def get_f1_history(self) -> F1HistoryResponse:
+    async def get_f1_history(
+        self,
+        run_id: UUID | None = None,
+    ) -> F1HistoryResponse:
         """Return the full f1_validation time-series for the deployed model.
 
         Reads all `f1_validation` rows for the deployed model from
@@ -118,6 +133,9 @@ class DashboardRepository:
         `{"epoch": N, ...}`. Rows without an epoch label are skipped.
 
         Returns empty defaults when no deployed model or history exists.
+
+        Args:
+            run_id: Optional UUID of the run to filter on.
 
         Returns:
             `F1HistoryResponse`
@@ -130,14 +148,23 @@ class DashboardRepository:
 
         model_id, version, _ = deployed
 
-        result = await self._db.execute(
-            select(MonitoringMetric.metric_value, MonitoringMetric.labels)
-            .where(
-                MonitoringMetric.metric_name == "f1_validation",
+        query = select(
+            MonitoringMetric.metric_value,
+            MonitoringMetric.labels,
+        ).where(
+            MonitoringMetric.metric_name == "f1_validation",
+        )
+
+        if run_id is not None:
+            query = query.where(MonitoringMetric.labels["run_id"].astext == str(run_id))
+        else:
+            query = query.where(
                 MonitoringMetric.model_version_id == model_id,
             )
-            .order_by(MonitoringMetric.recorded_at.asc())
-        )
+
+        query = query.order_by(MonitoringMetric.recorded_at.asc())
+
+        result = await self._db.execute(query)
         rows = result.all()
 
         data_points: list[F1HistoryPoint] = []
@@ -169,7 +196,10 @@ class DashboardRepository:
             `DataDistributionResponse`
         """
         result = await self._db.execute(
-            select(Annotation.species, func.count(Annotation.id).label("count"))
+            select(
+                Annotation.species,
+                func.count(Annotation.id).label("count"),
+            )
             .where(
                 Annotation.species.is_not(None),
                 Annotation.status == AnnotationStatus.ANNOTATED.value,

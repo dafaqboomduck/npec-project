@@ -104,3 +104,28 @@ def get_deployment_service(db) -> AbstractDeploymentService:
     from api.src.services.deployment import LocalDeploymentService
 
     return LocalDeploymentService(db=db, inference_service=get_inference_service())
+
+
+async def warmup_inference_service() -> None:
+    """Pre-load the inference pipeline at startup.
+
+    Calls _get_pipeline() on the singleton so TensorFlow and the .keras
+    weights are loaded before the first request arrives. This moves the
+    ~30s cold-start cost to server startup rather than the first prediction.
+    """
+    if _USE_MOCK:
+        logger.info("Inference warmup skipped (mock mode)")
+        return
+
+    service = get_inference_service()
+
+    try:
+        import asyncio
+
+        await asyncio.to_thread(service._get_pipeline)
+        logger.info("Inference pipeline warmed up successfully")
+    except Exception as exc:
+        logger.warning(
+            "Inference pipeline warmup failed: %s — " "first prediction will trigger a retry",
+            exc,
+        )

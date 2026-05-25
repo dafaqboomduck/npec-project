@@ -114,9 +114,12 @@ async def predict(
         HTTPException: 415 if the file format is not accepted.
         HTTPException: 422 if the image is corrupt or has an invalid resolution.
     """
+    import hashlib
+
     repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
     image_bytes = await file.read()
+    input_hash = hashlib.sha256(image_bytes).hexdigest()
     original_filename = file.filename or "upload"
 
     # Validation pipeline
@@ -170,6 +173,7 @@ async def predict(
     prediction = await repo.save(
         prediction,
         filename=original_filename,
+        input_hash=input_hash,
         input_uri=input_uri,
         tip_photo_uri=tip_photo_uri,
     )
@@ -229,6 +233,7 @@ async def list_predictions(
         page=page,
         page_size=page_size,
         confirmed=confirmed,
+        role=user.role,
     )
 
 
@@ -260,9 +265,10 @@ async def get_prediction(
     """
     repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
-    prediction = await repo.get(prediction_id)
+    prediction = await repo.get(prediction_id, role=user.role)
     if prediction is None:
         raise _404()
+
     return prediction
 
 
@@ -310,7 +316,7 @@ async def delete_prediction(
         404: {"model": ErrorResponse},
         409: {
             "model": ErrorResponse,
-            "description": "Prediction already confirmed",
+            "description": "Prediction already confirmed or the image was uploaded before",
         },
     },
 )
@@ -353,7 +359,24 @@ async def confirm_prediction(
             treatment=body.treatment if body else None,
             dataset_id=body.dataset_id if body else None,
         )
+        if body and body.feedback_signal:
+            from api.src.repositories.feedback import FeedbackRepository
+
+            await FeedbackRepository(db).create(
+                user_id=UUID(user.sub),
+                prediction_id=prediction_id,
+                signal=body.feedback_signal,
+                comment=None,
+            )
     except ValueError as exc:
+        if "identical image" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=ErrorResponse(
+                    error_code=ErrorCode.CONFLICT,
+                    message=str(exc),
+                ).model_dump(),
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=ErrorResponse(

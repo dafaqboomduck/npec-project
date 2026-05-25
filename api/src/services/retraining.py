@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.db.orm import Feedback, Prediction
 
-logger = logging.getLogoger(__name__)
+logger = logging.getLogger(__name__)
 
 RETRAIN_MIN_SAMPLES: int = int(os.getenv("RETRAIN_MIN_SAMPLES", "10"))
 

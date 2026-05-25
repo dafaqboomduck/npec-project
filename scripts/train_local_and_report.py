@@ -25,6 +25,7 @@ Stdout protocol:
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
 import shutil
@@ -32,6 +33,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import keras
 import numpy as np
 
 logging.basicConfig(
@@ -41,12 +43,14 @@ logging.basicConfig(
 logger = logging.getLogger("train_and_report")
 
 
+PATIENCE = int(os.environ.get("NPEC_PATIENCE", "10"))
+
 # Environment
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 TRAINING_RUN_ID = os.environ.get("TRAINING_RUN_ID", "")
 ARTIFACT_DIR = Path(os.environ.get("NPEC_ARTIFACT_DIR", "/app/artifacts/models"))
-DATA_DIR = Path(os.environ.get("NPEC_DATA_DIR", "/app/data/training"))
+DATA_DIR = Path(os.environ.get("NPEC_DATA_DIR", "/app/artifacts/training"))
 OUTPUT_DIR = Path(os.environ.get("NPEC_OUTPUT_DIR", "/app/artifacts/models"))
 LEARNING_RATE = float(os.environ.get("NPEC_LEARNING_RATE", "0.0001"))
 BATCH_SIZE = int(os.environ.get("NPEC_BATCH_SIZE", "4"))
@@ -60,7 +64,22 @@ PATCH_SIZE = 512
 # DB metric writer - synchronous, no FastAPI context
 
 
-def _write_epoch_metric(epoch: int, f1_score: float) -> None:
+def _get_deployed_model_id() -> str | None:
+    if not DATABASE_URL:
+        return None
+    try:
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT id FROM model_versions WHERE status = 'deployed' LIMIT 1")).fetchone()
+            return str(row[0]) if row else None
+    except Exception as exc:
+        logger.warning("Could not fetch deployed model ID: %s", exc)
+        return None
+
+
+def _write_epoch_metric(epoch: int, f1_score: float, model_version_id: str | None = None) -> None:
     """Write one f1_validation row to monitoring_metrics.
 
     Non-fatal - a DB write failure logs a warning and continues.
@@ -68,11 +87,12 @@ def _write_epoch_metric(epoch: int, f1_score: float) -> None:
     Args:
         epoch: 1-indexed epoch number.
         f1_score: Validation F1 for this epoch.
+        model_version_id: UUID of the deployed mdoel.
     """
     if not DATABASE_URL or not TRAINING_RUN_ID:
         return
 
-    sync_url = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
+    sync_url = DATABASE_URL
     try:
         from sqlalchemy import create_engine, text
 
@@ -87,7 +107,7 @@ def _write_epoch_metric(epoch: int, f1_score: float) -> None:
                     VALUES (
                         'f1_validation',
                         :value,
-                        NULL,
+                        CAST(:model_version_id AS uuid),
                         CAST(:labels AS jsonb),
                         :ts
                     )
@@ -96,6 +116,7 @@ def _write_epoch_metric(epoch: int, f1_score: float) -> None:
                 {
                     "value": f1_score,
                     "labels": (f'{{"epoch": {epoch}, "run_id": "{TRAINING_RUN_ID}"}}'),
+                    "model_version_id": model_version_id,
                     "ts": datetime.now(timezone.utc).isoformat(),
                 },
             )
@@ -219,7 +240,7 @@ def _compute_f1(model, X: "np.ndarray", y: "np.ndarray") -> float:
     """
     import numpy as np
 
-    preds = model.predict(X, verbose=0)
+    preds = model.predict(X, batch_size=BATCH_SIZE, verbose=0)
     preds_bin = (preds > 0.5).astype(np.float32)
 
     tp = np.sum(y * preds_bin)
@@ -261,7 +282,7 @@ def _run_no_data(output_root_path: Path, output_anchor_path: Path) -> float:
     f1_score = 0.0
     if DATABASE_URL:
         try:
-            sync_url = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
+            sync_url = DATABASE_URL
             from sqlalchemy import create_engine, text
 
             engine = create_engine(sync_url)
@@ -274,34 +295,27 @@ def _run_no_data(output_root_path: Path, output_anchor_path: Path) -> float:
         except Exception as exc:
             logger.warning("Could not fetch deployed model F1: %s", exc)
 
+    model_version_id = _get_deployed_model_id()
+
     # Write one synthetic metric row so the dashboard has something to show
-    _write_epoch_metric(epoch=1, f1_score=f1_score)
+    _write_epoch_metric(epoch=1, f1_score=f1_score, model_version_id=model_version_id)
     return f1_score
 
 
 # Fine-tuning path
 
 
+class _GCCallback(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        gc.collect()
+
+
 def _run_fine_tuning(
     pairs: list[tuple[Path, Path]],
     output_root_path: Path,
 ) -> float:
-    """Fine-tune the root detection model on the available image/mask pairs.
+    import gc
 
-    Loads the existing root model, applies a low learning rate for EPOCHS
-    epochs, writes per-epoch F1 metrics to the DB, and saves the best
-    checkpoint to output_root_path.
-
-    The anchor model is copied unchanged - it detects petri dish position
-    and does not benefit from fine-tuning on root annotation data.
-
-    Args:
-        pairs: List of (image_path, mask_path) tuples.
-        output_root_path: Destination path for the fine-tuned model.
-
-    Returns:
-        Best validation F1 achieved during fine-tuning.
-    """
     import keras
     import numpy as np
 
@@ -311,14 +325,12 @@ def _run_fine_tuning(
     with keras.saving.custom_object_scope(custom_objects):
         model = keras.models.load_model(str(ARTIFACT_DIR / ROOT_MODEL_NAME))
 
-    # Recompile with a lower learning rate for fine-tuning
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
         loss=custom_objects["dice_bce_loss"],
         metrics=[custom_objects["f1"]],
     )
 
-    # Load all patches into memory - fine-tuning datasets are small
     X_list, y_list = [], []
     for img_path, msk_path in pairs:
         result = _load_patch(img_path, msk_path)
@@ -333,16 +345,15 @@ def _run_fine_tuning(
     X = np.array(X_list, dtype=np.float32)
     y = np.array(y_list, dtype=np.float32)
 
-    # 80/20 split - with small datasets this may be only 1-2 val images
     split = max(1, int(len(X) * 0.8))
     X_train, X_val = X[:split], X[split:]
     y_train, y_val = y[:split], y[split:]
 
     if len(X_val) == 0:
-        X_val, y_val = X_train, y_train  # no val data - use train as proxy
+        X_val, y_val = X_train, y_train
 
     logger.info(
-        "Fine-tuning on %d train / %d val patches for %d epoch(s) " "(lr=%.5f, batch=%d)",
+        "Fine-tuning on %d train / %d val patches for %d epoch(s) (lr=%.5f, batch=%d)",
         len(X_train),
         len(X_val),
         EPOCHS,
@@ -350,32 +361,60 @@ def _run_fine_tuning(
         BATCH_SIZE,
     )
 
-    best_f1 = 0.0
-    best_weights = model.get_weights()
+    model_version_id = _get_deployed_model_id()
+    PATIENCE = int(os.environ.get("NPEC_PATIENCE", "10"))
 
-    for epoch in range(1, EPOCHS + 1):
-        model.fit(
-            X_train,
-            y_train,
-            batch_size=BATCH_SIZE,
-            epochs=1,
-            verbose=1,
-        )
-        epoch_f1 = _compute_f1(model, X_val, y_val)
-        logger.info("Epoch %d/%d - val_f1=%.4f", epoch, EPOCHS, epoch_f1)
+    class _TrackingCallback(keras.callbacks.Callback):
+        def __init__(self) -> None:
+            super().__init__()
+            self.best_f1 = 0.0
+            self.best_weights: list | None = None
+            self.epochs_without_improvement = 0
 
-        _write_epoch_metric(epoch=epoch, f1_score=epoch_f1)
-        _try_mlflow_log(epoch=epoch, f1_score=epoch_f1)
+        def on_epoch_end(self, epoch: int, logs=None) -> None:
+            epoch_f1 = _compute_f1(self.model, X_val, y_val)
+            logger.info("Epoch %d/%d - val_f1=%.4f", epoch + 1, EPOCHS, epoch_f1)
 
-        if epoch_f1 > best_f1:
-            best_f1 = epoch_f1
-            best_weights = model.get_weights()
+            _write_epoch_metric(epoch=epoch + 1, f1_score=epoch_f1, model_version_id=model_version_id)
+            _try_mlflow_log(epoch=epoch + 1, f1_score=epoch_f1)
 
-    # Restore best weights and save
-    model.set_weights(best_weights)
-    model.save(str(output_root_path))
-    logger.info("Fine-tuned model saved to %s (best_f1=%.4f)", output_root_path, best_f1)
-    return best_f1
+            if epoch_f1 > self.best_f1:
+                self.best_f1 = epoch_f1
+                self.best_weights = self.model.get_weights()
+                self.epochs_without_improvement = 0
+                logger.info("New best F1=%.4f at epoch %d - saving checkpoint", self.best_f1, epoch + 1)
+                self.model.save(str(output_root_path))
+            else:
+                self.epochs_without_improvement += 1
+                logger.info(
+                    "No improvement for %d epoch(s) (patience=%d)",
+                    self.epochs_without_improvement,
+                    PATIENCE,
+                )
+                if self.epochs_without_improvement >= PATIENCE:
+                    logger.info("Early stopping at epoch %d - best F1=%.4f", epoch + 1, self.best_f1)
+                    self.model.stop_training = True
+
+            gc.collect()
+
+    tracking_cb = _TrackingCallback()
+    model.fit(
+        X_train,
+        y_train,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+        verbose=1,
+        callbacks=[tracking_cb],
+    )
+
+    if tracking_cb.best_weights is not None:
+        model.set_weights(tracking_cb.best_weights)
+    else:
+        # No improvement ever recorded - save whatever weights we ended with
+        model.save(str(output_root_path))
+
+    logger.info("Fine-tuned model saved to %s (best_f1=%.4f)", output_root_path, tracking_cb.best_f1)
+    return tracking_cb.best_f1
 
 
 # Main
@@ -386,6 +425,16 @@ def main() -> None:
     if not TRAINING_RUN_ID:
         logger.error("TRAINING_RUN_ID is not set.")
         sys.exit(1)
+
+    try:
+        import tensorflow as tf
+
+        gpus = tf.config.list_physical_devices("GPU")
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logger.info("TF memory growth enabled for %d GPU(s)", len(gpus))
+    except Exception as exc:
+        logger.debug("Could not set TF memory growth: %s", exc)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_root_path = OUTPUT_DIR / ROOT_MODEL_NAME

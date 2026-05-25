@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getArtifactUrl } from '../api/client';
+import MaskEditor from './MaskEditor';
 import type { PredictionResponse, Plant } from '../types/api';
 import './ResultsView.css';
 
@@ -13,6 +14,7 @@ interface ResultsViewProps {
   onNewScan?: () => void;
   onDiscard?: () => void;
   onSave?: () => void;
+  onFeedbackChange?: (signal: 'correct' | 'incorrect' | null) => void;
   isHistoryView?: boolean;
 }
 
@@ -24,12 +26,14 @@ export default function ResultsView({
   onNewScan,
   onDiscard,
   onSave,
+  onFeedbackChange,
   isHistoryView = false,
 }: ResultsViewProps) {
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('scan');
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(
     null,
   );
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const meta = result.metadata;
   const predIdShort = result.prediction_id.slice(0, 6);
 
@@ -43,8 +47,8 @@ export default function ResultsView({
     overlayMode === 'mask' && result.segmentation_mask_url
       ? getArtifactUrl(result.segmentation_mask_url)
       : overlayMode === 'tips' && result.tip_photo_url
-      ? getArtifactUrl(result.tip_photo_url)
-      : inputDisplayUrl;
+        ? getArtifactUrl(result.tip_photo_url)
+        : inputDisplayUrl;
 
   return (
     <div className="results-view">
@@ -102,10 +106,8 @@ export default function ResultsView({
           <span className="rv-stat-value">{result.plants.length}</span>
         </div>
         <div className="rv-stat-card">
-          <span className="rv-stat-label">AVG CONFIDENCE</span>
-          <span className="rv-stat-value">
-            {(result.overall_confidence * 100).toFixed(1)}%
-          </span>
+          <span className="rv-stat-label">PLANTS DETECTED</span>
+          <span className="rv-stat-value">{result.plants.length}</span>
         </div>
         <div className="rv-stat-card">
           <span className="rv-stat-label">LATENCY</span>
@@ -166,8 +168,8 @@ export default function ResultsView({
                 <tr>
                   <th>#</th>
                   <th>TIP (X,Y)</th>
-                  <th>LENGTH</th>
-                  <th>CONF.</th>
+                  <th>LENGTH (mm)</th>
+                  <th>LENGTH (px)</th>
                 </tr>
               </thead>
               <tbody>
@@ -178,13 +180,20 @@ export default function ResultsView({
                       {p.tip_x}, {p.tip_y}
                     </td>
                     <td>{p.root_length_mm.toFixed(1)} mm</td>
-                    <td className={p.confidence < 0.8 ? 'rv-cell-low' : ''}>
-                      {(p.confidence * 100).toFixed(0)}%
-                    </td>
+                    <td className="rv-cell-px">{Math.round(p.root_length_px)} px</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="rv-actions-secondary">
+            <button
+              className="rv-btn rv-btn--secondary-ghost"
+              onClick={() => setIsEditorOpen(true)}
+            >
+              🖌 Fine-tune Mask
+            </button>
           </div>
 
           {/* Feedback widget */}
@@ -193,13 +202,21 @@ export default function ResultsView({
             <div className="rv-feedback-btns">
               <button
                 className={`rv-fb-btn rv-fb-btn--incorrect ${feedback === 'incorrect' ? 'rv-fb-btn--selected' : ''}`}
-                onClick={() => setFeedback('incorrect')}
+                onClick={() => {
+                  const next = feedback === 'incorrect' ? null : 'incorrect';
+                  setFeedback(next);
+                  onFeedbackChange?.(next);
+                }}
               >
                 Incorrect
               </button>
               <button
                 className={`rv-fb-btn rv-fb-btn--correct ${feedback === 'correct' ? 'rv-fb-btn--selected' : ''}`}
-                onClick={() => setFeedback('correct')}
+                onClick={() => {
+                  const next = feedback === 'correct' ? null : 'correct';
+                  setFeedback(next);
+                  onFeedbackChange?.(next);
+                }}
               >
                 Correct
               </button>
@@ -207,6 +224,19 @@ export default function ResultsView({
           </div>
         </div>
       </div>
+
+      <MaskEditor
+        isOpen={isEditorOpen}
+        onClose={() => setIsEditorOpen(false)}
+        onSave={(blob) => {
+          console.log('User submitted corrected mask:', blob);
+          setIsEditorOpen(false);
+          setFeedback('incorrect');
+          alert('Mask correction captured! (Note: Backend upload currently in development)');
+        }}
+        originalImageUrl={getArtifactUrl(result.input_url) ?? filePreviewUrl ?? ''}
+        maskImageUrl={getArtifactUrl(result.segmentation_mask_url) ?? ''}
+      />
     </div>
   );
 }

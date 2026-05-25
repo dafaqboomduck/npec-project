@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -57,6 +58,7 @@ class PredictionResponse(BaseModel):
     prediction_id: UUID
     status: PredictionStatus
     input_filename: str | None = Field(None, description="Original filename of the uploaded image.")
+    owner_email: str | None = None
     metadata: PredictionMetadata
     segmentation_mask_url: str | None = Field(
         None,
@@ -71,6 +73,7 @@ class PredictionResponse(BaseModel):
         description="Presigned URL of the tip visualisation overlay.",
     )
     plants: list[Plant] = Field(default_factory=list)
+    feedback_signal: str | None = None
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -98,6 +101,7 @@ class ConfirmPredictionRequest(BaseModel):
             "datasets.count is incremented by 1."
         ),
     )
+    feedback_signal: Literal["correct", "incorrect"] | None = None
 
 
 class ConfirmPredictionResponse(BaseModel):

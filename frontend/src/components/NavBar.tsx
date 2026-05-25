@@ -6,7 +6,7 @@
  */
 
 import { NavLink, useNavigate, Link } from 'react-router-dom';
-import { logout, getUsername } from '../api/auth';
+import { logout, getUsername, getRole } from '../api/auth';
 import SettingsPanel from './SettingsPanel';
 import './NavBar.css';
 import { useState } from 'react';
@@ -43,6 +43,15 @@ export default function NavBar() {
             Overview
           </NavLink>
           <NavLink
+            to="/dashboard"
+            id="nav-dashboard"
+            className={({ isActive }) =>
+              `navbar-tab${isActive ? ' navbar-tab--active' : ''}`
+            }
+          >
+            Dashboard
+          </NavLink>
+          <NavLink
             to="/inference"
             id="nav-inference"
             className={({ isActive }) =>
@@ -69,31 +78,21 @@ export default function NavBar() {
           >
             Library
           </NavLink>
+          {getRole() === 'admin' && (
+            <NavLink
+              to="/models"
+              id="nav-models"
+              className={({ isActive }) =>
+                `navbar-tab${isActive ? ' navbar-tab--active' : ''}`
+              }
+            >
+              Models
+            </NavLink>
+          )}
         </nav>
 
         {/* ── Right actions ── */}
         <div className="navbar-actions">
-          {/* Bell */}
-          <button
-            className="navbar-icon-btn"
-            aria-label="Notifications"
-            id="nav-bell"
-          >
-            <svg
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-          </button>
-
           {/* Settings */}
           <button
             className="navbar-icon-btn"

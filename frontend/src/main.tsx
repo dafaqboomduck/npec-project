@@ -19,16 +19,27 @@ import './styles/global.css';
 
 import Login from './pages/Login';
 import Overview from './pages/Overview';
+import Dashboard from './pages/Dashboard';
 import Inference from './pages/Inference';
 import History from './pages/History';
 import Library from './pages/Library';
-import { isAuthenticated } from './api/auth';
+import Models from './pages/Models';
+import { isAuthenticated, getRole } from './api/auth';
 import { InferenceJobsProvider } from './context/InferenceJobsContext';
 import { ThemeProvider } from './context/ThemeContext';
 
 /** Redirects unauthenticated users to /login. */
 function RequireAuth({ children }: { children: React.ReactNode }) {
   return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
+/** Redirects non-admin authenticated users to /overview. */
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  return isAuthenticated() && getRole() === 'admin' ? (
+    <>{children}</>
+  ) : (
+    <Navigate to="/overview" replace />
+  );
 }
 
 function App() {
@@ -44,6 +55,14 @@ function App() {
           element={
             <RequireAuth>
               <Overview />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <RequireAuth>
+              <Dashboard />
             </RequireAuth>
           }
         />
@@ -69,6 +88,14 @@ function App() {
             <RequireAuth>
               <Library />
             </RequireAuth>
+          }
+        />
+        <Route
+          path="/models"
+          element={
+            <RequireAdmin>
+              <Models />
+            </RequireAdmin>
           }
         />
 

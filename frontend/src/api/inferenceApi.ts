@@ -5,7 +5,7 @@
  */
 
 import { apiClient } from './client';
-import type { PredictionResponse, ModelSummary } from '../types/api';
+import type { PredictionResponse, ModelSummary, MessageResponse, ConfirmPredictionRequest, ConfirmPredictionResponse } from '../types/api';
 
 /**
  * POST /predict
@@ -49,4 +49,28 @@ export async function getPredictions(
 /** GET /predictions/:id — single past prediction. */
 export async function getPrediction(id: string): Promise<PredictionResponse> {
   return apiClient<PredictionResponse>(`/predictions/${id}`);
+}
+
+/** DELETE /predictions/:id — discard an unsaved prediction. */
+export async function deletePrediction(id: string): Promise<MessageResponse> {
+  return apiClient<MessageResponse>(`/predictions/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * POST /predictions/:id/confirm — confirm a prediction and create an annotation.
+ * Optionally attach biological metadata (species, age_days, treatment).
+ */
+export async function confirmPrediction(
+  predictionId: string,
+  body?: ConfirmPredictionRequest,
+): Promise<ConfirmPredictionResponse> {
+  return apiClient<ConfirmPredictionResponse>(
+    `/predictions/${predictionId}/confirm`,
+    {
+      method: 'POST',
+      body: body ?? null,
+    },
+  );
 }

@@ -19,6 +19,8 @@ from api.src.db.orm import ModelVersion, Prediction
 from api.src.repositories.annotations import AnnotationRepository
 from api.src.repositories.base import AbstractPredictionRepository
 from api.src.repositories.datasets import DatasetRepository
+from api.src.repositories.feedback import FeedbackRepository
+from api.src.schemas.auth import UserRole
 from api.src.schemas.predictions import (
     Plant,
     PredictionMetadata,
@@ -72,11 +74,16 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
 
         return model_id
 
-    def _orm_to_schema(self, row: Prediction) -> PredictionResponse:
+    def _orm_to_schema(
+        self,
+        row: Prediction,
+        feedback_signal: str | None = None,
+    ) -> PredictionResponse:
         """Convert a `Prediction` ORM row to a `PredictionResponse`.
 
         Args:
             row: The ORM row fetched from the database.
+            feedback_signal: `FeedbackSignal` value.
 
         Returns:
             A fully populated `PredictionResponse`.
@@ -87,6 +94,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             prediction_id=row.id,
             status=PredictionStatus(row.status),
             input_filename=row.input_filename,
+            owner_email=row.user.email if row.user else None,
             metadata=PredictionMetadata(
                 model_version=row.model_version.version if row.model_version else "unknown",
                 inference_timestamp=row.inference_timestamp,
@@ -100,6 +108,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             input_url=self._storage.sign(row.input_uri) if row.input_uri else None,
             tip_photo_url=self._storage.sign(row.tip_photo_uri) if row.tip_photo_uri else None,
             plants=plants,
+            feedback_signal=feedback_signal,
             warnings=list(row.warnings or []),
         )
 
@@ -107,6 +116,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         self,
         prediction: PredictionResponse,
         filename: str | None = None,
+        input_hash: str | None = None,
         input_uri: str | None = None,
         tip_photo_uri: str | None = None,
     ) -> Prediction:
@@ -115,6 +125,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         Args:
             prediction: The schema object returned by the inference service.
             filename: Original uploaded filename, stored for display purposes.
+            input_hash: Hash string of the file.
             input_uri: Local file URI of the saved input image.
             tip_photo_uri: Local file URI of the saved tip visualization.
 
@@ -131,6 +142,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             model_version_id=model_id,
             status=prediction.status.value,
             input_filename=filename or prediction.input_filename,
+            input_hash=input_hash,
             input_uri=input_uri,
             input_width_px=meta.input_resolution[0] if meta.input_resolution else None,
             input_height_px=meta.input_resolution[1] if meta.input_resolution else None,
@@ -151,6 +163,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         self,
         prediction: PredictionResponse,
         filename: str | None = None,
+        input_hash: str | None = None,
         input_uri: str | None = None,
         tip_photo_uri: str | None = None,
     ) -> PredictionResponse:
@@ -159,6 +172,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         Args:
             prediction: The fully populated prediction to store.
             filename: Original uploaded filename for display.
+            input_hash: Hash string of the file.
             input_uri: Local file URI of the saved input image.
             tip_photo_uri: Local file URI of the saved tip visualization.
 
@@ -168,6 +182,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         row = await self._schema_to_orm(
             prediction,
             filename,
+            input_hash,
             input_uri,
             tip_photo_uri,
         )
@@ -175,33 +190,58 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         await self._db.commit()
 
         result = await self._db.execute(
-            select(Prediction).options(selectinload(Prediction.model_version)).where(Prediction.id == row.id)
+            select(Prediction)
+            .options(
+                selectinload(Prediction.model_version),
+                selectinload(Prediction.user),
+            )
+            .where(Prediction.id == row.id)
         )
         saved_row = result.scalar_one()
         logger.debug("Persisted prediction %s to DB", prediction.prediction_id)
         return self._orm_to_schema(saved_row)
 
-    async def get(self, prediction_id: uuid.UUID) -> PredictionResponse | None:
+    async def get(
+        self,
+        prediction_id: uuid.UUID,
+        role: UserRole = UserRole.USER,
+    ) -> PredictionResponse | None:
         """Fetch the prediction with `prediction_id` from the DB.
 
         Args:
             prediction_id: UUID to look up.
+            role: `UserRole` of the logged in user.
 
         Returns:
             The matching prediction, or `None` if not found.
         """
-        result = await self._db.execute(
+        q = (
             select(Prediction)
-            .options(selectinload(Prediction.model_version))
+            .options(
+                selectinload(Prediction.model_version),
+                selectinload(Prediction.user),
+            )
             .where(Prediction.id == prediction_id)
             .where(Prediction.user_id == self._user_id)
         )
+        if role != UserRole.ADMIN:
+            q = q.where(Prediction.user_id == self._user_id)
+
+        result = await self._db.execute(q)
         row = result.scalar_one_or_none()
 
         if row is None:
             return None
 
-        return self._orm_to_schema(row)
+        feedback_signal: str | None = None
+        print("\n1.\n")
+        fb = await FeedbackRepository(self._db).get_latest_for_prediction(prediction_id)
+        print("\n2.\n")
+        if fb is not None:
+            feedback_signal = fb.signal
+            print("\n3.\n")
+
+        return self._orm_to_schema(row, feedback_signal=feedback_signal)
 
     async def delete(self, prediction_id: uuid.UUID) -> bool:
         """Delete the prediction with `prediction_id` from the DB.
@@ -225,6 +265,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         page: int = 1,
         page_size: int = 20,
         confirmed: bool | None = None,
+        role: UserRole = UserRole.USER,
     ) -> list[PredictionResponse]:
         """Return a paginated list of predictions for the authenticated user.
 
@@ -235,6 +276,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             page: 1-indexed page number.
             page_size: Number of record per page (1-100).
             confirmed: Boolean determining the confirmation status.
+            role: UserRole = UserRole.USER,
 
         Returns:
             `list[PredictionResponse]`
@@ -243,9 +285,14 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
 
         q = (
             select(Prediction)
-            .options(selectinload(Prediction.model_version))
+            .options(
+                selectinload(Prediction.model_version),
+                selectinload(Prediction.user),
+            )
             .where(Prediction.user_id == self._user_id)
         )
+        if role != UserRole.ADMIN:
+            q = q.where(Prediction.user_id == self._user_id)
 
         if confirmed is True:
             q = q.where(Prediction.confirmed_at.isnot(None))
@@ -253,7 +300,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             q = q.where(Prediction.confirmed_at.is_(None))
 
         # Paginated rows
-        q = q.rder_by(Prediction.created_at.desc()).offset(offset).limit(page_size)
+        q = q.order_by(Prediction.created_at.desc()).offset(offset).limit(page_size)
 
         result = await self._db.execute(q)
         return [self._orm_to_schema(r) for r in result.scalars().all()]
@@ -286,7 +333,10 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         """
         result = await self._db.execute(
             select(Prediction)
-            .options(selectinload(Prediction.model_version))
+            .options(
+                selectinload(Prediction.model_version),
+                selectinload(Prediction.user),
+            )
             .where(Prediction.id == prediction_id)
             .where(Prediction.user_id == self._user_id)
         )
@@ -308,14 +358,18 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
             if dataset is None:
                 raise ValueError(f"Dataset {dataset_id} not found.")
 
-        annotation_repo = AnnotationRepository(self._db)
+        annotation_repo = AnnotationRepository(self._db, self._storage)
         await annotation_repo.create_from_prediction(
             prediction_id=prediction_id,
             mask_uri=row.segmentation_mask_uri,
+            tip_photo_uri=row.tip_photo_uri,
+            input_hash=row.input_hash,
+            image_uri=row.input_uri,
             species=species,
             age_days=age_days,
             treatment=treatment,
             dataset_id=dataset_id,
+            created_by=self._user_id,
         )
 
         if dataset_id is not None:

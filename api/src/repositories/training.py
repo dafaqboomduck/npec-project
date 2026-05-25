@@ -34,6 +34,7 @@ def _row_to_summary(row: TrainingRun) -> TrainingRunSummary:
         started_at=row.started_at,
         completed_at=row.completed_at,
         final_f1=row.final_f1,
+        hyperparameters=row.hyperparameters,
     )
 
 

@@ -14,7 +14,7 @@ function getAuthHeader(): Record<string, string> {
 }
 
 interface ClientOptions extends Omit<RequestInit, 'body'> {
-  body?: BodyInit | null | Record<string, unknown> | unknown[];
+  body?: any;
 }
 
 /**
@@ -81,10 +81,8 @@ export async function apiClient<T>(
 }
 
 /**
- * Resolves an artifact URL or path returned by the backend storage service.
- * - Absolute URLs (MinIO presigned URLs) are returned as-is.
- * - Relative paths (Local storage proxy paths "/api/v1/files/...") are prefixed
- *   with the backend origin so they route to port 8000 instead of port 3000.
+ * Resolves artifact URLs (e.g. relative backend paths) to fully qualified URLs.
+ * If the URL is already absolute (like a MinIO presigned URL), it is returned unmodified.
  */
 export function getArtifactUrl(url: string | undefined | null): string {
   if (!url) return '';
@@ -92,19 +90,59 @@ export function getArtifactUrl(url: string | undefined | null): string {
     return url;
   }
 
-  // Already an absolute URL (e.g. MinIO presigned URL, external URL)
-  if (url.startsWith('http://') || url.startsWith('https://')) {
+  // If this is already a public, reachable absolute URL, return it unmodified
+  if ((url.startsWith('http://') || url.startsWith('https://')) && !url.includes('://minio:9000/')) {
     return url;
   }
 
-  // Local storage proxy path (starts with /api/v1/files/... or similar)
-  if (url.startsWith('/')) {
-    if (BASE_URL.startsWith('http')) {
-      const origin = new URL(BASE_URL).origin;
-      return `${origin}${url}`;
+  let targetUrl = url;
+
+  // If this is an absolute URL pointing to the unreachable MinIO container endpoint,
+  // extract the object key and route it through our backend's secure `/files` proxy endpoint.
+  if (url.includes('://minio:9000/')) {
+    try {
+      const parsedUrl = new URL(url);
+      const pathname = parsedUrl.pathname;
+      const bucketPrefix = '/npec-artifacts/';
+      if (pathname.startsWith(bucketPrefix)) {
+        targetUrl = pathname.substring(bucketPrefix.length);
+      } else {
+        const parts = pathname.split('/');
+        targetUrl = parts.slice(2).join('/');
+      }
+    } catch {
+      // Fallback in case of parsing error
     }
-    return `${window.location.origin}${url}`;
   }
 
-  return url;
+  // If the target URL is still absolute (e.g., custom external URLs), return it as-is
+  if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+    return targetUrl;
+  }
+
+  // Normalize leading slash for relative paths
+  const cleanUrl = targetUrl.startsWith('/') ? targetUrl : `/${targetUrl}`;
+
+  // Route it through the /files proxy path under the active API prefix (e.g. /api/v1)
+  let apiPath = '';
+  if (BASE_URL.startsWith('http')) {
+    apiPath = new URL(BASE_URL).pathname;
+  } else {
+    apiPath = BASE_URL;
+  }
+
+  // Strip trailing slash
+  if (apiPath.endsWith('/')) {
+    apiPath = apiPath.slice(0, -1);
+  }
+
+  const fullPath = `${apiPath}/files${cleanUrl}`;
+
+  if (BASE_URL.startsWith('http')) {
+    const origin = new URL(BASE_URL).origin;
+    return `${origin}${fullPath}`;
+  }
+
+  return `${window.location.origin}${fullPath}`;
 }
+

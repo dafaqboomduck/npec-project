@@ -9,7 +9,7 @@ class DashboardMetricsResponse(BaseModel):
     """Returned by GET /dashboard/metrics."""
 
     f1_score: float = Field(..., ge=0.0, le=1.0)
-    throughput_img_per_s: int
+    throughput_img_per_s: float
 
 
 class F1HistoryPoint(BaseModel):

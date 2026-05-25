@@ -35,7 +35,6 @@ services:
     volumes:
       - cv5_pgdata:/var/lib/postgresql/data
       - ./db/seeds:/seeds:ro
-      - ./db/seeds/dev_seed.sql:/docker-entrypoint-initdb.d/dev_seed.sql:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5db}" ]
       interval: 5s
@@ -128,6 +127,8 @@ services:
   seeder:
     image: postgres:16
     depends_on:
+      migrations:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
     environment:

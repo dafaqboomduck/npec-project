@@ -21,9 +21,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 ARG NPEC_CV_VERSION
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
-        --index-url https://test.pypi.org/simple/ \
-        --extra-index-url https://pypi.org/simple/ \
-"npec-cv${NPEC_CV_VERSION:+==$NPEC_CV_VERSION}"
+    --index-url https://test.pypi.org/simple/ \
+    --extra-index-url https://pypi.org/simple/ \
+    "npec-cv${NPEC_CV_VERSION:+==$NPEC_CV_VERSION}"
 
 # Download models from the matching GitHub release.
 # Token comes in as a BuildKit secret so it never lands in a layer.
@@ -32,9 +32,9 @@ RUN --mount=type=secret,id=github_token,required=true \
     GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
     NPEC_MODELS_CACHE_DIR=/opt/npec_models \
     npec-cv download-models \
- && ln -sfn "$(NPEC_MODELS_CACHE_DIR=/opt/npec_models \
-        python -c 'from npec_cv.helpers.model_loader import get_models_dir; print(get_models_dir())')" \
-        /opt/npec_models/current
+    && ln -sfn "$(NPEC_MODELS_CACHE_DIR=/opt/npec_models \
+    python -c 'from npec_cv.helpers.model_loader import get_models_dir; print(get_models_dir())')" \
+    /opt/npec_models/current
 
 # 2. Runtime
 FROM python:3.11-slim AS runtime
@@ -47,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /usr/local/lib/python3.11/site-packages \
-                 /usr/local/lib/python3.11/site-packages
+    /usr/local/lib/python3.11/site-packages
 COPY --from=deps /usr/local/bin /usr/local/bin
 COPY --from=deps /opt/npec_models /opt/npec_models
 
@@ -67,6 +67,6 @@ ENV PYTHONUNBUFFERED=1 \
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
 
-CMD ["uvicorn", "api.src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && python -m db.bootstrap && uvicorn api.src.main:app --host 0.0.0.0 --port 8000"]

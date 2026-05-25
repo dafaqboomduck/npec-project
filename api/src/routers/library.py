@@ -31,13 +31,14 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.src.core.security import get_current_user, require_admin
 from api.src.db.orm import Annotation
 from api.src.db.session import get_session
 from api.src.dependencies import get_deployment_service, get_inference_service, get_storage
 from api.src.repositories.annotations import AnnotationRepository
+from api.src.repositories.database import DatabasePredictionRepository
 from api.src.repositories.datasets import DatasetRepository
 from api.src.repositories.models import ModelRepository
 from api.src.schemas.auth import TokenData, UserRole
@@ -45,6 +46,7 @@ from api.src.schemas.common import ErrorCode, ErrorResponse, MessageResponse
 from api.src.schemas.library import (
     AnnotationResponse,
     AnnotationStatus,
+    AnnotationUpdate,
     DatasetCreate,
     DatasetDetail,
     DatasetSummary,
@@ -53,14 +55,23 @@ from api.src.schemas.library import (
     ModelDetail,
     ModelSummary,
 )
+from api.src.services.artifact_storage import (
+    save_segmentation_mask,
+    save_tip_photo,
+)
 from api.src.services.base import AbstractInferenceService
 from api.src.services.deployment import AbstractDeploymentService
+from api.src.services.image_validation import validate_image
 from api.src.services.mask_storage import save_annotation_mask, validate_tiff_mask
+from api.src.services.monitoring import MonitoringService
 from api.src.services.storage import AbstractStorageBackend
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Library"])
+
+# In-memory set to track datasets currently being processed
+_inference_running: set[str] = set()
 
 # Helpers
 
@@ -88,12 +99,15 @@ async def _run_inference_background(
     annotations: list[dict],
     inference_service: AbstractInferenceService,
     storage: AbstractStorageBackend,
-    db_session_factory,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+    running_set: set[str],
 ) -> None:
     """Background task: run inference on all pending annotations in a dataset.
 
     Iterates over pending annotations, fetches each image from storage, runs
-    inference, saves the mask, and updates the annotation row.
+    inference, saves the mask, records the prediction in the DB so it shows in history,
+    and updates the annotation row.
 
     Partial failures are isolated - a single bad image sets that annotation
     to 'review_required' and logs the error, then processing continues with
@@ -105,6 +119,8 @@ async def _run_inference_background(
         inference_service: The active inference service singleton.
         storage: The active storage backend.
         db_session_factory: Callable that returns a new AsyncSession.
+        user_id: UUID of the user triggering the batch inference.
+        running_set: Set of all the currently running tasks.
     """
     succeeded = 0
     failed = 0
@@ -115,6 +131,7 @@ async def _run_inference_background(
         len(annotations),
     )
 
+    dataset_key = str(dataset_id)
     for annotation in annotations:
         async with db_session_factory() as db:
             try:
@@ -123,21 +140,62 @@ async def _run_inference_background(
                 filename = annotation["image_uri"].split("/")[-1]
 
                 # Run inference
-                prediction_response, mask_bytes = await inference_service.run(
+                prediction_response, image_result = await inference_service.run(
                     image_bytes=image_bytes,
                     filename=filename,
                 )
 
-                # Save mask to storage if the service produced one
-                mask_uri: str | None = None
-                if mask_bytes is not None:
-                    mask_key = f"masks/{annotation['id']}_mask.png"
-                    mask_uri = storage.upload(mask_key, mask_bytes, content_type="image/png")
+                prediction_id = prediction_response.prediction_id
 
-                # Update annotation in DB
+                # Save mask and tip photo
+                mask_uri: str | None = None
+                tip_photo_uri: str | None = None
+
+                if image_result is not None:
+                    mask_uri = save_segmentation_mask(
+                        prediction_id=prediction_id,
+                        image_result=image_result,
+                        backend=storage,
+                    )
+                    tip_photo_uri = save_tip_photo(
+                        prediction_id=prediction_id,
+                        image_result=image_result,
+                        original_image_bytes=image_bytes,
+                        backend=storage,
+                    )
+
+                # Patch prediction with mask URI
+                prediction_response = prediction_response.model_copy(update={"segmentation_mask_url": mask_uri})
+
+                # Persist to repository so it appears in history!
+                repo = DatabasePredictionRepository(db=db, user_id=user_id, storage=storage)
+                await repo.save(
+                    prediction_response,
+                    filename=filename,
+                    input_uri=annotation["image_uri"],
+                    tip_photo_uri=tip_photo_uri,
+                )
+
+                # Record monitoring metrics
+                try:
+                    monitoring = MonitoringService(db)
+                    await monitoring.record_prediction_metrics(
+                        prediction_id=prediction_id,
+                        processing_time_ms=prediction_response.metadata.processing_time_ms,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to record monitoring metrics for prediction %s: %s",
+                        prediction_id,
+                        exc,
+                    )
+
+                # Update annotation in DB - link to prediction and set status
                 row = await db.get(Annotation, annotation["id"])
                 if row is not None:
+                    row.prediction_id = prediction_id
                     row.mask_uri = mask_uri
+                    row.tip_photo_uri = tip_photo_uri
                     row.status = AnnotationStatus.ANNOTATED
                     row.updated_at = datetime.now(timezone.utc)
                     await db.commit()
@@ -170,6 +228,7 @@ async def _run_inference_background(
                         db_exc,
                     )
 
+    running_set.discard(dataset_key)
     logger.info(
         "run-inference background task completed for dataset %s - %d succeeded, %d failed",
         dataset_id,
@@ -204,10 +263,11 @@ async def list_datasets(
     Returns:
         List of `DatasetSummary`.
     """
-    repo = DatasetRepository(db)
-    return await repo.list(
+    return await DatasetRepository(db).list(
         species=species,
         growth_stage=growth_stage.value if growth_stage else None,
+        role=user.role,
+        requesting_user_id=UUID(user.sub),
     )
 
 
@@ -239,7 +299,11 @@ async def get_dataset(
         HTTPException: 404 if the dataset does not exist.
     """
     repo = DatasetRepository(db)
-    dataset = await repo.get(dataset_id)
+    dataset = await repo.get(
+        dataset_id,
+        role=user.role,
+        requesting_user_id=UUID(user.sub),
+    )
     if dataset is None:
         raise _404()
     return dataset
@@ -272,12 +336,12 @@ async def create_dataset(
     Raises:
         HTTPException: 403 for non-admin tokens.
     """
-    repo = DatasetRepository(db)
-    dataset = await repo.create(
+    dataset = await DatasetRepository(db).create(
         name=data.name,
         description=data.description,
         species=data.species,
         growth_stage=data.growth_stage.value if data.growth_stage else None,
+        created_by=UUID(user.sub),
     )
     logger.info("Admin %s created dataset %s", user.sub, dataset.dataset_id)
     return dataset
@@ -361,6 +425,10 @@ async def upload_dataset_image(
         HTTPException: 413 if the file exceeds 50 MB.
         HTTPException: 415 if the file format is not accepted.
     """
+    import hashlib
+
+    from sqlalchemy import select
+
     from api.src.services.image_validation import (
         validate_content_type,
         validate_file_size,
@@ -378,6 +446,7 @@ async def upload_dataset_image(
     image_bytes = await file.read()
     validate_file_size(image_bytes)
     validate_content_type(file.content_type or "", file.filename or "")
+    validate_image(image_bytes, file.filename or "")
 
     # Save to storage
     storage_key = f"datasets/{dataset_id}/{uuid.uuid4()}{_ext(file.filename or '')}"
@@ -393,10 +462,29 @@ async def upload_dataset_image(
             ).model_dump(),
         )
 
+    # Check for existing duplicate in this dataset
+    image_hash = hashlib.sha256(image_bytes).hexdigest()
+    existing = await db.execute(
+        select(Annotation).where(
+            Annotation.dataset_id == dataset_id,
+            Annotation.image_hash == image_hash,
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ErrorResponse(
+                error_code=ErrorCode.CONFLICT,
+                message="An identical image already exists in this dataset.",
+            ).model_dump(),
+        )
+
     # Create annotation + increment count in a single transaction
     annotation = await annotation_repo.create_pending(
         dataset_id=dataset_id,
         image_uri=image_uri,
+        image_hash=image_hash,
+        created_by=UUID(user.sub),
     )
     await dataset_repo.increment_count(dataset_id)
     await db.commit()
@@ -408,6 +496,81 @@ async def upload_dataset_image(
         annotation.annotation_id,
     )
     return annotation
+
+
+@router.post(
+    "/datasets/{dataset_id}/annotations/{annotation_id}",
+    response_model=AnnotationResponse,
+    summary="Add an existing annotation to a dataset",
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse, "description": "Annotation already belongs to a dataset"},
+    },
+)
+async def add_annotation_to_dataset(
+    dataset_id: UUID,
+    annotation_id: UUID,
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
+) -> AnnotationResponse:
+    """Link an existing annotation to a dataset.
+
+    The annotation must not already belong to a dataset.
+
+    Args:
+        dataset_id: UUID of the dataset to add the annotation to.
+        annotation_id: UUID of the annotation to link.
+        user: Authenticated user from Bearer token.
+        db: Injected database session.
+        storage: Injected storage backend.
+
+    Returns:
+        Updated `AnnotationResponse` with dataset_id set.
+
+    Raises:
+        HTTPException: 404 if dataset or annotation not found.
+        HTTPException: 409 if annotation already belongs to a dataset.
+    """
+    dataset_repo = DatasetRepository(db)
+    annotation_repo = AnnotationRepository(db, storage)
+
+    dataset = await dataset_repo.get(dataset_id)
+    if dataset is None:
+        raise _404("Dataset not found.")
+
+    row = await db.get(Annotation, annotation_id)
+    if row is None:
+        raise _404("Annotation not found.")
+
+    if row.dataset_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ErrorResponse(
+                error_code=ErrorCode.CONFLICT,
+                message="Annotation already belongs to a dataset.",
+            ).model_dump(),
+        )
+
+    row.dataset_id = dataset_id
+    row.updated_at = datetime.now(timezone.utc)
+    await dataset_repo.increment_count(dataset_id)
+    await db.commit()
+    await db.refresh(row)
+
+    logger.info(
+        "User %s added annotation %s to dataset %s",
+        user.sub,
+        annotation_id,
+        dataset_id,
+    )
+
+    return await annotation_repo.get(
+        annotation_id,
+        role=user.role,
+        requesting_user_id=UUID(user.sub),
+    )
 
 
 @router.post(
@@ -451,7 +614,7 @@ async def run_dataset_inference(
     Raises:
         HTTPException: 404 if the dataset does not exist.
     """
-    from api.src.db.session import get_session as session_factory
+    from api.src.db.session import get_sessionmaker
 
     dataset = await DatasetRepository(db).get(dataset_id)
     if dataset is None:
@@ -464,13 +627,21 @@ async def run_dataset_inference(
 
     pending_data = [{"id": ann.id, "image_uri": ann.image_uri} for ann in pending]
 
+    dataset_key = str(dataset_id)
+    if dataset_key in _inference_running:
+        return MessageResponse(message="Inference is already running for this dataset.")
+
+    _inference_running.add(dataset_key)
+
     background_tasks.add_task(
         _run_inference_background,
         dataset_id=dataset_id,
         annotations=pending_data,
         inference_service=inference_service,
         storage=storage,
-        db_session_factory=session_factory,
+        db_session_factory=get_sessionmaker(),
+        user_id=UUID(user.sub),
+        running_set=_inference_running,
     )
 
     logger.info(
@@ -498,6 +669,7 @@ async def run_dataset_inference(
 async def list_annotations(
     species: str | None = Query(None, description="Filter by species name"),
     growth_stage: GrowthStage | None = Query(None, description="Filter by growth stage"),
+    status: AnnotationStatus | None = Query(None, description="Filter by annotation status"),
     dataset_id: UUID | None = Query(None, description="Filter by dataset UUID"),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=20, ge=1, le=100, description="Results per page"),
@@ -512,6 +684,7 @@ async def list_annotations(
     Args:
         species: Optional species name filter.
         growth_stage: Optional growth stage filter.
+        status: Optional annotatino status filter.
         dataset_id: Optional dataset UUID filter.
         page: 1-indexed page number.
         page_size: Number of results per page (max 100).
@@ -522,13 +695,15 @@ async def list_annotations(
     Returns:
         Paginated list of `AnnotationResponse`.
     """
-    repo = AnnotationRepository(db, storage)
-    return await repo.list(
+    return await AnnotationRepository(db, storage).list(
         species=species,
         growth_stage=growth_stage.value if growth_stage else None,
+        status=status,
         dataset_id=dataset_id,
         page=page,
         page_size=page_size,
+        role=user.role,
+        requesting_user_id=UUID(user.sub),
     )
 
 
@@ -561,11 +736,125 @@ async def get_annotation(
     Raises:
         HTTPException: 404 if the annotation does not exist.
     """
-    repo = AnnotationRepository(db, storage)
-    annotation = await repo.get(annotation_id)
+    annotation = await AnnotationRepository(db, storage).get(
+        annotation_id,
+        role=user.role,
+        requesting_user_id=UUID(user.sub),
+    )
     if annotation is None:
         raise _404()
     return annotation
+
+
+@router.post(
+    "/annotations/{annotation_id}/update",
+    response_model=AnnotationResponse,
+    summary="Update annotation metadata",
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def update_annotation(
+    annotation_id: UUID,
+    body: AnnotationUpdate,
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    db: AsyncSession = Depends(get_session),
+    storage: AbstractStorageBackend = Depends(get_storage),
+) -> AnnotationResponse:
+    """Update species, age_days, treatment, or growth_stage on an annotation.
+
+    Args:
+        annotation_id: UUID of the annotation to flag.
+        body: Body including fields to update.
+        user: Authenticated user from Bearer token.
+        db: Injected database session.
+        storage: Injected backend storage.
+
+    Returns:
+        AnnotationResponse
+
+    Raises:
+        HTTPException: 404 if the annotation does not exist.
+    """
+    updated = await AnnotationRepository(db, storage).update_metadata(
+        annotation_id=annotation_id,
+        species=body.species,
+        age_days=body.age_days,
+        treatment=body.treatment,
+        growth_stage=body.growth_stage.value if body.growth_stage else None,
+    )
+    if updated is None:
+        raise _404("Annotation not found.")
+    return updated
+
+
+@router.post(
+    "/annotations/{annotation_id}/run-inference",
+    response_model=MessageResponse,
+    summary="Run inference on a single annotation",
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def run_annotation_inference(
+    annotation_id: UUID,
+    background_tasks: BackgroundTasks,
+    user: Annotated[TokenData, Depends(get_current_user)] = None,
+    inference_service: AbstractInferenceService = Depends(get_inference_service),
+    storage: AbstractStorageBackend = Depends(get_storage),
+    db: AsyncSession = Depends(get_session),
+) -> MessageResponse:
+    """Run inference on a single annotation.
+
+    Queues a background task for an annotation. Poll
+    GET /annotations/{annotation_id} to watch the status transition
+    from 'pending' to 'annotated' (or 'review_required' on failure).
+
+    Args:
+        annotation_id: UUID of the annotation to process.
+        background_tasks: FastAPI background task manager.
+        user: Authenticated user from Bearer token.
+        inference_service: Injected inference service singleton.
+        storage: Injected storage backend.
+        db: Injected database session.
+
+    Returns:
+        MessageResponse confirming the task was queued.
+
+    Raises:
+        HTTPException: 404 if the annotation does not exist or has no image.
+    """
+    from api.src.db.session import get_sessionmaker
+
+    row = await db.get(Annotation, annotation_id)
+    if row is None:
+        raise _404("Annotation not found.")
+
+    if row.image_uri is None:
+        raise _404("Annotation has no source image.")
+
+    annotation_data = [{"id": annotation_id, "image_uri": row.image_uri}]
+
+    background_tasks.add_task(
+        _run_inference_background,
+        dataset_id=annotation_id,  # used for logging only
+        annotations=annotation_data,
+        inference_service=inference_service,
+        storage=storage,
+        db_session_factory=get_sessionmaker(),
+        user_id=UUID(user.sub),
+        running_set=set(),  # single annotation
+    )
+
+    logger.info(
+        "User %s queued inference for annotation %s",
+        user.sub,
+        annotation_id,
+    )
+
+    return MessageResponse(message=f"Inference queued for annotation {annotation_id}.")
 
 
 @router.delete(
@@ -676,7 +965,7 @@ async def confirm_annotation(
         )
 
     try:
-        updated = await AnnotationRepository(db).confirm(annotation_id, mask_url=mask_url)
+        updated = await AnnotationRepository(db, storage).confirm(annotation_id, mask_url=mask_key)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

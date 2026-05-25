@@ -38,6 +38,7 @@ class TrainingRunSummary(BaseModel):
     started_at: datetime
     completed_at: datetime | None = None
     final_f1: float | None = None
+    hyperparameters: dict[str, Any] | None = None
 
 
 class TrainingRunDetail(TrainingRunSummary):

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +39,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
     responses={401: {"model": ErrorResponse}},
 )
 async def get_dashboard_metrics(
+    run_id: UUID | None = None,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
 ) -> DashboardMetricsResponse:
@@ -48,13 +50,14 @@ async def get_dashboard_metrics(
     model or metrics exist yet.
 
     Args:
+        run_id: Optional UUID of the run to filter on.
         user: Authenticated user from Bearer Token.
         db: Injected database session.
 
     Returns:
         `DashboardMetricsResponse`
     """
-    return await DashboardRepository(db).get_metrics()
+    return await DashboardRepository(db).get_metrics(run_id=run_id)
 
 
 @router.get(
@@ -69,23 +72,28 @@ async def get_dashboard_metrics(
     responses={401: {"model": ErrorResponse}},
 )
 async def get_f1_history(
+    run_id: UUID | None = None,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
     db: AsyncSession = Depends(get_session),
 ) -> F1HistoryResponse:
-    """Return the full f1 training history for the deployed model.
+    """Return the full f1 training history for the run with run_id.
+
+    If run_id is not provided, returns the f1 history of the
+    currently deployed model.
 
     Each data point is an `{epoch, f1_score}` pair read from
     `monitoring_metrics` rows with `metric_name = 'f1_validation'`.
     Returns an empty `data_points` list when no history exists.
 
     Args:
+        run_id: UUID of the run
         user: Authenticated user from Bearer token.
         db: Injected database session.
 
     Returns:
         `F1HistoryResponse`
     """
-    return await DashboardRepository(db).get_f1_history()
+    return await DashboardRepository(db).get_f1_history(run_id=run_id)
 
 
 @router.get(

@@ -14,7 +14,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.db.orm import Feedback, Prediction
-from api.src.schemas.feedback import FeedbackSignal
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ class FeedbackRepository:
         self,
         user_id: uuid.UUID,
         prediction_id: uuid.UUID,
-        signal: FeedbackSignal,
+        signal: str,
         comment: str | None,
     ) -> None:
         """Insert a new feedback row.
@@ -60,14 +59,34 @@ class FeedbackRepository:
         row = Feedback(
             user_id=user_id,
             prediction_id=prediction_id,
-            signal=signal.value,
+            signal=signal,
             comment=comment,
         )
         self._db.add(row)
         await self._db.commit()
         logger.debug(
             "Recorded feedback signal=%s for prediction %s by user %s",
-            signal.value,
+            signal,
             prediction_id,
             user_id,
         )
+
+    async def get_latest_for_prediction(
+        self,
+        prediction_id: uuid.UUID,
+    ) -> Feedback | None:
+        """Return the most recent feedback row for a prediction.
+
+        Args:
+            prediction_id: UUID of the prediction.
+
+        Returns:
+            The most recent `Feedback` ORM row, or None if no feedback exists.
+        """
+        result = await self._db.execute(
+            select(Feedback)
+            .where(Feedback.prediction_id == prediction_id)
+            .order_by(Feedback.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()

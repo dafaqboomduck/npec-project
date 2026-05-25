@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Enums
 
@@ -59,6 +59,7 @@ class DatasetSummary(BaseModel):
     modified_at: datetime
     count: int
     species: str | None = None
+    owner_email: str | None = None
 
 
 class DatasetDetail(DatasetSummary):
@@ -80,11 +81,23 @@ class AnnotationResponse(BaseModel):
     status: AnnotationStatus
     image_uri: str | None = None
     mask_url: str | None = None
+    tip_photo_url: str | None = None
     species: str | None = None
     age_days: int | None = None
     treatment: str | None = None
+    growth_stage: str | None = None
+    owner_email: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AnnotationUpdate(BaseModel):
+    """Payload for POST /annotations/{id}/update."""
+
+    species: str | None = None
+    age_days: int | None = Field(None, ge=0)
+    treatment: str | None = None
+    growth_stage: GrowthStage | None = None
 
 
 # Model schemas

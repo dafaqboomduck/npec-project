@@ -67,15 +67,14 @@ INSERT INTO model_versions (
 VALUES (
     '00000000-0000-0000-0000-000000000000',
     'unet-npec-v0.0.0-placeholder',
-    'Placeholder U-Net',
-    'Dev-only placeholder. Not a real trained model. The deploy flow registers and deploys real models as separate rows.',
-    'registered',
-    NULL, NULL, NULL, NULL,
-    NULL,
-    NULL
+    'NPEC U-Net Baseline',
+    'Baseline model, trained on the NPEC dataset.',
+    'deployed',
+    0.87, 0.85, 0.89, 31352,
+    '/app/artifacts/models/v1/',
+    now()
 )
-ON CONFLICT (version) DO UPDATE SET
-    id          = EXCLUDED.id,
+ON CONFLICT (id) DO UPDATE SET
     name        = EXCLUDED.name,
     description = EXCLUDED.description,
     status      = EXCLUDED.status,
@@ -87,7 +86,6 @@ ON CONFLICT (version) DO UPDATE SET
     deployed_at  = EXCLUDED.deployed_at;
 
 COMMIT;
-
 -- ---------------------------------------------------------------------------
 -- Verification
 -- ---------------------------------------------------------------------------

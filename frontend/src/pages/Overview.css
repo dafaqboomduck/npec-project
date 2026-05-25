@@ -218,11 +218,9 @@
 .hero-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(27, 67, 50, 0.65) 0%,
-    rgba(27, 67, 50, 0.25) 100%
-  );
+  background: linear-gradient(135deg,
+      rgba(27, 67, 50, 0.65) 0%,
+      rgba(27, 67, 50, 0.25) 100%);
 }
 
 /* Glassmorphism model card */
@@ -505,9 +503,11 @@
 .health-bar-fill--green {
   background: var(--color-primary-light);
 }
+
 .health-bar-fill--dark {
   background: var(--color-primary);
 }
+
 .health-bar-fill--danger {
   background: var(--color-danger);
 }
@@ -564,6 +564,7 @@
 .env-status-badge--ok .env-dot {
   background: var(--color-success);
 }
+
 .env-status-badge--warn .env-dot {
   background: var(--color-warning);
 }
@@ -603,6 +604,7 @@
   .overview-stats {
     grid-template-columns: 1fr 1fr;
   }
+
   .overview-bottom {
     grid-template-columns: 1fr;
   }
@@ -612,6 +614,7 @@
   .overview-stats {
     grid-template-columns: 1fr;
   }
+
   .overview-heading {
     font-size: var(--text-xl);
   }

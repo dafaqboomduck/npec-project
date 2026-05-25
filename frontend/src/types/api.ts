@@ -50,8 +50,6 @@ export interface ActivityItem {
   description: string;
   timestamp: string; // ISO 8601
   resource_url?: string;
-  /** Tags rendered as badges in the UI (e.g. EPOCH_50, VAL_B) */
-  tags?: string[];
 }
 
 export interface ActivityFeedResponse {
@@ -70,8 +68,13 @@ export interface ModelHealthResponse {
 }
 
 export interface EnvironmentResponse {
-  gpu_temp_celsius: number;
-  memory_percent: number; // 0–100
+  gpu_temp_celsius: number | null;
+  gpu_utilisation: number | null;
+  vram_percent: number | null;
+  cpu_percent: number | null;
+  disk_percent: number | null;
+  cuda_available: boolean;
+  memory_percent: number;
   system_status: 'optimal' | 'degraded' | 'critical';
 }
 
@@ -113,11 +116,15 @@ export interface DatasetSummary {
   created_at: string;
   modified_at: string;
   count: number;
+  species?: string;
+  growth_stage?: string;
+  owner_email?: string | null;
 }
 
 export interface DatasetDetail extends DatasetSummary {
   description?: string;
   species?: string;
+  growth_stage?: string;
 }
 
 // ===========================================================================
@@ -133,12 +140,26 @@ export interface ModelSummary {
   created_at: string;
 }
 
-export interface ModelDetail extends ModelSummary {
+export interface ModelCreate {
+  version: string;
+  name: string;
+  artifact_uri: string;
   description?: string;
   f1_score?: number;
   precision?: number;
   recall?: number;
   inference_latency_ms?: number;
+}
+
+export interface ModelDetail extends ModelSummary {
+  version?: string;
+  description?: string;
+  f1_score?: number;
+  precision?: number;
+  recall?: number;
+  inference_latency_ms?: number;
+  artifact_uri?: string;   // Admin only
+  deployed_at?: string;    // Admin only
 }
 
 // ===========================================================================
@@ -153,32 +174,38 @@ export interface PredictionMetadata {
   input_channels: number;
   normalisation_applied: boolean;
   scale_factor_mm_per_px: number;
+  species?: string;
+  treatment?: string;
 }
 
 export interface Plant {
   plant_id: number;
   tip_x: number;
   tip_y: number;
-  confidence: number;
   root_length_px: number;
   root_length_mm: number;
 }
 
 export interface PredictionResponse {
   prediction_id: string; // UUID
+  owner_email?: string | null;
   status: 'ok' | 'error';
   input_filename?: string;
   metadata: PredictionMetadata;
-  input_url?: string;
   segmentation_mask_url?: string;
-  tip_photo_url?: string;
+  input_url?: string;         // Presigned URL of the original input image
+  tip_photo_url?: string;     // Presigned URL of the tip visualisation overlay
   plants: Plant[];
-  overall_confidence: number;
+  feedback_signal?: 'correct' | 'incorrect' | null;
   warnings: string[];
 }
 
+/** Body for POST /predictions/{id}/confirm */
 export interface ConfirmPredictionRequest {
-  scan_id: string; // UUID
+  species?: string;
+  age_days?: number;
+  treatment?: string;
+  feedback_signal?: 'correct' | 'incorrect';
 }
 
 export interface ConfirmPredictionResponse {
@@ -194,12 +221,17 @@ export type AnnotationStatus = 'pending' | 'annotated' | 'review_required';
 
 export interface AnnotationResponse {
   annotation_id: string; // UUID
-  scan_id: string;
+  prediction_id: string; // UUID of the linked prediction (renamed from scan_id)
+  dataset_id?: string | null; // UUID of the linked dataset
   status: AnnotationStatus;
+  image_uri?: string;
   mask_url?: string;
+  tip_photo_url?: string;
   species?: string;
   age_days?: number;
   treatment?: string;
+  growth_stage?: string | null;
+  owner_email?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -222,11 +254,17 @@ export interface TrainingRunSummary {
   started_at: string;
   completed_at?: string;
   final_f1?: number;
+  hyperparameters?: Record<string, unknown>;
 }
 
 export interface TrainingRunDetail extends TrainingRunSummary {
-  hyperparameters?: TrainingStartRequest;
-  metrics_history?: F1HistoryPoint[];
+  hyperparameters?: Record<string, unknown>;
+  model_version_id?: string; // UUID of the model version produced by this run
+}
+
+export interface TrainingStartResponse {
+  run_id: string;
+  message: string;
 }
 
 // ===========================================================================
@@ -235,7 +273,7 @@ export interface TrainingRunDetail extends TrainingRunSummary {
 
 export interface FeedbackRequest {
   prediction_id: string;
-  signal: 'correct' | 'incorrect';
+  feedback_signal: 'correct' | 'incorrect';
   comment?: string;
 }
 

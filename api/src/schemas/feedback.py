@@ -22,7 +22,7 @@ class FeedbackRequest(BaseModel):
         ...,
         description="UUID of the prediction being rated.",
     )
-    signal: FeedbackSignal = Field(
+    feedback_signal: FeedbackSignal = Field(
         ...,
         description="Thumbs up (correct) or thumbs down (incorrect).",
     )

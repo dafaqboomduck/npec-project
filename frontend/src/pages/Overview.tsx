@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { getUsername, getRole } from '../api/auth';
 import {
@@ -126,9 +126,9 @@ export default function Overview() {
   // Display name: strip the domain from an email, capitalise first letter
   const displayName = username.includes('@')
     ? username
-        .split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, (c) => c.toUpperCase())
+      .split('@')[0]
+      .replace(/[._-]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
   // ── Data state ──
@@ -159,14 +159,16 @@ export default function Overview() {
     ]).finally(() => setLoading(false));
   }, []);
 
-  const deployedModels = models.filter((m) => m.status === 'deployed');
+  const deployedModels = models.filter((m) => m.status?.toLowerCase() === 'deployed');
   const currentModel = deployedModels[0] ?? null;
 
   // ── Health bar fill widths ──
-  const accuracyPct = health ? Math.round(health.f1_score * 100) : null;
-  const latencyPct = health ? Math.min(health.latency_ms / 200, 1) * 100 : null;
-  const driftBad =
-    health?.drift_status === 'high' || health?.drift_status === 'medium';
+  const f1Pct = health ? Math.round(health.f1_score * 100) : null;
+  const latencyPct = health
+    ? Math.min((Math.log10(health.latency_ms + 1) / Math.log10(60_000)) * 100, 100)
+    : null;
+  const latencyDanger = health ? health.latency_ms > 32_000 : false;
+
 
   return (
     <div className="overview-page">
@@ -216,8 +218,8 @@ export default function Overview() {
                 {loading
                   ? '—'
                   : String(
-                      status?.active_model_count ?? deployedModels.length,
-                    ).padStart(2, '0')}
+                    status?.active_model_count ?? deployedModels.length,
+                  ).padStart(2, '0')}
               </span>
               <div className="model-badges">
                 {deployedModels.length > 0 ? (
@@ -282,7 +284,7 @@ export default function Overview() {
                   </svg>
                 </span>
                 <span className="hero-card-name">
-                  {currentModel ? currentModel.name : 'No model deployed'}
+                  {currentModel ? currentModel.name : 'No deployed models'}
                 </span>
               </div>
             </div>
@@ -315,32 +317,34 @@ export default function Overview() {
                         <p className="activity-description">
                           {item.description}
                         </p>
-                        {item.tags && item.tags.length > 0 && (
-                          <div className="activity-tags">
-                            {item.tags.map((t) => (
-                              <span className="activity-tag" key={t}>
-                                {t}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {item.resource_url && (
-                          <a
-                            className="activity-link"
-                            href={item.resource_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View files ↗
-                          </a>
-                        )}
+                        {(() => {
+                          const link = (() => {
+                            if (!item.resource_url) return null;
+                            const match = item.resource_url.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+                            const id = match ? match[1] : '';
+                            if (item.event_type === 'upload') return id ? `/history?prediction_id=${id}` : '/history';
+                            if (item.event_type === 'annotation') return '/library?tab=annotations';
+                            if (item.event_type === 'deployment') return '/models?tab=registry';
+                            if (item.event_type === 'retraining') return '/models?tab=retraining';
+                            return null;
+                          })();
+                          return link ? (
+                            <Link className="activity-link" to={link}>
+                              View files ↗
+                            </Link>
+                          ) : null;
+                        })()}
                       </div>
                     </li>
                   ))}
                 </ul>
               )}
 
-              <button className="btn-view-logs" id="btn-view-logs">
+              <button
+                className="btn-view-logs"
+                id="btn-view-logs"
+                onClick={() => navigate('/history')}
+              >
                 VIEW ALL LABORATORY LOGS
               </button>
             </section>
@@ -350,18 +354,18 @@ export default function Overview() {
               <h2 className="section-heading">Model Health</h2>
 
               <div className="health-metrics">
-                {/* Accuracy */}
+                {/* f1 */}
                 <div className="health-metric">
                   <div className="health-metric-header">
-                    <span className="health-metric-label">ACCURACY</span>
+                    <span className="health-metric-label">VALIDATION F1</span>
                     <span className="health-metric-value">
-                      {accuracyPct !== null ? `${accuracyPct}%` : '—'}
+                      {f1Pct !== null ? `${f1Pct}%` : '—'}
                     </span>
                   </div>
                   <div className="health-bar-track">
                     <div
                       className="health-bar-fill health-bar-fill--green"
-                      style={{ width: `${accuracyPct ?? 0}%` }}
+                      style={{ width: `${f1Pct ?? 0}%` }}
                     />
                   </div>
                 </div>
@@ -371,47 +375,15 @@ export default function Overview() {
                   <div className="health-metric-header">
                     <span className="health-metric-label">LATENCY</span>
                     <span className="health-metric-value">
-                      {health ? `${health.latency_ms}ms` : '—'}
+                      {health ? `${(health.latency_ms / 1000).toFixed(3)}s` : '—'}
                     </span>
                   </div>
                   <div className="health-bar-track">
                     <div
-                      className="health-bar-fill health-bar-fill--dark"
+                      className={`health-bar-fill ${latencyDanger ? 'health-bar-fill--danger' : 'health-bar-fill--dark'}`}
                       style={{ width: `${latencyPct ?? 0}%` }}
                     />
                   </div>
-                </div>
-
-                {/* Drift */}
-                <div className="health-metric">
-                  <div className="health-metric-header">
-                    <span className="health-metric-label">DRIFT</span>
-                    <span
-                      className={`health-metric-value ${driftBad ? 'health-metric-value--danger' : ''}`}
-                    >
-                      {health ? capitalize(health.drift_status) : '—'}
-                    </span>
-                  </div>
-                  <div className="health-bar-track">
-                    <div
-                      className={`health-bar-fill ${driftBad ? 'health-bar-fill--danger' : 'health-bar-fill--green'}`}
-                      style={{
-                        width: health
-                          ? {
-                              none: '5%',
-                              low: '25%',
-                              medium: '60%',
-                              high: '90%',
-                            }[health.drift_status]
-                          : '0%',
-                      }}
-                    />
-                  </div>
-                  {driftBad && (
-                    <span className="drift-warning">
-                      {capitalize(health!.drift_status)} drift detected
-                    </span>
-                  )}
                 </div>
               </div>
 
@@ -428,16 +400,54 @@ export default function Overview() {
                     </span>
                   </div>
                   <div className="env-grid">
-                    <div className="env-stat">
-                      <span className="env-stat-label">GPU TEMP</span>
-                      <span className="env-stat-value">
-                        {env ? `${env.gpu_temp_celsius}°C` : '—'}
-                      </span>
-                    </div>
+                    {env?.gpu_temp_celsius != null && (
+                      <div className="env-stat">
+                        <span className="env-stat-label">GPU TEMP</span>
+                        <span className="env-stat-value">
+                          {env.gpu_temp_celsius.toFixed(1)}°C
+                        </span>
+                      </div>
+                    )}
+                    {env?.gpu_utilisation != null && (
+                      <div className="env-stat">
+                        <span className="env-stat-label">GPU UTIL</span>
+                        <span className="env-stat-value">
+                          {env.gpu_utilisation.toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
+                    {env?.vram_percent != null && (
+                      <div className="env-stat">
+                        <span className="env-stat-label">VRAM</span>
+                        <span className="env-stat-value">
+                          {env.vram_percent.toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
+                    {env?.cpu_percent != null && (
+                      <div className="env-stat">
+                        <span className="env-stat-label">CPU</span>
+                        <span className="env-stat-value">
+                          {env.cpu_percent.toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
                     <div className="env-stat">
                       <span className="env-stat-label">MEMORY</span>
                       <span className="env-stat-value">
                         {env ? `${env.memory_percent}%` : '—'}
+                      </span>
+                    </div>
+                    <div className="env-stat">
+                      <span className="env-stat-label">DISK</span>
+                      <span className="env-stat-value">
+                        {env ? `${env.disk_percent}%` : '—'}
+                      </span>
+                    </div>
+                    <div className="env-stat">
+                      <span className="env-stat-label">CUDA</span>
+                      <span className="env-stat-value">
+                        {env ? (env.cuda_available ? 'Yes' : 'No') : '—'}
                       </span>
                     </div>
                   </div>
