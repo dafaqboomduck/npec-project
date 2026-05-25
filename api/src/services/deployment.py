@@ -5,8 +5,8 @@ AbstractDeploymentServic.
 
 LocalDeploymentService (active for local + on-premise):
     - Reads artifact_uri from the model_versions row
-    - Verifies the file exists on disk
-    - Copies it to the versioned path ./artifacts/models/{version}/model.keras
+    - Verifies the artifact directory exists on disk
+    - Copies it to the versioned path ./artifacts/models/{version}/
     - Archives the previously deployed model in the same DB transaction
     - Signals the UNetInferenceService singleton to reload on next request
 """
@@ -76,8 +76,8 @@ class LocalDeploymentService(AbstractDeploymentService):
 
         Steps:
             1. Load the model_versions row and verify artifact_uri is set.
-            2. Verify the source file exists on disk.
-            3. Copy it to ./atifacts/models/{version}/model.keras.
+            2. Verify the source path is a directory on disk.
+            3. Copy the entire directory to ./artifacts/models/{version}/.
             4. Archive the currently deployed model.
             5. Mark this model as deployed with deployed_at = now().
             6. Commit the transaction.
@@ -88,7 +88,7 @@ class LocalDeploymentService(AbstractDeploymentService):
 
         Raises:
             ValueError: If the model does not exist or artifact_uri is NULL.
-            FileNotFoundError: If the file at artifact_uri does not exist.
+            FileNotFoundError: If the directory at artifact_uri does not exist.
         """
         from api.src.db.orm import ModelVersion
 
@@ -103,28 +103,17 @@ class LocalDeploymentService(AbstractDeploymentService):
                 "Register the model with an artifact_uri before deploying."
             )
 
-        # 2. Verify source file exists
+        # 2. Verify source directory exists
         source_path = Path(row.artifact_uri)
-        if not source_path.exists():
-            raise FileNotFoundError(
-                f"Artifact file not found at '{source_path}'. "
-                "Ensure the file exists at that path inside the container "
-                "(mounted from ./data on the host)."
-            )
+        if not source_path.is_dir():
+            raise FileNotFoundError(f"Artifact directory not found at '{source_path}'.")
 
-        # 3. Copy to versioned active path
+        # 3. Copy entire directory to versioned active path
         dest_dir = _ARTIFACT_DIR / row.version
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_path = dest_dir / "model.keras"
-
-        if dest_path != source_path:
-            shutil.copy2(source_path, dest_path)
-            logger.info("Copied artifacts from '%s' to '%s'", source_path, dest_path)
-        else:
-            logger.info(
-                "Source and destination are the same path '%s' - skipping copy.",
-                source_path,
-            )
+        if dest_dir.exists():
+            shutil.rmtree(dest_dir)
+        shutil.copytree(source_path, dest_dir)
+        logger.info("Copied artifact directory from '%s' to '%s'", source_path, dest_dir)
 
         # 4. Archive the currently deployed model
         await self._db.execute(
@@ -136,7 +125,7 @@ class LocalDeploymentService(AbstractDeploymentService):
 
         # 5. Mark this model as deployed
         row.status = ModelStatus.DEPLOYED.value
-        row.artifact_uri = str(dest_path)
+        row.artifact_uri = str(dest_dir)
         row.deployed_at = datetime.now(timezone.utc)
 
         # 6. Commit
@@ -145,7 +134,7 @@ class LocalDeploymentService(AbstractDeploymentService):
             "Deployed model %s (version='%s') - artifact at '%s'",
             model_id,
             row.version,
-            dest_path,
+            dest_dir,
         )
 
         # 7. Signal the inference service to reload on next request

@@ -686,7 +686,7 @@ async def _register_model_if_better(
         UUID of the registered model version, or None if not registered.
     """
     min_improvement = float(os.getenv("MODEL_PROMOTION_MIN_IMPROVEMENT", "0.01"))
-    artifact_uri = str(output_dir / "root_det_model_512px.keras")
+    artifact_uri = str(output_dir)
 
     if not Path(artifact_uri).exists():
         logger.warning(
