@@ -136,6 +136,7 @@ async def predict(
     prediction, image_result = await inference_service.run(
         image_bytes=image_bytes,
         filename=original_filename,
+        db=db,
     )
 
     prediction_id = prediction.prediction_id

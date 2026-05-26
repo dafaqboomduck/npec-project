@@ -1,11 +1,19 @@
 """U-Net inference service.
 
 Wraps the npec_cv pipeline behind AbstractInferenceService so the
-router never import npec_cv directly.
+router never imports npec_cv directly.
 
 The active model artifact path is passed in at construction time by
 LocalDeploymentService (via dependencies.py), so swapping the deployment
 model only requires calling reload() on the singleton.
+
+Audit logging
+-------------
+When ``run()`` is called with a DB session, one row is appended to the
+``inference_audit_log`` table per request (added in migration 0010).
+The audit row is added to the same session as the prediction so both
+commit or roll back together. If the session is not passed (e.g. by
+tests using a mock service), audit logging is skipped with a warning.
 """
 
 from __future__ import annotations
@@ -16,7 +24,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.src.db.orm import ModelVersion
 from api.src.schemas.predictions import (
     Plant,
     PredictionMetadata,
@@ -24,6 +37,7 @@ from api.src.schemas.predictions import (
     PredictionStatus,
 )
 from api.src.services.base import AbstractInferenceService
+from lineage import InferenceLogger
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +49,11 @@ MASK_OUTPUT_DIR = Path(os.getenv("NPEC_MASK_OUTPUT_DIR", str(DEFAULT_MASK_OUTPUT
 
 SCALE_FACTOR_MM_PER_PX: float = float(os.getenv("NPEC_SCALE_FACTOR", "0.05405"))
 
+# Fallback model name/version when no deployed ModelVersion row exists.
+# Used only for the audit row; the actual model artifact is whatever
+# LocalDeploymentService loaded at startup.
+_FALLBACK_MODEL_NAME = "root-detection"
+
 
 class UNetInferenceService(AbstractInferenceService):
     """Inference service backed by the `npec_cv` U-Net pipeline."""
@@ -43,7 +62,7 @@ class UNetInferenceService(AbstractInferenceService):
         """Inference service backed by the `npec_cv` U-Net pipeline.
 
         The pipeline is loaded once on first use and reused for subsequent
-        requests. Heavy TesnorFlow imports are deferred to `_get_pipeline()`
+        requests. Heavy TensorFlow imports are deferred to `_get_pipeline()`
         so that the module can be imported without loading TensorFlow.
 
         Args:
@@ -114,6 +133,8 @@ class UNetInferenceService(AbstractInferenceService):
         self,
         image_bytes: bytes,
         filename: str,
+        *,
+        db: Optional[AsyncSession] = None,
     ) -> tuple[PredictionResponse, object | None]:
         """Run U-Net inference on `image_bytes`.
 
@@ -121,9 +142,16 @@ class UNetInferenceService(AbstractInferenceService):
         `ImageResult` to a `PredictionResponse`, saves the mask, and
         returns the response.
 
+        When ``db`` is provided, one ``inference_audit_log`` row is added
+        to the session (not committed — the caller's transaction handles
+        commit). Failed predictions still produce an audit row with
+        ``error`` populated.
+
         Args:
             image_bytes: Raw bytes of the uploaded image.
             filename: Original filename - used for the temp file.
+            db: Optional async DB session for audit logging. Passing None
+                disables audit logging (useful for tests).
 
         Returns:
             `(PredictionResponse, image_result)` on success.
@@ -132,15 +160,37 @@ class UNetInferenceService(AbstractInferenceService):
             HTTPException: 422 if the pipeline raises a known inference error.
             HTTPException: 500 for unexpected pipeline failures.
         """
-        import asyncio
         import tempfile
 
-        from fastapi import HTTPException, status
-
-        from api.src.schemas.common import ErrorCode, ErrorResponse
+        from fastapi import HTTPException
 
         start = time.perf_counter()
         prediction_id = uuid.uuid4()
+
+        # Resolve the deployed ModelVersion (for audit linkage + the
+        # PredictionResponse's model_version field).
+        mv_row = await self._get_deployed_model_version(db)
+        if mv_row is not None:
+            mv_id = mv_row.id
+            mv_label = mv_row.version
+            mv_name = mv_row.name
+        else:
+            mv_id = None
+            mv_label = os.getenv("NPEC_MODEL_VERSION", "unet-npec-v1.0.0")
+            mv_name = _FALLBACK_MODEL_NAME
+
+        # Build the audit logger (no-op if db is None).
+        audit = (
+            InferenceLogger(
+                db,
+                model_version_id=mv_id,
+                model_name=mv_name,
+                model_version_label=mv_label,
+            )
+            if db is not None
+            else None
+        )
+        input_ref = InferenceLogger.hash_input(image_bytes)
 
         # Write bytes to a temp file, the pipeline expects a Path
         suffix = Path(filename).suffix or ".png"
@@ -148,31 +198,29 @@ class UNetInferenceService(AbstractInferenceService):
             tmp.write(image_bytes)
             tmp_path = Path(tmp.name)
 
+        # Run inference under the audit logger when one is available.
+        # The context manager produces exactly one audit row whether the
+        # block succeeds or raises.
         try:
-
-            def _run_pipeline():
-                pipeline = self._get_pipeline()
-                return pipeline.process_single_image(tmp_path)
-
-            image_result = await asyncio.to_thread(_run_pipeline)
-        except RuntimeError as exc:
-            logger.error("Pipeline RuntimeError for '%s': %s", filename, exc)
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=ErrorResponse(
-                    error_code=ErrorCode.CORRUPT_FILE,
-                    message=f"Inference failed: {exc}",
-                ).model_dump(),
-            )
-        except Exception:
-            logger.exception("Unexpected pipeline error for '%s'", filename)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=ErrorResponse(
-                    error_code=ErrorCode.INTERNAL_ERROR,
-                    message="An unexpected error occurred during inference.",
-                ).model_dump(),
-            )
+            if audit is not None:
+                async with audit.measure(input_ref=input_ref) as audit_rec:
+                    audit_rec.set_prediction_id(prediction_id)
+                    image_result = await self._run_pipeline_or_raise(tmp_path, filename)
+                    # Quick output summary; full plant list goes on the
+                    # prediction row, not the audit row.
+                    audit_rec.set_output(
+                        {
+                            "num_detected": int(image_result.num_detected),
+                            "total_plants": int(image_result.total_plants),
+                        }
+                    )
+            else:
+                image_result = await self._run_pipeline_or_raise(tmp_path, filename)
+        except HTTPException:
+            # _run_pipeline_or_raise already mapped the error to HTTP.
+            # The audit_rec context manager has already persisted a row
+            # with error populated (if audit was active).
+            raise
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -211,14 +259,12 @@ class UNetInferenceService(AbstractInferenceService):
             width, height = img.size
             channels = len(img.getbands())
 
-        model_version = os.getenv("NPEC_MODEL_VERSION", "unet-npec-v1.0.0")
-
         prediction = PredictionResponse(
             prediction_id=prediction_id,
             status=PredictionStatus.OK,
             input_filename=filename,
             metadata=PredictionMetadata(
-                model_version=model_version,
+                model_version=mv_label,
                 inference_timestamp=datetime.now(timezone.utc),
                 processing_time_ms=processing_ms,
                 input_resolution=[width, height],
@@ -232,10 +278,12 @@ class UNetInferenceService(AbstractInferenceService):
         )
 
         logger.info(
-            "Inference complete for '%s': %d plant(s) detected in %dms",
+            "Inference complete for '%s': %d plant(s) detected in %dms (model=%s:%s)",
             filename,
             len(plants),
             processing_ms,
+            mv_name,
+            mv_label,
         )
 
         return prediction, image_result
@@ -249,3 +297,60 @@ class UNetInferenceService(AbstractInferenceService):
         """
         self._pipeline = None
         logger.info("UNetInferenceService: pipeline marked for reload on next request.")
+
+    # ── internal helpers ─────────────────────────────────────────────
+
+    async def _get_deployed_model_version(self, db: Optional[AsyncSession]) -> Optional[ModelVersion]:
+        """Return the currently deployed ModelVersion row, or None.
+
+        Returns None when:
+          - ``db`` is None (no session available, e.g. tests), or
+          - No row has status='deployed' in this database.
+        """
+        if db is None:
+            return None
+        try:
+            result = await db.execute(select(ModelVersion).where(ModelVersion.status == "deployed").limit(1))
+            return result.scalar_one_or_none()
+        except Exception:
+            logger.exception("Failed to look up deployed ModelVersion")
+            return None
+
+    async def _run_pipeline_or_raise(self, tmp_path: Path, filename: str):
+        """Execute the pipeline in a worker thread and translate errors.
+
+        Centralises the 422 / 500 translation that was previously inline
+        in ``run()`` so it can be invoked from both the audit-logged and
+        un-audited code paths without duplicating the try/except.
+        """
+        import asyncio
+
+        from fastapi import HTTPException, status
+
+        from api.src.schemas.common import ErrorCode, ErrorResponse
+
+        try:
+
+            def _run():
+                pipeline = self._get_pipeline()
+                return pipeline.process_single_image(tmp_path)
+
+            return await asyncio.to_thread(_run)
+        except RuntimeError as exc:
+            logger.error("Pipeline RuntimeError for '%s': %s", filename, exc)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=ErrorResponse(
+                    error_code=ErrorCode.CORRUPT_FILE,
+                    message=f"Inference failed: {exc}",
+                ).model_dump(),
+            )
+        except Exception:
+            logger.exception("Unexpected pipeline error for '%s'", filename)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=ErrorResponse(
+                    error_code=ErrorCode.INTERNAL_ERROR,
+                    message="An unexpected error occurred during inference.",
+                ).model_dump(),
+            )

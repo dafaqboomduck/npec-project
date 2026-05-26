@@ -6,6 +6,9 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.schemas.predictions import (
     Plant,
@@ -33,12 +36,16 @@ class MockInferenceService(AbstractInferenceService):
         self,
         image_bytes: bytes,
         filename: str,
-    ) -> tuple[PredictionResponse, None]:
+        *,
+        db: Optional[AsyncSession] = None,  # accepted, ignored
+    ) -> tuple[PredictionResponse, object | None]:
         """Return a mock prediction with two plants.
 
         Args:
             image_bytes: Ignored by this implementation.
             filename: Ignored by this implementation.
+            db: Accepted for compatibility with the abstract base; the
+                mock service does not write audit rows.
 
         Returns:
             A mock `PredictionResponse`.

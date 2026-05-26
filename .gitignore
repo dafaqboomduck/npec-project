@@ -53,3 +53,6 @@ azure-ml/check-data.py
 
 # Training outputs
 artifacts/models
+test_lineage_mock.py
+tree.py
+tree.txt

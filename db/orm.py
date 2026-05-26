@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models for the CV5 database.
 
-Matches ``docs/database/schema.md`` v0.4. Nine tables:
+Matches ``docs/database/schema.md``. Ten tables:
 
 - users
 - refresh_tokens
@@ -11,6 +11,7 @@ Matches ``docs/database/schema.md`` v0.4. Nine tables:
 - datasets
 - annotations
 - training_runs
+- inference_audit_log
 
 Any change to these models must be matched by an update to the schema doc
 and a new Alembic migration (never hand-edit an old migration).
@@ -137,7 +138,13 @@ class RefreshToken(Base):
 
 
 class ModelVersion(Base):
-    """Registry of trained U-Net versions. Matches schema §2.3."""
+    """Registry of trained U-Net versions. Matches schema §2.3.
+
+    Lineage columns (git_commit, training_job_name, dataset_versions, ...)
+    were added in migration 0010. The ``baseline`` flag (also 0010) marks
+    pre-pipeline / externally-sourced models so the trace tool reports
+    them honestly rather than treating their missing lineage as broken.
+    """
 
     __tablename__ = "model_versions"
 
@@ -152,6 +159,20 @@ class ModelVersion(Base):
     recall: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     inference_latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     artifact_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # ─── Lineage (added in migration 0010) ───────────────────────────
+    git_commit: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    git_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    git_repo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    training_job_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    pipeline_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    dataset_versions: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB_or_JSON, nullable=True)
+    environment: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # True for pre-pipeline / bundled / externally-sourced models. Lineage
+    # assertions skip baseline rows; the trace tool labels them as such.
+    baseline: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # ────────────────────────────────────────────────────────────────
 
     created_at: Mapped[datetime] = _created_at()
     deployed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -177,6 +198,9 @@ class ModelVersion(Base):
             unique=True,
             postgresql_where="status = 'deployed'",
         ),
+        Index("ix_model_versions_training_job_name", "training_job_name"),
+        Index("ix_model_versions_git_commit", "git_commit"),
+        Index("ix_model_versions_baseline", "baseline"),
     )
 
 
@@ -313,7 +337,7 @@ class Dataset(Base):
     )
 
     annotations: Mapped[list["Annotation"]] = relationship(back_populates="dataset")
-    creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])  # ADD
+    creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])
 
     __table_args__ = (
         CheckConstraint(
@@ -377,6 +401,8 @@ class Annotation(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+    dataset: Mapped[Optional["Dataset"]] = relationship(back_populates="annotations")
     creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])
 
     __table_args__ = (
@@ -440,6 +466,9 @@ class TrainingRun(Base):
     Inserted with status='running' when a job starts. Updated to
     'completed' or 'failed' when the subprocess exits. Can be moved
     to 'stopped' via DELETE /training/runs/{id}.
+
+    Lineage columns (azureml_job_name, git_commit, dataset_versions,
+    environment) were added in migration 0010.
     """
 
     __tablename__ = "training_runs"
@@ -461,6 +490,13 @@ class TrainingRun(Base):
         nullable=True,
     )
 
+    # ─── Lineage (added in migration 0010) ───────────────────────────
+    azureml_job_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    git_commit: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    environment: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    dataset_versions: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB_or_JSON, nullable=True)
+    # ────────────────────────────────────────────────────────────────
+
     __table_args__ = (
         CheckConstraint(
             "status IN ('running', 'completed', 'failed', 'stopped')",
@@ -469,6 +505,77 @@ class TrainingRun(Base):
         Index("ix_training_runs_status", "status"),
         Index("ix_training_runs_model_version_id", "model_version_id"),
         Index("ix_training_runs_started_at", "started_at"),
+        Index("ix_training_runs_azureml_job_name", "azureml_job_name"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Inference audit log
+# ---------------------------------------------------------------------------
+
+
+class InferenceAuditLog(Base):
+    """Append-only audit log of inference calls. Added in migration 0010.
+
+    One row per ``POST /predict`` call. Survives deletion of the source
+    prediction (both FKs are SET NULL on delete) so the audit trail
+    remains intact for forensic queries even after a user deletes their
+    prediction.
+
+    Full lineage is reachable by joining ``model_version_id`` to
+    ``model_versions``, which carries git_commit, training_job_name,
+    dataset_versions, etc. For baseline models, ``model_versions.baseline``
+    is True and the trace tool reports them honestly as such.
+
+    The ``input_ref`` column holds a ``sha256:<hex>`` string and is
+    compatible with ``predictions.input_hash`` (drop the prefix to compare).
+    """
+
+    __tablename__ = "inference_audit_log"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    prediction_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("predictions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    model_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Denormalised copies of the model identity. Kept so the row stays
+    # informative even after the FKs become NULL.
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    model_version_label: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    output_summary: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB_or_JSON, nullable=True)
+    latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    endpoint: Mapped[str] = mapped_column(String(64), nullable=False, server_default="api")
+    # One of: 'local', 'portainer', 'azureml', 'unknown'.
+    deployment: Mapped[str] = mapped_column(String(32), nullable=False)
+    logged_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    prediction: Mapped[Optional["Prediction"]] = relationship()
+    model_version: Mapped[Optional["ModelVersion"]] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            "deployment IN ('local', 'portainer', 'azureml', 'unknown')",
+            name="ck_audit_deployment_valid",
+        ),
+        Index("ix_audit_request_id", "request_id"),
+        Index("ix_audit_prediction_id", "prediction_id"),
+        Index("ix_audit_model_version_id", "model_version_id"),
+        Index("ix_audit_logged_at", "logged_at"),
     )
 
 
@@ -486,4 +593,5 @@ __all__ = [
     "Dataset",
     "Annotation",
     "TrainingRun",
+    "InferenceAuditLog",
 ]

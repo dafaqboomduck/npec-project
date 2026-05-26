@@ -5,6 +5,12 @@ do not already exist. Safe to run on every startup (idempotent checks).
 
 Usage (called from the API container entrypoint before uvicorn starts):
     python -m db.bootstrap
+
+Lineage note (migration 0010):
+    The baseline model created here genuinely has no upstream training
+    pipeline — it is a pre-existing artifact shipped with the application.
+    We mark it ``baseline=True`` so that lineage traces report it
+    honestly as a baseline, rather than as a model with broken lineage.
 """
 
 from __future__ import annotations
@@ -24,7 +30,7 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 
 
 async def bootstrap() -> None:
-    """Creates the initial admin user and registers the baseline model."""
+    """Create the initial admin user and register the baseline model."""
     engine = create_async_engine(DATABASE_URL, echo=False)
     factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -86,18 +92,29 @@ async def _ensure_baseline_model(db) -> None:
         )
         return
 
+    # Lineage: this model genuinely has no upstream training run. Mark
+    # it as a baseline so traces report it honestly. See migration 0010
+    # and the lineage module's register_baseline_model() helper for the
+    # equivalent path on the Azure ML registry side.
     db.add(
         ModelVersion(
             version="unet-npec-v1.0.0-baseline",
             name="NPEC U-Net Baseline",
-            description="Baseline model shipped with the application.",
+            description=(
+                "Baseline model shipped with the application. Pre-pipeline "
+                "artifact — no upstream training run in this repository."
+            ),
             status="deployed",
             artifact_uri=artifact_uri,
             deployed_at=datetime.now(timezone.utc),
+            baseline=True,
         )
     )
     await db.commit()
-    logger.info("Registered and deployed baseline model from '%s'.", artifact_uri)
+    logger.info(
+        "Registered and deployed baseline model from '%s' (marked baseline=True).",
+        artifact_uri,
+    )
 
 
 if __name__ == "__main__":
