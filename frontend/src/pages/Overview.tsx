@@ -126,9 +126,9 @@ export default function Overview() {
   // Display name: strip the domain from an email, capitalise first letter
   const displayName = username.includes('@')
     ? username
-      .split('@')[0]
-      .replace(/[._-]/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
+        .split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
   // ── Data state ──
@@ -159,16 +159,20 @@ export default function Overview() {
     ]).finally(() => setLoading(false));
   }, []);
 
-  const deployedModels = models.filter((m) => m.status?.toLowerCase() === 'deployed');
+  const deployedModels = models.filter(
+    (m) => m.status?.toLowerCase() === 'deployed',
+  );
   const currentModel = deployedModels[0] ?? null;
 
   // ── Health bar fill widths ──
   const f1Pct = health ? Math.round(health.f1_score * 100) : null;
   const latencyPct = health
-    ? Math.min((Math.log10(health.latency_ms + 1) / Math.log10(60_000)) * 100, 100)
+    ? Math.min(
+        (Math.log10(health.latency_ms + 1) / Math.log10(60_000)) * 100,
+        100,
+      )
     : null;
   const latencyDanger = health ? health.latency_ms > 32_000 : false;
-
 
   return (
     <div className="overview-page">
@@ -218,8 +222,8 @@ export default function Overview() {
                 {loading
                   ? '—'
                   : String(
-                    status?.active_model_count ?? deployedModels.length,
-                  ).padStart(2, '0')}
+                      status?.active_model_count ?? deployedModels.length,
+                    ).padStart(2, '0')}
               </span>
               <div className="model-badges">
                 {deployedModels.length > 0 ? (
@@ -320,12 +324,20 @@ export default function Overview() {
                         {(() => {
                           const link = (() => {
                             if (!item.resource_url) return null;
-                            const match = item.resource_url.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+                            const match = item.resource_url.match(
+                              /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i,
+                            );
                             const id = match ? match[1] : '';
-                            if (item.event_type === 'upload') return id ? `/history?prediction_id=${id}` : '/history';
-                            if (item.event_type === 'annotation') return '/library?tab=annotations';
-                            if (item.event_type === 'deployment') return '/models?tab=registry';
-                            if (item.event_type === 'retraining') return '/models?tab=retraining';
+                            if (item.event_type === 'upload')
+                              return id
+                                ? `/history?prediction_id=${id}`
+                                : '/history';
+                            if (item.event_type === 'annotation')
+                              return '/library?tab=annotations';
+                            if (item.event_type === 'deployment')
+                              return '/models?tab=registry';
+                            if (item.event_type === 'retraining')
+                              return '/models?tab=retraining';
                             return null;
                           })();
                           return link ? (
@@ -375,7 +387,9 @@ export default function Overview() {
                   <div className="health-metric-header">
                     <span className="health-metric-label">LATENCY</span>
                     <span className="health-metric-value">
-                      {health ? `${(health.latency_ms / 1000).toFixed(3)}s` : '—'}
+                      {health
+                        ? `${(health.latency_ms / 1000).toFixed(3)}s`
+                        : '—'}
                     </span>
                   </div>
                   <div className="health-bar-track">

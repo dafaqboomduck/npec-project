@@ -194,7 +194,9 @@
   border-radius: var(--radius-lg);
   padding: var(--space-5);
   box-shadow: var(--shadow-card);
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .dash-card:hover {
@@ -496,9 +498,11 @@
 .bar-fill {
   height: 100%;
   border-radius: var(--radius-full);
-  background: linear-gradient(90deg,
-      var(--color-primary-mid) 0%,
-      var(--color-primary-light) 100%);
+  background: linear-gradient(
+    90deg,
+    var(--color-primary-mid) 0%,
+    var(--color-primary-light) 100%
+  );
   width: 0;
   /* Animated on mount via keyframes */
   animation: bar-grow 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;

@@ -12,11 +12,20 @@
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
-import { predict, getModelsForInference, confirmPrediction, deletePrediction } from '../api/inferenceApi';
+import {
+  predict,
+  getModelsForInference,
+  confirmPrediction,
+  deletePrediction,
+} from '../api/inferenceApi';
 import type { PredictionResponse, ModelSummary } from '../types/api';
 import { useInferenceJobs } from '../context/InferenceJobsContext';
 import { getUsername, getRole } from '../api/auth';
-import { getAnnotations, getDatasets, runDatasetInference } from '../api/libraryApi';
+import {
+  getAnnotations,
+  getDatasets,
+  runDatasetInference,
+} from '../api/libraryApi';
 import type { DatasetSummary } from '../api/libraryApi';
 import ResultsView from '../components/ResultsView';
 import './Inference.css';
@@ -68,17 +77,28 @@ export default function Inference() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
-  const [pendingFeedback, setPendingFeedback] = useState<'correct' | 'incorrect' | null>(null);
-  const [datasetPendingCounts, setDatasetPendingCounts] = useState<Record<string, number>>({});
+  const [pendingFeedback, setPendingFeedback] = useState<
+    'correct' | 'incorrect' | null
+  >(null);
+  const [datasetPendingCounts, setDatasetPendingCounts] = useState<
+    Record<string, number>
+  >({});
 
   // ── Active Session Stats ──
   const username = getUsername();
   const role = getRole();
   const displayName = username.includes('@')
-    ? username.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    ? username
+        .split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
-  async function runBatchInference(dsId: string, dsName: string, count: number) {
+  async function runBatchInference(
+    dsId: string,
+    dsName: string,
+    count: number,
+  ) {
     setShowSelectDatasetModal(false);
     setShowBatchProgress(true);
     setBatchDatasetName(dsName);
@@ -106,10 +126,14 @@ export default function Inference() {
       const realTotal = initialAnnotations.length;
       setBatchTotalCount(realTotal);
 
-      const initialPending = initialAnnotations.filter(a => a.status === 'pending').length;
+      const initialPending = initialAnnotations.filter(
+        (a) => a.status === 'pending',
+      ).length;
       const initialDone = realTotal - initialPending;
       setBatchCurrentIndex(initialDone);
-      setBatchPercent(realTotal > 0 ? Math.round((initialDone / realTotal) * 100) : 0);
+      setBatchPercent(
+        realTotal > 0 ? Math.round((initialDone / realTotal) * 100) : 0,
+      );
 
       // Poll annotations until none are pending
       const MAX_POLLS = 120; // 10 minutes at 5s intervals
@@ -124,7 +148,9 @@ export default function Inference() {
           });
 
           const total = annotations.length;
-          const pending = annotations.filter(a => a.status === 'pending').length;
+          const pending = annotations.filter(
+            (a) => a.status === 'pending',
+          ).length;
           const done = total - pending;
 
           setBatchTotalCount(total);
@@ -142,7 +168,6 @@ export default function Inference() {
           setBatchCompleted(true);
         }
       }, 5000);
-
     } catch (err) {
       setBatchCompleted(true);
       setBatchPercent(100);
@@ -316,37 +341,64 @@ export default function Inference() {
                 {/* Active Session */}
                 <section className="sidebar-section">
                   <span className="sidebar-section-label">ACTIVE SESSION</span>
-                  <div className="session-status" style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    flexFlow: 'wrap',
-                    gap: '8px',
-                    padding: '12px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: '8px',
-                    border: '1px solid var(--color-border-subtle)',
-                    fontSize: '12px',
-                    color: 'var(--color-text-muted)',
-                    lineHeight: '1.4'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: '#10b981',
-                        boxShadow: '0 0 8px #10b981',
-                        display: 'inline-block',
-                      }} />
-                      <span style={{ color: '#10b981', fontWeight: 600 }}>API Connected (TLS secured)</span>
+                  <div
+                    className="session-status"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      flexFlow: 'wrap',
+                      gap: '8px',
+                      padding: '12px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border-subtle)',
+                      fontSize: '12px',
+                      color: 'var(--color-text-muted)',
+                      lineHeight: '1.4',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#10b981',
+                          boxShadow: '0 0 8px #10b981',
+                          display: 'inline-block',
+                        }}
+                      />
+                      <span style={{ color: '#10b981', fontWeight: 600 }}>
+                        API Connected (TLS secured)
+                      </span>
                     </div>
                     <div>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Model: </span>
-                      <span>{deployedModel ? deployedModel.name : 'Placeholder U-Net'}</span>
+                      <span
+                        style={{ fontWeight: 600, color: 'var(--color-text)' }}
+                      >
+                        Model:{' '}
+                      </span>
+                      <span>
+                        {deployedModel
+                          ? deployedModel.name
+                          : 'Placeholder U-Net'}
+                      </span>
                     </div>
                     <div>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Operator: </span>
-                      <span>{displayName} ({role})</span>
+                      <span
+                        style={{ fontWeight: 600, color: 'var(--color-text)' }}
+                      >
+                        Operator:{' '}
+                      </span>
+                      <span>
+                        {displayName} ({role})
+                      </span>
                     </div>
                   </div>
                 </section>
@@ -499,12 +551,15 @@ export default function Inference() {
                                 status: 'pending',
                                 page_size: 100,
                               });
-                              return [ds.dataset_id, pending.length] as [string, number];
-                            })
+                              return [ds.dataset_id, pending.length] as [
+                                string,
+                                number,
+                              ];
+                            }),
                           );
                           setDatasetPendingCounts(Object.fromEntries(counts));
                         } catch (err) {
-                          console.error("Failed to load datasets:", err);
+                          console.error('Failed to load datasets:', err);
                         } finally {
                           setLoadingDatasets(false);
                         }
@@ -572,31 +627,44 @@ export default function Inference() {
           <div className="modal-card" style={{ maxWidth: '500px' }}>
             <h2 className="modal-title">Select Dataset</h2>
             <p className="modal-body">
-              Select a dataset from the library to run U-Net batch inference on all of its scans.
+              Select a dataset from the library to run U-Net batch inference on
+              all of its scans.
             </p>
             {loadingDatasets ? (
               <div style={{ textAlign: 'center', padding: '24px' }}>
                 <span className="spinner" aria-hidden="true" />
-                <p style={{ marginTop: '12px' }}>Loading available datasets...</p>
+                <p style={{ marginTop: '12px' }}>
+                  Loading available datasets...
+                </p>
               </div>
             ) : datasets.length === 0 ? (
-              <p style={{ textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)' }}>
+              <p
+                style={{
+                  textAlign: 'center',
+                  padding: '16px',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
                 No datasets found. Create a dataset in the Library first.
               </p>
             ) : (
-              <div style={{
-                maxHeight: '300px',
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                margin: '16px 0'
-              }}>
+              <div
+                style={{
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  margin: '16px 0',
+                }}
+              >
                 {datasets.map((ds) => (
                   <button
                     key={ds.dataset_id}
                     disabled={datasetPendingCounts[ds.dataset_id] === 0}
-                    onClick={() => void runBatchInference(ds.dataset_id, ds.name, ds.count)}
+                    onClick={() =>
+                      void runBatchInference(ds.dataset_id, ds.name, ds.count)
+                    }
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -605,31 +673,50 @@ export default function Inference() {
                       background: 'rgba(255, 255, 255, 0.03)',
                       border: '1px solid var(--color-border-subtle)',
                       borderRadius: '8px',
-                      opacity: datasetPendingCounts[ds.dataset_id] === 0 ? 0.4 : 1,
-                      cursor: datasetPendingCounts[ds.dataset_id] === 0 ? 'not-allowed' : 'pointer',
+                      opacity:
+                        datasetPendingCounts[ds.dataset_id] === 0 ? 0.4 : 1,
+                      cursor:
+                        datasetPendingCounts[ds.dataset_id] === 0
+                          ? 'not-allowed'
+                          : 'pointer',
                       textAlign: 'left',
                       color: 'var(--color-text)',
-                      transition: 'all 0.2s'
+                      transition: 'all 0.2s',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--color-primary-light)';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      e.currentTarget.style.borderColor =
+                        'var(--color-primary-light)';
+                      e.currentTarget.style.background =
+                        'rgba(255, 255, 255, 0.05)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--color-border-subtle)';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                      e.currentTarget.style.borderColor =
+                        'var(--color-border-subtle)';
+                      e.currentTarget.style.background =
+                        'rgba(255, 255, 255, 0.03)';
                     }}
                   >
-
                     <div>
                       <div style={{ fontWeight: 600 }}>{ds.name}</div>
-                      {ds.species || ds.owner_email && (
-                        <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
-                          {ds.species ?? `Owner: ${ds.owner_email}`}
-                        </div>
-                      )}
+                      {ds.species ||
+                        (ds.owner_email && (
+                          <div
+                            style={{
+                              fontSize: '10px',
+                              color: 'var(--color-text-muted)',
+                            }}
+                          >
+                            {ds.species ?? `Owner: ${ds.owner_email}`}
+                          </div>
+                        ))}
                     </div>
-                    <span className="model-badge" style={{ marginLeft: '10px', background: 'var(--color-primary-light' }}>
+                    <span
+                      className="model-badge"
+                      style={{
+                        marginLeft: '10px',
+                        background: 'var(--color-primary-light',
+                      }}
+                    >
                       {datasetPendingCounts[ds.dataset_id] !== undefined
                         ? `${datasetPendingCounts[ds.dataset_id]} pending`
                         : `${ds.count} scans`}
@@ -652,12 +739,11 @@ export default function Inference() {
 
       {/* ── Batch Progress modal ─────────────────────────────────────────── */}
       {showBatchProgress && (
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="modal-card" style={{ maxWidth: '450px', textAlign: 'center' }}>
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div
+            className="modal-card"
+            style={{ maxWidth: '450px', textAlign: 'center' }}
+          >
             <button
               onClick={() => setShowBatchProgress(false)}
               style={{
@@ -674,25 +760,47 @@ export default function Inference() {
                 transition: 'color 0.15s',
               }}
               aria-label="Close"
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-text-primary)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.color = 'var(--color-text-primary)')
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.color = 'var(--color-text-muted)')
+              }
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2.5"
-                strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
 
-            <h2 className="modal-title" style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}>
-              {!batchCompleted && <span className="spinner" style={{ width: '20px', height: '20px' }} aria-hidden="true" />}
-              {batchCompleted ? 'Batch Inference Completed!' : 'Running U-Net Inference'}
+            <h2
+              className="modal-title"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+            >
+              {!batchCompleted && (
+                <span
+                  className="spinner"
+                  style={{ width: '20px', height: '20px' }}
+                  aria-hidden="true"
+                />
+              )}
+              {batchCompleted
+                ? 'Batch Inference Completed!'
+                : 'Running U-Net Inference'}
             </h2>
             <p className="modal-body" style={{ margin: '8px 0 16px 0' }}>
               {batchCompleted
@@ -701,33 +809,53 @@ export default function Inference() {
             </p>
 
             <div style={{ margin: '24px 0' }}>
-              <div style={{
-                display: 'block',
-                fontSize: '14px',
-                marginBottom: '8px'
-              }}>
-                <span>{batchCompleted ? 'All Scans Processed' : `Scan ${batchCurrentIndex} of ${batchTotalCount || 15}`}</span>
-                <div style={{
-                  height: '8px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  borderRadius: '4px',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{
-                    width: `${batchPercent}%`,
-                    height: '100%',
-                    background: 'var(--color-primary-light)',
-                    boxShadow: '0 0 8px var(--color-primary-light)',
+              <div
+                style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  marginBottom: '8px',
+                }}
+              >
+                <span>
+                  {batchCompleted
+                    ? 'All Scans Processed'
+                    : `Scan ${batchCurrentIndex} of ${batchTotalCount || 15}`}
+                </span>
+                <div
+                  style={{
+                    height: '8px',
+                    background: 'rgba(255, 255, 255, 0.05)',
                     borderRadius: '4px',
-                    transition: 'width 0.3s ease'
-                  }} />
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${batchPercent}%`,
+                      height: '100%',
+                      background: 'var(--color-primary-light)',
+                      boxShadow: '0 0 8px var(--color-primary-light)',
+                      borderRadius: '4px',
+                      transition: 'width 0.3s ease',
+                    }}
+                  />
                 </div>
-                <span style={{ fontWeight: 600, color: 'var(--color-primary-light)' }}>{batchPercent}%</span>
+                <span
+                  style={{
+                    fontWeight: 600,
+                    color: 'var(--color-primary-light)',
+                  }}
+                >
+                  {batchPercent}%
+                </span>
               </div>
             </div>
 
             {batchCompleted ? (
-              <div className="modal-actions" style={{ justifyContent: 'center', gap: '12px' }}>
+              <div
+                className="modal-actions"
+                style={{ justifyContent: 'center', gap: '12px' }}
+              >
                 <button
                   className="modal-close modal-close--secondary"
                   onClick={() => setShowBatchProgress(false)}
@@ -745,9 +873,24 @@ export default function Inference() {
                 </button>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>
-                  U-Net segmenter performing primary segmentation analysis. Please wait...
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: '12px',
+                    color: 'var(--color-text-muted)',
+                    fontStyle: 'italic',
+                    margin: 0,
+                  }}
+                >
+                  U-Net segmenter performing primary segmentation analysis.
+                  Please wait...
                 </p>
                 <button
                   className="modal-close modal-close--secondary"
@@ -832,11 +975,24 @@ export default function Inference() {
           }}
         >
           <div className="modal-card">
-            <h2 id="save-modal-title" className="modal-title">Save to Library</h2>
+            <h2 id="save-modal-title" className="modal-title">
+              Save to Library
+            </h2>
             <p className="modal-body">
-              Optionally add biological metadata before saving this scan as an annotation.
+              Optionally add biological metadata before saving this scan as an
+              annotation.
             </p>
-            {saveError && <p style={{ color: '#b91c1c', fontSize: 'var(--text-sm)', marginBottom: '0.5rem' }}>{saveError}</p>}
+            {saveError && (
+              <p
+                style={{
+                  color: '#b91c1c',
+                  fontSize: 'var(--text-sm)',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                {saveError}
+              </p>
+            )}
             <div className="lib-create-form" style={{ marginTop: '1rem' }}>
               <div className="lib-form-group">
                 <label htmlFor="save-species">Species</label>

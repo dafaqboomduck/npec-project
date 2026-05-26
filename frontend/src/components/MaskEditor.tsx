@@ -71,7 +71,7 @@ export default function MaskEditor({
     return () => {
       img.onload = null;
       mask.onload = null;
-    }
+    };
   }, [inline, isOpen, originalImageUrl, maskImageUrl]);
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
@@ -155,8 +155,9 @@ export default function MaskEditor({
   if (!inline && !isOpen) return null;
 
   const editorWindow = (
-    <div className={`mask-editor-window${inline ? ' mask-editor-window--inline' : ''}`}>
-
+    <div
+      className={`mask-editor-window${inline ? ' mask-editor-window--inline' : ''}`}
+    >
       <header className="me-header">
         <div className="me-header-left">
           <h3>{title}</h3>
@@ -202,7 +203,8 @@ export default function MaskEditor({
             <label>Brush Size: {brushSize}px</label>
             <input
               type="range"
-              min="1" max="100"
+              min="1"
+              max="100"
               value={brushSize}
               onChange={(e) => setBrushSize(parseInt(e.target.value))}
             />
@@ -212,19 +214,26 @@ export default function MaskEditor({
             <label>Mask Opacity: {(maskOpacity * 100).toFixed(0)}%</label>
             <input
               type="range"
-              min="0" max="1" step="0.01"
+              min="0"
+              max="1"
+              step="0.01"
               value={maskOpacity}
               onChange={(e) => setMaskOpacity(parseFloat(e.target.value))}
             />
           </div>
 
           <div className="me-help">
-            <p>💡 Tip: Use the opacity slider to compare the mask against the original scan.</p>
+            <p>
+              💡 Tip: Use the opacity slider to compare the mask against the
+              original scan.
+            </p>
           </div>
         </aside>
 
         <div className="me-canvas-container">
-          {!isLoaded && <div className="me-loading">Loading high-res scan...</div>}
+          {!isLoaded && (
+            <div className="me-loading">Loading high-res scan...</div>
+          )}
 
           {/* Background image (locked) */}
           <img

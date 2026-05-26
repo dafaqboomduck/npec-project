@@ -158,8 +158,8 @@ export interface ModelDetail extends ModelSummary {
   precision?: number;
   recall?: number;
   inference_latency_ms?: number;
-  artifact_uri?: string;   // Admin only
-  deployed_at?: string;    // Admin only
+  artifact_uri?: string; // Admin only
+  deployed_at?: string; // Admin only
 }
 
 // ===========================================================================
@@ -193,8 +193,8 @@ export interface PredictionResponse {
   input_filename?: string;
   metadata: PredictionMetadata;
   segmentation_mask_url?: string;
-  input_url?: string;         // Presigned URL of the original input image
-  tip_photo_url?: string;     // Presigned URL of the tip visualisation overlay
+  input_url?: string; // Presigned URL of the original input image
+  tip_photo_url?: string; // Presigned URL of the tip visualisation overlay
   plants: Plant[];
   feedback_signal?: 'correct' | 'incorrect' | null;
   warnings: string[];

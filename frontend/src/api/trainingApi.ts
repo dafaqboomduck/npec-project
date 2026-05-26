@@ -16,7 +16,7 @@ import type {
 
 /** POST /training/start — Trigger a U-Net retraining background subprocess (admin only) */
 export async function startTrainingRun(
-  hyperparameters?: TrainingStartRequest
+  hyperparameters?: TrainingStartRequest,
 ): Promise<TrainingStartResponse> {
   return apiClient<TrainingStartResponse>('/training/start', {
     method: 'POST',
@@ -30,7 +30,9 @@ export async function listTrainingRuns(): Promise<TrainingRunSummary[]> {
 }
 
 /** GET /training/runs/{runId} — Fetch full details of a specific retraining run (admin only) */
-export async function getTrainingRunDetail(runId: string): Promise<TrainingRunDetail> {
+export async function getTrainingRunDetail(
+  runId: string,
+): Promise<TrainingRunDetail> {
   return apiClient<TrainingRunDetail>(`/training/runs/${runId}`);
 }
 

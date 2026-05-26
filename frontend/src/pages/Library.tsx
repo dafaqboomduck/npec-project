@@ -48,10 +48,17 @@ interface AnnotationsTabProps {
   growthFilter: string;
   speciesFilter: string;
   refreshKey?: number;
-  onAnnotationsFetched?: (annotations: AnnotationResponse[]) => void;  // ADD
+  onAnnotationsFetched?: (annotations: AnnotationResponse[]) => void; // ADD
 }
 
-function AnnotationsTab({ onSelect, statusFilter, growthFilter, speciesFilter, refreshKey, onAnnotationsFetched }: AnnotationsTabProps) {
+function AnnotationsTab({
+  onSelect,
+  statusFilter,
+  growthFilter,
+  speciesFilter,
+  refreshKey,
+  onAnnotationsFetched,
+}: AnnotationsTabProps) {
   const [annotations, setAnnotations] = useState<AnnotationResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +82,12 @@ function AnnotationsTab({ onSelect, statusFilter, growthFilter, speciesFilter, r
     }
   }, [statusFilter, growthFilter, speciesFilter]);
 
-  async function fetchAnnotations(pageNum: number, status: string, growth: string, species: string) {
+  async function fetchAnnotations(
+    pageNum: number,
+    status: string,
+    growth: string,
+    species: string,
+  ) {
     setLoading(true);
     setError(null);
     try {
@@ -97,7 +109,8 @@ function AnnotationsTab({ onSelect, statusFilter, growthFilter, speciesFilter, r
 
   async function handleDelete(e: React.MouseEvent, annotationId: string) {
     e.stopPropagation();
-    if (!window.confirm('Delete this annotation? This cannot be undone.')) return;
+    if (!window.confirm('Delete this annotation? This cannot be undone.'))
+      return;
     setDeleting(annotationId);
     try {
       await deleteAnnotation(annotationId);
@@ -127,10 +140,19 @@ function AnnotationsTab({ onSelect, statusFilter, growthFilter, speciesFilter, r
   if (error) {
     return (
       <div className="lib-empty">
-        <p className="lib-empty-text" style={{ color: '#b91c1c' }}>{error}</p>
+        <p className="lib-empty-text" style={{ color: '#b91c1c' }}>
+          {error}
+        </p>
         <button
           className="modal-close"
-          onClick={() => void fetchAnnotations(page, statusFilter, growthFilter, speciesFilter)}
+          onClick={() =>
+            void fetchAnnotations(
+              page,
+              statusFilter,
+              growthFilter,
+              speciesFilter,
+            )
+          }
           style={{ marginTop: '1rem' }}
         >
           Retry
@@ -143,13 +165,21 @@ function AnnotationsTab({ onSelect, statusFilter, growthFilter, speciesFilter, r
     return (
       <div className="lib-empty">
         <p className="lib-empty-text">No annotations found.</p>
-        <p className="lib-empty-hint">Run inference and save a result to create annotations.</p>
+        <p className="lib-empty-hint">
+          Run inference and save a result to create annotations.
+        </p>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-4)',
+      }}
+    >
       <div style={{ overflowX: 'auto' }}>
         <table className="history-table">
           <thead>
@@ -186,32 +216,58 @@ function AnnotationsTab({ onSelect, statusFilter, growthFilter, speciesFilter, r
                       background: 'rgba(0,0,0,0.2)',
                     }}
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><rect width="40" height="40" fill="%23222"/><text x="20" y="24" font-family="sans-serif" font-size="8" fill="%23666" text-anchor="middle">N/A</text></svg>';
+                      (e.target as HTMLImageElement).src =
+                        'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><rect width="40" height="40" fill="%23222"/><text x="20" y="24" font-family="sans-serif" font-size="8" fill="%23666" text-anchor="middle">N/A</text></svg>';
                     }}
                   />
                 </td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                <td
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
                   {ann.annotation_id.slice(0, 8)}&hellip;
                 </td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                  {ann.prediction_id ? `${ann.prediction_id.slice(0, 8)}...` : '—'}
+                <td
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
+                  {ann.prediction_id
+                    ? `${ann.prediction_id.slice(0, 8)}...`
+                    : '—'}
                 </td>
                 <td>
-                  <span style={{
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 700,
-                    color: statusColors[ann.status] ?? 'inherit',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                  }}>
+                  <span
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 700,
+                      color: statusColors[ann.status] ?? 'inherit',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
                     {ann.status.replace('_', ' ')}
                   </span>
                 </td>
                 <td>{ann.species ?? '—'}</td>
                 <td>{ann.age_days ?? '—'}</td>
                 <td>{ann.treatment ?? '—'}</td>
-                <td style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                  {new Date(ann.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                <td
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
+                  {new Date(ann.created_at).toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
                 </td>
                 <td>
                   <button
@@ -236,9 +292,16 @@ function AnnotationsTab({ onSelect, statusFilter, growthFilter, speciesFilter, r
           onClick={() => setPage((p) => p - 1)}
           aria-label="Previous page"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="15 18 9 12 15 6" />
           </svg>
           Prev
@@ -255,9 +318,16 @@ function AnnotationsTab({ onSelect, statusFilter, growthFilter, speciesFilter, r
           aria-label="Next page"
         >
           Next
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>
@@ -277,9 +347,9 @@ export default function Library() {
   const role = getRole();
   const displayName = username.includes('@')
     ? username
-      .split('@')[0]
-      .replace(/[._-]/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
+        .split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
   // ── State ──
@@ -303,13 +373,19 @@ export default function Library() {
   const [annotSpeciesFilter, setAnnotSpeciesFilter] = useState('');
   const [annotGrowthFilter, setAnnotGrowthFilter] = useState('');
   const [annotRefreshKey, setAnnotRefreshKey] = useState(0);
-  const [runningAnnotationIds, setRunningAnnotationIds] = useState<Set<string>>(new Set());
+  const [runningAnnotationIds, setRunningAnnotationIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const annotationModalClosedRef = useRef<string | null>(null);
   const [targetDatasetId, setTargetDatasetId] = useState('');
   const [addingToDataset, setAddingToDataset] = useState(false);
-  const [addToDatasetError, setAddToDatasetError] = useState<string | null>(null);
-  const [annotationFeedback, setAnnotationFeedback] = useState<'correct' | 'incorrect' | null>(null);
+  const [addToDatasetError, setAddToDatasetError] = useState<string | null>(
+    null,
+  );
+  const [annotationFeedback, setAnnotationFeedback] = useState<
+    'correct' | 'incorrect' | null
+  >(null);
 
   const [inferenceRunning, setInferenceRunning] = useState(false);
   const [inferenceMessage, setInferenceMessage] = useState<string | null>(null);
@@ -344,10 +420,13 @@ export default function Library() {
   const [detailScans, setDetailScans] = useState<AnnotationResponse[]>([]);
 
   // Selected annotation modal details
-  const [selectedAnnotation, setSelectedAnnotation] = useState<AnnotationResponse | null>(null);
-  const [linkedPrediction, setLinkedPrediction] = useState<PredictionResponse | null>(null);
+  const [selectedAnnotation, setSelectedAnnotation] =
+    useState<AnnotationResponse | null>(null);
+  const [linkedPrediction, setLinkedPrediction] =
+    useState<PredictionResponse | null>(null);
   const [linkedPredictionLoading, setLinkedPredictionLoading] = useState(false);
-  const [imageView, setImageView] = useState<'scan' | 'mask' | 'tip'>('scan'); const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [imageView, setImageView] = useState<'scan' | 'mask' | 'tip'>('scan');
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [scanPage, setScanPage] = useState(1);
   const SCANS_PER_PAGE = 20;
 
@@ -383,7 +462,6 @@ export default function Library() {
   const [importError, setImportError] = useState<string | null>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
-
   useEffect(() => {
     const fetchDatasets = async () => {
       await Promise.resolve();
@@ -398,7 +476,9 @@ export default function Library() {
       } catch (err) {
         setDatasets([]);
         const message = (err as Error).message ?? '';
-        setDbUp(!message.includes('fetch') && !message.includes('NetworkError'));
+        setDbUp(
+          !message.includes('fetch') && !message.includes('NetworkError'),
+        );
       } finally {
         setLoading(false);
       }
@@ -442,7 +522,9 @@ export default function Library() {
 
     if (selectedDatasetId && _inferenceRunningDatasets.has(selectedDatasetId)) {
       setInferenceRunning(true);
-      setInferenceMessage('Processing images in the background. The grid will update automatically.');
+      setInferenceMessage(
+        'Processing images in the background. The grid will update automatically.',
+      );
     }
   }, [selectedDatasetId]);
 
@@ -482,7 +564,6 @@ export default function Library() {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [lightboxSrc, selectedAnnotation]);
-
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -575,9 +656,12 @@ export default function Library() {
       if (field === 'treatment') body.treatment = editingMetaValue;
       if (field === 'age_days') body.age_days = parseInt(editingMetaValue) || 0;
 
-      const updated = await updateAnnotationMetadata(selectedAnnotation.annotation_id, body);
+      const updated = await updateAnnotationMetadata(
+        selectedAnnotation.annotation_id,
+        body,
+      );
       setSelectedAnnotation(updated);
-      setAnnotRefreshKey(k => k + 1);
+      setAnnotRefreshKey((k) => k + 1);
     } catch {
       // optionally show an error
     } finally {
@@ -602,7 +686,9 @@ export default function Library() {
       const count = countMatch ? parseInt(countMatch[1]) : null;
 
       if (res.message.toLowerCase().includes('already running')) {
-        setInferenceMessage('Inference is already in progress for this dataset.');
+        setInferenceMessage(
+          'Inference is already in progress for this dataset.',
+        );
         _inferenceRunningDatasets.delete(selectedDatasetId);
         return;
       }
@@ -616,7 +702,7 @@ export default function Library() {
       setInferenceMessage(
         count
           ? `Processing ${count} image${count !== 1 ? 's' : ''} in the background. The grid will update automatically.`
-          : 'Processing images in the background. The grid will update automatically.'
+          : 'Processing images in the background. The grid will update automatically.',
       );
 
       // Poll every 5s for up to 10 minutes
@@ -629,7 +715,7 @@ export default function Library() {
           });
           setDetailScans(scans);
 
-          const stillPending = scans.some(s => s.status === 'pending');
+          const stillPending = scans.some((s) => s.status === 'pending');
           if (!stillPending) {
             clearInterval(interval);
             _inferenceRunningDatasets.delete(selectedDatasetId);
@@ -647,17 +733,23 @@ export default function Library() {
       }, 5000);
 
       // Safety timeout after 10 minutes
-      setTimeout(() => {
-        clearInterval(interval);
-        _inferenceRunningDatasets.delete(selectedDatasetId);
-        setInferenceRunning(false);
-        setInferenceMessage('Inference is taking longer than expected. Check back later.');
-      }, 10 * 60 * 1000);
-
+      setTimeout(
+        () => {
+          clearInterval(interval);
+          _inferenceRunningDatasets.delete(selectedDatasetId);
+          setInferenceRunning(false);
+          setInferenceMessage(
+            'Inference is taking longer than expected. Check back later.',
+          );
+        },
+        10 * 60 * 1000,
+      );
     } catch (err) {
       _inferenceRunningDatasets.delete(selectedDatasetId);
       setInferenceRunning(false);
-      setInferenceMessage(`Failed to start inference: ${(err as Error).message}`);
+      setInferenceMessage(
+        `Failed to start inference: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -667,15 +759,19 @@ export default function Library() {
     if (_inferenceRunningAnnotations.has(annotationId)) return;
 
     addRunningAnnotation(annotationId);
-    setSelectedAnnotation(prev => prev ? { ...prev, status: 'pending' } : null);
-    setAnnotRefreshKey(k => k + 1);
+    setSelectedAnnotation((prev) =>
+      prev ? { ...prev, status: 'pending' } : null,
+    );
+    setAnnotRefreshKey((k) => k + 1);
 
     try {
       const res = await runAnnotationInference(annotationId);
 
       if (res.message.toLowerCase().includes('already running')) {
         removeRunningAnnotation(annotationId);
-        setSelectedAnnotation(prev => prev ? { ...prev, status: 'annotated' } : null);
+        setSelectedAnnotation((prev) =>
+          prev ? { ...prev, status: 'annotated' } : null,
+        );
         return;
       }
 
@@ -687,10 +783,13 @@ export default function Library() {
             setSelectedAnnotation(updated);
           }
 
-          if (updated.status === 'annotated' || updated.status === 'review_required') {
+          if (
+            updated.status === 'annotated' ||
+            updated.status === 'review_required'
+          ) {
             clearInterval(interval);
             removeRunningAnnotation(annotationId);
-            setAnnotRefreshKey(k => k + 1);
+            setAnnotRefreshKey((k) => k + 1);
 
             if (annotationModalClosedRef.current !== annotationId) {
               setSelectedAnnotation(updated);
@@ -703,26 +802,30 @@ export default function Library() {
       }, 2000);
 
       // Safety timeout after 5 minutes
-      setTimeout(() => {
-        clearInterval(interval);
-        removeRunningAnnotation(annotationId);
-      }, 5 * 60 * 1000);
-
+      setTimeout(
+        () => {
+          clearInterval(interval);
+          removeRunningAnnotation(annotationId);
+        },
+        5 * 60 * 1000,
+      );
     } catch (err) {
       removeRunningAnnotation(annotationId);
       // Revert optimistic status update
-      setSelectedAnnotation(prev => prev ? { ...prev, status: 'annotated' } : null);
+      setSelectedAnnotation((prev) =>
+        prev ? { ...prev, status: 'annotated' } : null,
+      );
     }
   }
 
   function addRunningAnnotation(id: string) {
     _inferenceRunningAnnotations.add(id);
-    setRunningAnnotationIds(prev => new Set(prev).add(id));
+    setRunningAnnotationIds((prev) => new Set(prev).add(id));
   }
 
   function removeRunningAnnotation(id: string) {
     _inferenceRunningAnnotations.delete(id);
-    setRunningAnnotationIds(prev => {
+    setRunningAnnotationIds((prev) => {
       const next = new Set(prev);
       next.delete(id);
       return next;
@@ -782,7 +885,13 @@ export default function Library() {
 
     // Validate before setting loading state
     const MAX_SIZE_MB = 50;
-    const ACCEPTED_TYPES = ['image/png', 'image/tiff', 'image/tif', 'image/jpeg', 'image/jpg'];
+    const ACCEPTED_TYPES = [
+      'image/png',
+      'image/tiff',
+      'image/tif',
+      'image/jpeg',
+      'image/jpg',
+    ];
 
     for (const f of uploadFiles) {
       if (f.size > MAX_SIZE_MB * 1024 * 1024) {
@@ -790,7 +899,9 @@ export default function Library() {
         return;
       }
       if (!ACCEPTED_TYPES.includes(f.type)) {
-        setUploadError(`File "${f.name}" has an unsupported format. Use PNG, TIFF, or JPEG.`);
+        setUploadError(
+          `File "${f.name}" has an unsupported format. Use PNG, TIFF, or JPEG.`,
+        );
         return;
       }
     }
@@ -811,7 +922,7 @@ export default function Library() {
         setShowUploadModal(false);
         setUploadFiles([]);
         setUploadError(
-          `${result.success} image(s) uploaded. ${result.failed} failed:\n${result.errors.join('\n')}`
+          `${result.success} image(s) uploaded. ${result.failed} failed:\n${result.errors.join('\n')}`,
         );
       } else {
         // Full success
@@ -1116,7 +1227,9 @@ export default function Library() {
                       <button
                         key={opt.value}
                         className={`lib-chip ${(growthStages.length === 0 && opt.value === '') || growthStages[0] === opt.value ? 'lib-chip--active' : ''}`}
-                        onClick={() => setGrowthStages(opt.value === '' ? [] : [opt.value])}
+                        onClick={() =>
+                          setGrowthStages(opt.value === '' ? [] : [opt.value])
+                        }
                       >
                         {opt.label}
                       </button>
@@ -1124,7 +1237,13 @@ export default function Library() {
                   </div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--space-3)',
+                  }}
+                >
                   <div className="lib-filter-group">
                     <span className="lib-filter-label">STATUS</span>
                     <div className="lib-filter-chips">
@@ -1172,7 +1291,10 @@ export default function Library() {
                       placeholder="e.g. Arabidopsis"
                       value={annotSpeciesFilter}
                       onChange={(e) => setAnnotSpeciesFilter(e.target.value)}
-                      style={{ fontSize: 'var(--text-xs)', padding: 'var(--space-2) var(--space-3)' }}
+                      style={{
+                        fontSize: 'var(--text-xs)',
+                        padding: 'var(--space-2) var(--space-3)',
+                      }}
                     />
                   </div>
                 </div>
@@ -1283,21 +1405,40 @@ export default function Library() {
                         </p>
                       </div>
                       <div className="lib-detail-card">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 'var(--space-3)',
+                          }}
+                        >
                           <h3 className="lib-detail-card-title">
                             Scans ({datasetDetail.count.toLocaleString()})
                           </h3>
                           {/* Page indicator when there are multiple pages */}
                           {datasetDetail.count > SCANS_PER_PAGE && (
-                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                              {(scanPage - 1) * SCANS_PER_PAGE + 1}–{Math.min(scanPage * SCANS_PER_PAGE, datasetDetail.count)} of {datasetDetail.count}
+                            <span
+                              style={{
+                                fontSize: 'var(--text-xs)',
+                                color: 'var(--color-text-muted)',
+                              }}
+                            >
+                              {(scanPage - 1) * SCANS_PER_PAGE + 1}–
+                              {Math.min(
+                                scanPage * SCANS_PER_PAGE,
+                                datasetDetail.count,
+                              )}{' '}
+                              of {datasetDetail.count}
                             </span>
                           )}
                         </div>
                         {uploadError && (
                           <div className="lib-upload-warning">
                             {uploadError.split('\n').map((line, i) => (
-                              <p key={i} style={{ margin: '2px 0' }}>{line}</p>
+                              <p key={i} style={{ margin: '2px 0' }}>
+                                {line}
+                              </p>
                             ))}
                             <button
                               className="lib-upload-warning-dismiss"
@@ -1310,8 +1451,15 @@ export default function Library() {
                         )}
                         <div className="lib-scans-grid">
                           {detailScans.length === 0 ? (
-                            <p style={{ gridColumn: '1 / -1', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                              No scans uploaded yet. Click &quot;Add Scans&quot; above to add images.
+                            <p
+                              style={{
+                                gridColumn: '1 / -1',
+                                color: 'var(--color-text-muted)',
+                                fontSize: '0.85rem',
+                              }}
+                            >
+                              No scans uploaded yet. Click &quot;Add Scans&quot;
+                              above to add images.
                             </p>
                           ) : (
                             detailScans.map((scan) => (
@@ -1322,21 +1470,27 @@ export default function Library() {
                                 style={{
                                   cursor: 'pointer',
                                   background: 'rgba(255, 255, 255, 0.02)',
-                                  border: '1px solid var(--color-border-subtle)',
+                                  border:
+                                    '1px solid var(--color-border-subtle)',
                                   borderRadius: '8px',
                                   padding: '8px',
                                   display: 'flex',
                                   flexDirection: 'column',
                                   gap: '8px',
-                                  transition: 'transform 0.2s, border-color 0.2s',
+                                  transition:
+                                    'transform 0.2s, border-color 0.2s',
                                 }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.borderColor = 'var(--color-primary-light)';
-                                  e.currentTarget.style.transform = 'translateY(-2px)';
+                                  e.currentTarget.style.borderColor =
+                                    'var(--color-primary-light)';
+                                  e.currentTarget.style.transform =
+                                    'translateY(-2px)';
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.borderColor = 'var(--color-border-subtle)';
-                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.borderColor =
+                                    'var(--color-border-subtle)';
+                                  e.currentTarget.style.transform =
+                                    'translateY(0)';
                                 }}
                               >
                                 <img
@@ -1351,11 +1505,25 @@ export default function Library() {
                                     background: '#000',
                                   }}
                                   onError={(e) => {
-                                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23222"/><text x="50" y="55" font-family="sans-serif" font-size="12" fill="%23666" text-anchor="middle">No Preview</text></svg>';
+                                    (e.target as HTMLImageElement).src =
+                                      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23222"/><text x="50" y="55" font-family="sans-serif" font-size="12" fill="%23666" text-anchor="middle">No Preview</text></svg>';
                                   }}
                                 />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
-                                  <span style={{ fontSize: '8px', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    fontSize: '11px',
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: '8px',
+                                      fontFamily: 'var(--font-mono)',
+                                      color: 'var(--color-text-muted)',
+                                    }}
+                                  >
                                     {scan.annotation_id.slice(0, 8)}...
                                   </span>
                                   <span
@@ -1381,35 +1549,59 @@ export default function Library() {
 
                         {/* Pagination */}
                         {datasetDetail.count > SCANS_PER_PAGE && (
-                          <div className="lib-pagination" style={{ marginTop: 'var(--space-4)' }}>
+                          <div
+                            className="lib-pagination"
+                            style={{ marginTop: 'var(--space-4)' }}
+                          >
                             <button
                               className="lib-page-btn"
                               disabled={scanPage === 1}
                               onClick={() => setScanPage((p) => p - 1)}
                               aria-label="Previous page"
                             >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2.5"
-                                strokeLinecap="round" strokeLinejoin="round">
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
                                 <polyline points="15 18 9 12 15 6" />
                               </svg>
                               Prev
                             </button>
 
                             <span className="lib-page-indicator">
-                              Page <strong>{scanPage}</strong> of <strong>{Math.ceil(datasetDetail.count / SCANS_PER_PAGE)}</strong>
+                              Page <strong>{scanPage}</strong> of{' '}
+                              <strong>
+                                {Math.ceil(
+                                  datasetDetail.count / SCANS_PER_PAGE,
+                                )}
+                              </strong>
                             </span>
 
                             <button
                               className="lib-page-btn"
-                              disabled={scanPage * SCANS_PER_PAGE >= datasetDetail.count}
+                              disabled={
+                                scanPage * SCANS_PER_PAGE >= datasetDetail.count
+                              }
                               onClick={() => setScanPage((p) => p + 1)}
                               aria-label="Next page"
                             >
                               Next
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2.5"
-                                strokeLinecap="round" strokeLinejoin="round">
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
                                 <polyline points="9 18 15 12 9 6" />
                               </svg>
                             </button>
@@ -1431,23 +1623,37 @@ export default function Library() {
                         </div>
 
                         <div className="lib-page-stats">
-                          <span className="lib-page-stats-label">This page</span>
+                          <span className="lib-page-stats-label">
+                            This page
+                          </span>
                           <div className="lib-page-stats-row">
                             <span className="lib-page-stat lib-page-stat--annotated">
                               <span className="lib-page-stat-num">
-                                {detailScans.filter((s) => s.status === 'annotated').length}
+                                {
+                                  detailScans.filter(
+                                    (s) => s.status === 'annotated',
+                                  ).length
+                                }
                               </span>
                               annotated
                             </span>
                             <span className="lib-page-stat lib-page-stat--pending">
                               <span className="lib-page-stat-num">
-                                {detailScans.filter((s) => s.status === 'pending').length}
+                                {
+                                  detailScans.filter(
+                                    (s) => s.status === 'pending',
+                                  ).length
+                                }
                               </span>
                               pending
                             </span>
                             <span className="lib-page-stat lib-page-stat--review">
                               <span className="lib-page-stat-num">
-                                {detailScans.filter((s) => s.status === 'review_required').length}
+                                {
+                                  detailScans.filter(
+                                    (s) => s.status === 'review_required',
+                                  ).length
+                                }
                               </span>
                               review
                             </span>
@@ -1477,23 +1683,45 @@ export default function Library() {
                           <div className="lib-meta-row">
                             <span className="lib-meta-k">Created</span>
                             <span className="lib-meta-v">
-                              {new Date(datasetDetail.created_at).toLocaleDateString('en-GB', {
-                                day: '2-digit', month: 'short', year: 'numeric'
+                              {new Date(
+                                datasetDetail.created_at,
+                              ).toLocaleDateString('en-GB', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
                               })}
                             </span>
                           </div>
                           <div className="lib-meta-row">
                             <span className="lib-meta-k">Last Modified</span>
                             <span className="lib-meta-v">
-                              {new Date(datasetDetail.modified_at).toLocaleDateString('en-GB', {
-                                day: '2-digit', month: 'short', year: 'numeric'
+                              {new Date(
+                                datasetDetail.modified_at,
+                              ).toLocaleDateString('en-GB', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
                               })}
                             </span>
                           </div>
                           {datasetDetail.description && (
-                            <div className="lib-meta-row" style={{ flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            <div
+                              className="lib-meta-row"
+                              style={{
+                                flexDirection: 'column',
+                                gap: '4px',
+                                alignItems: 'flex-start',
+                              }}
+                            >
                               <span className="lib-meta-k">Description</span>
-                              <span className="lib-meta-v" style={{ maxWidth: '100%', whiteSpace: 'normal', fontSize: 'var(--text-xs)' }}>
+                              <span
+                                className="lib-meta-v"
+                                style={{
+                                  maxWidth: '100%',
+                                  whiteSpace: 'normal',
+                                  fontSize: 'var(--text-xs)',
+                                }}
+                              >
                                 {datasetDetail.description}
                               </span>
                             </div>
@@ -1502,23 +1730,38 @@ export default function Library() {
                       </div>
 
                       {/* Run Inference button */}
-                      {detailScans.some(s => s.status === 'pending') && (
+                      {detailScans.some((s) => s.status === 'pending') && (
                         <div>
                           <button
                             className="lib-btn-run-inference"
                             onClick={() => void handleRunInference()}
-                            disabled={inferenceRunning || _inferenceRunningDatasets.has(selectedDatasetId ?? '')}
+                            disabled={
+                              inferenceRunning ||
+                              _inferenceRunningDatasets.has(
+                                selectedDatasetId ?? '',
+                              )
+                            }
                           >
                             {inferenceRunning ? (
                               <>
-                                <span className="spinner" style={{ width: '12px', height: '12px' }} />
+                                <span
+                                  className="spinner"
+                                  style={{ width: '12px', height: '12px' }}
+                                />
                                 Running...
                               </>
                             ) : (
                               <>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                  stroke="currentColor" strokeWidth="2.5"
-                                  strokeLinecap="round" strokeLinejoin="round">
+                                <svg
+                                  width="13"
+                                  height="13"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
                                   <polygon points="5 3 19 12 5 21 5 3" />
                                 </svg>
                                 Run Inference
@@ -1526,23 +1769,42 @@ export default function Library() {
                             )}
                           </button>
                           {inferenceMessage && (
-                            <p className="lib-inference-msg">{inferenceMessage}</p>
+                            <p className="lib-inference-msg">
+                              {inferenceMessage}
+                            </p>
                           )}
                         </div>
                       )}
                       {/* Review in Lab button */}
-                      {detailScans.some(s => s.status === 'review_required') && (
+                      {detailScans.some(
+                        (s) => s.status === 'review_required',
+                      ) && (
                         <button
                           className="lib-btn-review-lab"
-                          onClick={() => navigate(`/lab?dataset_id=${selectedDatasetId}`)}
+                          onClick={() =>
+                            navigate(`/lab?dataset_id=${selectedDatasetId}`)
+                          }
                         >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2.5"
-                            strokeLinecap="round" strokeLinejoin="round">
+                          <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                           </svg>
-                          Review {detailScans.filter(s => s.status === 'review_required').length} in Lab
+                          Review{' '}
+                          {
+                            detailScans.filter(
+                              (s) => s.status === 'review_required',
+                            ).length
+                          }{' '}
+                          in Lab
                         </button>
                       )}
                     </div>
@@ -1558,7 +1820,9 @@ export default function Library() {
                     <span className="lib-breadcrumb">
                       LIBRARY / {activeTab.toUpperCase()}
                     </span>
-                    <h1 className="lib-content-title">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h1>
+                    <h1 className="lib-content-title">
+                      {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+                    </h1>
                   </div>
                 </div>
 
@@ -1744,9 +2008,11 @@ export default function Library() {
                     speciesFilter={annotSpeciesFilter}
                     refreshKey={annotRefreshKey}
                     onAnnotationsFetched={(fresh) => {
-                      setSelectedAnnotation(prev => {
+                      setSelectedAnnotation((prev) => {
                         if (!prev) return null;
-                        const updated = fresh.find(a => a.annotation_id === prev.annotation_id);
+                        const updated = fresh.find(
+                          (a) => a.annotation_id === prev.annotation_id,
+                        );
                         return updated ?? prev;
                       });
                     }}
@@ -1853,7 +2119,9 @@ export default function Library() {
                   }}
                   style={{ display: 'none' }}
                 />
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div
+                  style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
+                >
                   <button
                     type="button"
                     className="lib-btn-new"
@@ -1862,29 +2130,52 @@ export default function Library() {
                   >
                     Select Files...
                   </button>
-                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--color-text-muted)',
+                    }}
+                  >
                     {createFiles.length === 0
                       ? 'No files selected'
                       : `${createFiles.length} files selected`}
                   </span>
                 </div>
                 {createFiles.length > 0 && (
-                  <div style={{
-                    maxHeight: '120px',
-                    overflowY: 'auto',
-                    marginTop: '8px',
-                    padding: '8px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid var(--color-border-subtle)',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px'
-                  }}>
+                  <div
+                    style={{
+                      maxHeight: '120px',
+                      overflowY: 'auto',
+                      marginTop: '8px',
+                      padding: '8px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid var(--color-border-subtle)',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                  >
                     {createFiles.map((file, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)' }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }}>{file.name}</span>
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          color: 'var(--color-text-muted)',
+                        }}
+                      >
+                        <span
+                          style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: '250px',
+                          }}
+                        >
+                          {file.name}
+                        </span>
                         <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                       </div>
                     ))}
@@ -2410,40 +2701,53 @@ export default function Library() {
           aria-modal="true"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              annotationModalClosedRef.current = selectedAnnotation?.annotation_id ?? null;
+              annotationModalClosedRef.current =
+                selectedAnnotation?.annotation_id ?? null;
               setSelectedAnnotation(null);
             }
           }}
         >
           <div className="ann-detail-modal">
-
             {/* ── Header ── */}
             <div className="ann-detail-header">
               <div>
                 <span className="lib-breadcrumb">ANNOTATION</span>
                 <h2 className="ann-detail-title">
                   {selectedAnnotation.annotation_id.slice(0, 8).toUpperCase()}
-                  <span className={`ann-status-pill ann-status-pill--${selectedAnnotation.status}`}>
+                  <span
+                    className={`ann-status-pill ann-status-pill--${selectedAnnotation.status}`}
+                  >
                     {selectedAnnotation.status.replace('_', ' ')}
                   </span>
                 </h2>
               </div>
-              <button className="ann-detail-close" onClick={() => {
-                annotationModalClosedRef.current = selectedAnnotation.annotation_id;
-                setSelectedAnnotation(null);
-              }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              <button
+                className="ann-detail-close"
+                onClick={() => {
+                  annotationModalClosedRef.current =
+                    selectedAnnotation.annotation_id;
+                  setSelectedAnnotation(null);
+                }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
             </div>
 
             <div className="ann-detail-body">
-
               {/* ── Left: Image viewer ── */}
               <div className="ann-detail-image-col">
-
                 {/* Tab switcher */}
                 <div className="ann-image-tabs">
                   <button
@@ -2475,25 +2779,44 @@ export default function Library() {
                       src={getArtifactUrl(selectedAnnotation.image_uri)}
                       alt="Original Scan"
                       className="ann-image"
-                      onClick={() => setLightboxSrc(getArtifactUrl(selectedAnnotation.image_uri))}
+                      onClick={() =>
+                        setLightboxSrc(
+                          getArtifactUrl(selectedAnnotation.image_uri),
+                        )
+                      }
                       title="Click to enlarge"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23222"/><text x="100" y="105" font-family="sans-serif" font-size="14" fill="%23666" text-anchor="middle">No Preview</text></svg>';
+                        (e.target as HTMLImageElement).src =
+                          'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23222"/><text x="100" y="105" font-family="sans-serif" font-size="14" fill="%23666" text-anchor="middle">No Preview</text></svg>';
                       }}
                     />
                   ) : imageView === 'mask' && selectedAnnotation.mask_url ? (
-                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        height: '100%',
+                      }}
+                    >
                       <img
                         src={
                           selectedAnnotation.mask_url
                             ? getArtifactUrl(selectedAnnotation.mask_url)
-                            : getArtifactUrl(linkedPrediction?.segmentation_mask_url)
-                        } alt="Segmentation Mask"
+                            : getArtifactUrl(
+                                linkedPrediction?.segmentation_mask_url,
+                              )
+                        }
+                        alt="Segmentation Mask"
                         className="ann-image"
-                        onClick={() => setLightboxSrc(getArtifactUrl(selectedAnnotation.mask_url!))}
+                        onClick={() =>
+                          setLightboxSrc(
+                            getArtifactUrl(selectedAnnotation.mask_url!),
+                          )
+                        }
                         title="Click to enlarge"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23222"/><text x="100" y="105" font-family="sans-serif" font-size="14" fill="%23666" text-anchor="middle">No Mask</text></svg>';
+                          (e.target as HTMLImageElement).src =
+                            'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23222"/><text x="100" y="105" font-family="sans-serif" font-size="14" fill="%23666" text-anchor="middle">No Mask</text></svg>';
                         }}
                       />
                       <button
@@ -2502,38 +2825,61 @@ export default function Library() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedAnnotation(null);
-                          navigate(`/lab?annotation_id=${selectedAnnotation.annotation_id}`);
+                          navigate(
+                            `/lab?annotation_id=${selectedAnnotation.annotation_id}`,
+                          );
                         }}
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                          stroke="currentColor" strokeWidth="2.5"
-                          strokeLinecap="round" strokeLinejoin="round">
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>
                         Edit in Lab
                       </button>
                     </div>
-                  ) : imageView === 'tip' && selectedAnnotation.tip_photo_url ? (
+                  ) : imageView === 'tip' &&
+                    selectedAnnotation.tip_photo_url ? (
                     <img
                       src={selectedAnnotation.tip_photo_url}
                       alt="Tip Visualisation"
                       className="ann-image"
-                      onClick={() => setLightboxSrc(selectedAnnotation.tip_photo_url!)}
+                      onClick={() =>
+                        setLightboxSrc(selectedAnnotation.tip_photo_url!)
+                      }
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23222"/><text x="100" y="105" font-family="sans-serif" font-size="14" fill="%23666" text-anchor="middle">No Mask</text></svg>';
+                        (e.target as HTMLImageElement).src =
+                          'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23222"/><text x="100" y="105" font-family="sans-serif" font-size="14" fill="%23666" text-anchor="middle">No Mask</text></svg>';
                       }}
                     />
                   ) : (
                     <div className="ann-image-empty">
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
-                        stroke="var(--color-text-muted)" strokeWidth="1.5"
-                        strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
+                      <svg
+                        width="32"
+                        height="32"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="var(--color-text-muted)"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
                         <polyline points="21 15 16 10 5 21" />
                       </svg>
                       <p>No mask generated yet.</p>
-                      <span>Run inference to generate a segmentation mask.</span>
+                      <span>
+                        Run inference to generate a segmentation mask.
+                      </span>
                     </div>
                   )}
                 </div>
@@ -2541,19 +2887,33 @@ export default function Library() {
                 {/* Run / Re-run inference button */}
                 <button
                   className="lib-btn-run-inference"
-                  disabled={runningAnnotationIds.has(selectedAnnotation.annotation_id)}
+                  disabled={runningAnnotationIds.has(
+                    selectedAnnotation.annotation_id,
+                  )}
                   onClick={() => void handleRunAnnotationInference()}
                 >
-                  {runningAnnotationIds.has(selectedAnnotation.annotation_id) ? (
+                  {runningAnnotationIds.has(
+                    selectedAnnotation.annotation_id,
+                  ) ? (
                     <>
-                      <span className="spinner" style={{ width: '12px', height: '12px' }} />
+                      <span
+                        className="spinner"
+                        style={{ width: '12px', height: '12px' }}
+                      />
                       Running...
                     </>
                   ) : selectedAnnotation.status === 'pending' ? (
                     <>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2.5"
-                        strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <polygon points="5 3 19 12 5 21 5 3" />
                       </svg>
                       Run Inference
@@ -2566,18 +2926,59 @@ export default function Library() {
 
               {/* ── Right: Info ── */}
               <div className="ann-detail-info-col">
-
                 {/* Metadata */}
                 <div className="ann-detail-section">
                   <h3 className="ann-detail-section-title">METADATA</h3>
                   <dl className="ann-meta-list">
                     {[
-                      { label: 'Species', field: 'species', value: selectedAnnotation.species || '—', editable: true },
-                      { label: 'Age (days)', field: 'age_days', value: selectedAnnotation.age_days?.toString() || '—', editable: true },
-                      { label: 'Treatment', field: 'treatment', value: selectedAnnotation.treatment || '—', editable: true },
-                      { label: 'Owner', field: 'owner_email', value: selectedAnnotation.owner_email || '—', editable: false },
-                      { label: 'Created', field: null, value: new Date(selectedAnnotation.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }), editable: false },
-                      { label: 'Updated', field: null, value: new Date(selectedAnnotation.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }), editable: false },
+                      {
+                        label: 'Species',
+                        field: 'species',
+                        value: selectedAnnotation.species || '—',
+                        editable: true,
+                      },
+                      {
+                        label: 'Age (days)',
+                        field: 'age_days',
+                        value: selectedAnnotation.age_days?.toString() || '—',
+                        editable: true,
+                      },
+                      {
+                        label: 'Treatment',
+                        field: 'treatment',
+                        value: selectedAnnotation.treatment || '—',
+                        editable: true,
+                      },
+                      {
+                        label: 'Owner',
+                        field: 'owner_email',
+                        value: selectedAnnotation.owner_email || '—',
+                        editable: false,
+                      },
+                      {
+                        label: 'Created',
+                        field: null,
+                        value: new Date(
+                          selectedAnnotation.created_at,
+                        ).toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        }),
+                        editable: false,
+                      },
+                      {
+                        label: 'Updated',
+                        field: null,
+                        value: new Date(
+                          selectedAnnotation.updated_at,
+                        ).toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        }),
+                        editable: false,
+                      },
                     ].map(({ label, field, value, editable }) => (
                       <div key={label} className="ann-meta-row">
                         <dt className="ann-meta-label">{label}</dt>
@@ -2588,11 +2989,15 @@ export default function Library() {
                               value={editingMetaValue}
                               autoFocus
                               disabled={metaSaving}
-                              onChange={e => setEditingMetaValue(e.target.value)}
+                              onChange={(e) =>
+                                setEditingMetaValue(e.target.value)
+                              }
                               onBlur={() => void handleMetaSave(field)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') void handleMetaSave(field);
-                                if (e.key === 'Escape') setEditingMetaField(null);
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter')
+                                  void handleMetaSave(field);
+                                if (e.key === 'Escape')
+                                  setEditingMetaField(null);
                               }}
                             />
                           ) : (
@@ -2603,7 +3008,9 @@ export default function Library() {
                                   className="ann-meta-edit-btn"
                                   onClick={() => {
                                     setEditingMetaField(field);
-                                    setEditingMetaValue(value === '—' ? '' : value);
+                                    setEditingMetaValue(
+                                      value === '—' ? '' : value,
+                                    );
                                   }}
                                 >
                                   ✎
@@ -2628,14 +3035,14 @@ export default function Library() {
                       <select
                         className="ann-assign-select"
                         value={targetDatasetId}
-                        onChange={e => {
+                        onChange={(e) => {
                           setTargetDatasetId(e.target.value);
                           setAddToDatasetError(null);
                         }}
                         disabled={addingToDataset}
                       >
                         <option value="">Select a dataset...</option>
-                        {datasets.map(d => (
+                        {datasets.map((d) => (
                           <option key={d.dataset_id} value={d.dataset_id}>
                             {d.name} ({d.count} scans)
                           </option>
@@ -2653,22 +3060,34 @@ export default function Library() {
                               selectedAnnotation.annotation_id,
                             );
                             setSelectedAnnotation(updated);
-                            setAnnotRefreshKey(k => k + 1);
+                            setAnnotRefreshKey((k) => k + 1);
                             // Also refresh dataset list so count updates
                             const data = await getDatasets({
                               species: speciesFilter || undefined,
-                              growth_stage: growthStages.length === 1 ? growthStages[0] : undefined,
+                              growth_stage:
+                                growthStages.length === 1
+                                  ? growthStages[0]
+                                  : undefined,
                             });
                             setDatasets(data);
                           } catch (err) {
-                            setAddToDatasetError((err as Error).message || 'Failed to add to dataset.');
+                            setAddToDatasetError(
+                              (err as Error).message ||
+                                'Failed to add to dataset.',
+                            );
                           } finally {
                             setAddingToDataset(false);
                           }
                         }}
                       >
                         {addingToDataset ? (
-                          <><span className="spinner" style={{ width: '10px', height: '10px' }} /> Adding...</>
+                          <>
+                            <span
+                              className="spinner"
+                              style={{ width: '10px', height: '10px' }}
+                            />{' '}
+                            Adding...
+                          </>
                         ) : (
                           'Add to Dataset'
                         )}
@@ -2682,9 +3101,16 @@ export default function Library() {
                   <div className="ann-detail-section">
                     <h3 className="ann-detail-section-title">DATASET</h3>
                     <div className="ann-assign-linked">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2.5"
-                        strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <ellipse cx="12" cy="5" rx="9" ry="3" />
                         <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
                         <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
@@ -2698,8 +3124,10 @@ export default function Library() {
                         }}
                         title="Go to dataset"
                       >
-                        {datasets.find(d => d.dataset_id === selectedAnnotation.dataset_id)?.name
-                          ?? selectedAnnotation.dataset_id?.slice(0, 8) + '...'}
+                        {datasets.find(
+                          (d) => d.dataset_id === selectedAnnotation.dataset_id,
+                        )?.name ??
+                          selectedAnnotation.dataset_id?.slice(0, 8) + '...'}
                       </span>
                     </div>
                   </div>
@@ -2708,10 +3136,15 @@ export default function Library() {
                 {/* U-Net Detection — admin only */}
                 {role === 'admin' && (
                   <div className="ann-detail-section">
-                    <h3 className="ann-detail-section-title">U-NET DETECTION</h3>
+                    <h3 className="ann-detail-section-title">
+                      U-NET DETECTION
+                    </h3>
                     {linkedPredictionLoading ? (
                       <div className="ann-prediction-loading">
-                        <span className="spinner" style={{ width: '14px', height: '14px' }} />
+                        <span
+                          className="spinner"
+                          style={{ width: '14px', height: '14px' }}
+                        />
                         Loading prediction...
                       </div>
                     ) : linkedPrediction ? (
@@ -2719,14 +3152,21 @@ export default function Library() {
                         <div className="ann-prediction-meta">
                           <div>
                             <span className="ann-meta-label">MODEL</span>
-                            <span className="ann-meta-value" style={{ fontSize: 'var(--text-xs)' }}>
+                            <span
+                              className="ann-meta-value"
+                              style={{ fontSize: 'var(--text-xs)' }}
+                            >
                               {linkedPrediction.metadata.model_version}
                             </span>
                           </div>
                           <div>
                             <span className="ann-meta-label">LATENCY</span>
                             <span className="ann-meta-value">
-                              {(linkedPrediction.metadata.processing_time_ms / 1000).toFixed(3)}s
+                              {(
+                                linkedPrediction.metadata.processing_time_ms /
+                                1000
+                              ).toFixed(3)}
+                              s
                             </span>
                           </div>
                         </div>
@@ -2743,10 +3183,21 @@ export default function Library() {
                               {linkedPrediction.plants.map((p) => (
                                 <tr key={p.plant_id}>
                                   <td>{p.plant_id}</td>
-                                  <td style={{ color: 'var(--color-tag-text)', fontWeight: 600 }}>
+                                  <td
+                                    style={{
+                                      color: 'var(--color-tag-text)',
+                                      fontWeight: 600,
+                                    }}
+                                  >
                                     {p.root_length_mm}mm
                                   </td>
-                                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                                  <td
+                                    style={{
+                                      fontFamily: 'var(--font-mono)',
+                                      fontSize: '10px',
+                                      color: 'var(--color-text-muted)',
+                                    }}
+                                  >
                                     ({p.tip_x}, {p.tip_y})
                                   </td>
                                 </tr>
@@ -2754,7 +3205,9 @@ export default function Library() {
                             </tbody>
                           </table>
                         ) : (
-                          <p className="ann-prediction-empty">No plants detected.</p>
+                          <p className="ann-prediction-empty">
+                            No plants detected.
+                          </p>
                         )}
                       </div>
                     ) : (
@@ -2779,16 +3232,24 @@ export default function Library() {
                           if (next === annotationFeedback) return;
                           setFeedbackSaving(true);
                           try {
-                            await submitAnnotationFeedback(selectedAnnotation.prediction_id!, next);
+                            await submitAnnotationFeedback(
+                              selectedAnnotation.prediction_id!,
+                              next,
+                            );
                             setAnnotationFeedback(next);
-                            setSelectedAnnotation(prev => prev ? { ...prev, status: 'review_required' } : null);
-                            setAnnotRefreshKey(k => k + 1);  // triggers list re-fetch
-                            setDetailScans(prev =>
-                              prev.map(s =>
-                                s.annotation_id === selectedAnnotation.annotation_id
+                            setSelectedAnnotation((prev) =>
+                              prev
+                                ? { ...prev, status: 'review_required' }
+                                : null,
+                            );
+                            setAnnotRefreshKey((k) => k + 1); // triggers list re-fetch
+                            setDetailScans((prev) =>
+                              prev.map((s) =>
+                                s.annotation_id ===
+                                selectedAnnotation.annotation_id
                                   ? { ...s, status: 'review_required' }
-                                  : s
-                              )
+                                  : s,
+                              ),
                             );
                           } finally {
                             setFeedbackSaving(false);
@@ -2805,16 +3266,22 @@ export default function Library() {
                           if (next === annotationFeedback) return;
                           setFeedbackSaving(true);
                           try {
-                            await submitAnnotationFeedback(selectedAnnotation.prediction_id!, next);
+                            await submitAnnotationFeedback(
+                              selectedAnnotation.prediction_id!,
+                              next,
+                            );
                             setAnnotationFeedback(next);
-                            setSelectedAnnotation(prev => prev ? { ...prev, status: 'annotated' } : null);
-                            setAnnotRefreshKey(k => k + 1);  // triggers list re-fetch
-                            setDetailScans(prev =>
-                              prev.map(s =>
-                                s.annotation_id === selectedAnnotation.annotation_id
+                            setSelectedAnnotation((prev) =>
+                              prev ? { ...prev, status: 'annotated' } : null,
+                            );
+                            setAnnotRefreshKey((k) => k + 1); // triggers list re-fetch
+                            setDetailScans((prev) =>
+                              prev.map((s) =>
+                                s.annotation_id ===
+                                selectedAnnotation.annotation_id
                                   ? { ...s, status: 'annotated' }
-                                  : s
-                              )
+                                  : s,
+                              ),
                             );
                           } finally {
                             setFeedbackSaving(false);
@@ -2830,26 +3297,36 @@ export default function Library() {
             </div>
           </div>
         </div>
-      )
-      }
+      )}
 
       {/* ── Lightbox ── */}
-      {
-        lightboxSrc && (
-          <div
-            className="ann-lightbox"
+      {lightboxSrc && (
+        <div className="ann-lightbox" onClick={() => setLightboxSrc(null)}>
+          <button
+            className="ann-lightbox-close"
             onClick={() => setLightboxSrc(null)}
           >
-            <button className="ann-lightbox-close" onClick={() => setLightboxSrc(null)}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-            <img src={lightboxSrc} alt="Enlarged view" className="ann-lightbox-img" />
-          </div>
-        )
-      }
-    </div >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Enlarged view"
+            className="ann-lightbox-img"
+          />
+        </div>
+      )}
+    </div>
   );
 }

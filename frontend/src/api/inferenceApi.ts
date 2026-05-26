@@ -5,7 +5,13 @@
  */
 
 import { apiClient } from './client';
-import type { PredictionResponse, ModelSummary, MessageResponse, ConfirmPredictionRequest, ConfirmPredictionResponse } from '../types/api';
+import type {
+  PredictionResponse,
+  ModelSummary,
+  MessageResponse,
+  ConfirmPredictionRequest,
+  ConfirmPredictionResponse,
+} from '../types/api';
 
 /**
  * POST /predict

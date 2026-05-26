@@ -91,7 +91,10 @@ export function getArtifactUrl(url: string | undefined | null): string {
   }
 
   // If this is already a public, reachable absolute URL, return it unmodified
-  if ((url.startsWith('http://') || url.startsWith('https://')) && !url.includes('://minio:9000/')) {
+  if (
+    (url.startsWith('http://') || url.startsWith('https://')) &&
+    !url.includes('://minio:9000/')
+  ) {
     return url;
   }
 
@@ -145,4 +148,3 @@ export function getArtifactUrl(url: string | undefined | null): string {
 
   return `${window.location.origin}${fullPath}`;
 }
-

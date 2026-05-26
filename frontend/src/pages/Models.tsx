@@ -72,17 +72,18 @@ export default function Models() {
   // ── Expandable Detail Rows ──
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [expandedModelId, setExpandedModelId] = useState<string | null>(null);
-  const [detailedModels, setDetailedModels] = useState<Record<string, ModelDetail>>({});
+  const [detailedModels, setDetailedModels] = useState<
+    Record<string, ModelDetail>
+  >({});
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
 
   useEffect(() => {
     fetchData();
   }, [activeTab]);
 
   useEffect(() => {
-    const hasRunningRun = runs.some(r => r.status === 'running');
+    const hasRunningRun = runs.some((r) => r.status === 'running');
 
     if (hasRunningRun) {
       // Start polling if not already
@@ -129,11 +130,19 @@ export default function Models() {
       }
     } catch (err: any) {
       const msg = err.message || '';
-      if (activeTab === 'retraining' && (msg.includes('501') || msg.includes('Not implemented'))) {
+      if (
+        activeTab === 'retraining' &&
+        (msg.includes('501') || msg.includes('Not implemented'))
+      ) {
         setIsNotImplemented(true);
-        setError('The model retraining subprocess is currently under integration (501 Not Implemented).');
+        setError(
+          'The model retraining subprocess is currently under integration (501 Not Implemented).',
+        );
       } else {
-        setError(err.message || 'Connection failed. Could not fetch models workspace data.');
+        setError(
+          err.message ||
+            'Connection failed. Could not fetch models workspace data.',
+        );
       }
     } finally {
       setLoading(false);
@@ -156,17 +165,25 @@ export default function Models() {
 
     try {
       const res = await startTrainingRun(config);
-      setInfoMessage(`✓ Retraining initiated: ${res.message} (Run ID: ${res.run_id.slice(0, 8)})`);
+      setInfoMessage(
+        `✓ Retraining initiated: ${res.message} (Run ID: ${res.run_id.slice(0, 8)})`,
+      );
       await fetchData();
     } catch (err: any) {
       const msg = err.message || '';
       if (msg.includes('501') || msg.includes('Not implemented')) {
-        setError('Retraining trigger failed: The training runner subprocess daemon is pending deployment (501).');
+        setError(
+          'Retraining trigger failed: The training runner subprocess daemon is pending deployment (501).',
+        );
       } else if (msg.includes('already in progress') || msg.includes('409')) {
         // Find the running run to show its short ID
-        const runningRun = runs.find(r => r.status === 'running');
-        const runLabel = runningRun ? `run_${runningRun.run_id.slice(0, 8)}` : 'a run';
-        setError(`${runLabel} is already running — wait for it to finish or terminate it using the button in the table below.`);
+        const runningRun = runs.find((r) => r.status === 'running');
+        const runLabel = runningRun
+          ? `run_${runningRun.run_id.slice(0, 8)}`
+          : 'a run';
+        setError(
+          `${runLabel} is already running — wait for it to finish or terminate it using the button in the table below.`,
+        );
       } else {
         setError(msg || 'Failed to start retraining run.');
       }
@@ -177,7 +194,10 @@ export default function Models() {
 
   async function handleStopTraining(runId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to terminate this retraining job?')) return;
+    if (
+      !window.confirm('Are you sure you want to terminate this retraining job?')
+    )
+      return;
 
     setActionLoading(true);
     setError(null);
@@ -189,7 +209,9 @@ export default function Models() {
     } catch (err: any) {
       const msg = err.message || '';
       if (msg.includes('501') || msg.includes('Not implemented')) {
-        setError('Stop action failed: Training runner subprocess management is pending deployment (501).');
+        setError(
+          'Stop action failed: Training runner subprocess management is pending deployment (501).',
+        );
       } else {
         setError(err.message || 'Failed to stop retraining run.');
       }
@@ -239,7 +261,12 @@ export default function Models() {
 
   async function handleDeployModel(modelId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!window.confirm('Deploy this U-Net model version? This will set it as the active inference engine.')) return;
+    if (
+      !window.confirm(
+        'Deploy this U-Net model version? This will set it as the active inference engine.',
+      )
+    )
+      return;
 
     setActionLoading(true);
     setError(null);
@@ -258,7 +285,12 @@ export default function Models() {
 
   async function handleDeleteModel(modelId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this registered model? This cannot be undone.')) return;
+    if (
+      !window.confirm(
+        'Are you sure you want to delete this registered model? This cannot be undone.',
+      )
+    )
+      return;
 
     setActionLoading(true);
     setError(null);
@@ -312,7 +344,8 @@ export default function Models() {
               <span className="models-breadcrumb">ADMIN CONSOLE</span>
               <h1 className="models-title">Models Administration</h1>
               <p className="models-subtitle">
-                Supervise automated U-Net retraining pipelines, register model weights, and deploy inference versions.
+                Supervise automated U-Net retraining pipelines, register model
+                weights, and deploy inference versions.
               </p>
             </div>
           </header>
@@ -337,7 +370,16 @@ export default function Models() {
           {activeTab === 'retraining' && isNotImplemented && (
             <div className="models-notice-banner">
               <div className="notice-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                   <line x1="12" y1="9" x2="12" y2="13" />
                   <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -345,13 +387,23 @@ export default function Models() {
               </div>
               <div className="notice-content">
                 <strong>U-Net Retraining Subprocess Offline (Task 2097)</strong>
-                <p>The U-Net training daemon router is pending server infrastructure integration. Real-time controls will activate once deployed.</p>
+                <p>
+                  The U-Net training daemon router is pending server
+                  infrastructure integration. Real-time controls will activate
+                  once deployed.
+                </p>
               </div>
             </div>
           )}
 
-          {error && <div className="models-alert models-alert--danger">{error}</div>}
-          {infoMessage && <div className="models-alert models-alert--success">{infoMessage}</div>}
+          {error && (
+            <div className="models-alert models-alert--danger">{error}</div>
+          )}
+          {infoMessage && (
+            <div className="models-alert models-alert--success">
+              {infoMessage}
+            </div>
+          )}
 
           {/* ── Tab Content ───────────────────────────────────────────────── */}
           {activeTab === 'retraining' ? (
@@ -359,24 +411,44 @@ export default function Models() {
               {/* Left: Hyperparameter Configuration */}
               <div className="models-card models-form-card">
                 <h3 className="card-title">Retraining Launch Control</h3>
-                <p className="card-desc">Configure variables to invoke a new U-Net training background subprocess.</p>
+                <p className="card-desc">
+                  Configure variables to invoke a new U-Net training background
+                  subprocess.
+                </p>
 
                 {(() => {
-                  const deployedModel = models.find((m) => m.status === 'deployed');
+                  const deployedModel = models.find(
+                    (m) => m.status === 'deployed',
+                  );
                   return (
-                    <div style={{
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      border: '1px solid var(--color-border-subtle)',
-                      borderRadius: '6px',
-                      padding: '10px 12px',
-                      marginBottom: '15px',
-                      fontSize: '12px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>RETRAINING ANCHOR BASE:</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--color-primary-light)' }}>
+                    <div
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid var(--color-border-subtle)',
+                        borderRadius: '6px',
+                        padding: '10px 12px',
+                        marginBottom: '15px',
+                        fontSize: '12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: 'var(--color-text-muted)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        RETRAINING ANCHOR BASE:
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          color: 'var(--color-primary-light)',
+                        }}
+                      >
                         {deployedModel ? `${deployedModel.name}` : 'U-Net Base'}
                       </span>
                     </div>
@@ -397,7 +469,9 @@ export default function Models() {
                       disabled={actionLoading || isNotImplemented}
                       required
                     />
-                    <small className="form-help">Governs weights convergence. Recommended: 0.001</small>
+                    <small className="form-help">
+                      Governs weights convergence. Recommended: 0.001
+                    </small>
                   </div>
 
                   <div className="form-group">
@@ -413,7 +487,9 @@ export default function Models() {
                       <option value={32}>32 samples</option>
                       <option value={64}>64 samples</option>
                     </select>
-                    <small className="form-help">Sub-sampling constraints per forward pass.</small>
+                    <small className="form-help">
+                      Sub-sampling constraints per forward pass.
+                    </small>
                   </div>
 
                   <div className="form-group">
@@ -431,7 +507,9 @@ export default function Models() {
                       onChange={(e) => setEpochs(Number(e.target.value))}
                       disabled={actionLoading || isNotImplemented}
                     />
-                    <small className="form-help">Total full passes across dataset records.</small>
+                    <small className="form-help">
+                      Total full passes across dataset records.
+                    </small>
                   </div>
 
                   <button
@@ -453,14 +531,17 @@ export default function Models() {
                 <h3 className="card-title">Training Jobs Monitor</h3>
                 <h3 className="card-title">
                   Retraining History
-                  {runs.some(r => r.status === 'running') && (
+                  {runs.some((r) => r.status === 'running') && (
                     <span className="live-indicator">
                       <span className="pulse-dot" />
                       LIVE
                     </span>
                   )}
                 </h3>
-                <p className="card-desc">Supervise active U-Net tasks and trace learning historical statistics.</p>
+                <p className="card-desc">
+                  Supervise active U-Net tasks and trace learning historical
+                  statistics.
+                </p>
 
                 {loading ? (
                   <div className="models-table-loading">
@@ -469,22 +550,46 @@ export default function Models() {
                   </div>
                 ) : isNotImplemented ? (
                   <div className="models-table-empty">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      width="40"
+                      height="40"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="var(--color-text-muted)"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <circle cx="12" cy="12" r="10" />
                       <line x1="8" y1="12" x2="16" y2="12" />
                     </svg>
                     <h4>Training Daemon Unreachable</h4>
-                    <p>The U-Net retraining logs could not be retrieved due to server-side Task 2097 integration.</p>
+                    <p>
+                      The U-Net retraining logs could not be retrieved due to
+                      server-side Task 2097 integration.
+                    </p>
                   </div>
                 ) : runs.length === 0 ? (
                   <div className="models-table-empty">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      width="40"
+                      height="40"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="var(--color-text-muted)"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <circle cx="12" cy="12" r="10" />
                       <line x1="12" y1="8" x2="12" y2="16" />
                       <line x1="8" y1="12" x2="16" y2="12" />
                     </svg>
                     <h4>No Retraining Runs Found</h4>
-                    <p>Invoke a retraining run on the left to spawn U-Net historical logs.</p>
+                    <p>
+                      Invoke a retraining run on the left to spawn U-Net
+                      historical logs.
+                    </p>
                   </div>
                 ) : (
                   <div className="models-table-wrapper">
@@ -514,26 +619,37 @@ export default function Models() {
                                   <code>run_{runShort}</code>
                                 </td>
                                 <td>
-                                  <span className={`status-badge status-badge--${run.status}`}>
-                                    {isRunning && <span className="pulse-dot" />}
+                                  <span
+                                    className={`status-badge status-badge--${run.status}`}
+                                  >
+                                    {isRunning && (
+                                      <span className="pulse-dot" />
+                                    )}
                                     {run.status}
                                   </span>
                                 </td>
                                 <td className="cell-f1">
-                                  {run.final_f1 ? (run.final_f1 * 100).toFixed(2) + '%' : '—'}
+                                  {run.final_f1
+                                    ? (run.final_f1 * 100).toFixed(2) + '%'
+                                    : '—'}
                                 </td>
                                 <td className="cell-time">
-                                  {new Date(run.started_at).toLocaleTimeString([], {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit',
-                                  })}
+                                  {new Date(run.started_at).toLocaleTimeString(
+                                    [],
+                                    {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit',
+                                    },
+                                  )}
                                 </td>
                                 <td className="cell-actions">
                                   {isRunning ? (
                                     <button
                                       className="terminate-btn"
-                                      onClick={(e) => handleStopTraining(run.run_id, e)}
+                                      onClick={(e) =>
+                                        handleStopTraining(run.run_id, e)
+                                      }
                                       title="Terminate Retraining Pipeline Job"
                                       disabled={actionLoading}
                                     >
@@ -556,15 +672,40 @@ export default function Models() {
                                         <ul>
                                           <li>
                                             <span>Learning Rate:</span>
-                                            <strong>{run.hyperparameters?.learning_rate !== undefined ? String(run.hyperparameters.learning_rate) : '0.001'}</strong>
+                                            <strong>
+                                              {run.hyperparameters
+                                                ?.learning_rate !== undefined
+                                                ? String(
+                                                    run.hyperparameters
+                                                      .learning_rate,
+                                                  )
+                                                : '0.001'}
+                                            </strong>
                                           </li>
                                           <li>
                                             <span>Batch Size:</span>
-                                            <strong>{run.hyperparameters?.batch_size !== undefined ? String(run.hyperparameters.batch_size) : '16'} samples</strong>
+                                            <strong>
+                                              {run.hyperparameters
+                                                ?.batch_size !== undefined
+                                                ? String(
+                                                    run.hyperparameters
+                                                      .batch_size,
+                                                  )
+                                                : '16'}{' '}
+                                              samples
+                                            </strong>
                                           </li>
                                           <li>
                                             <span>Target Epochs:</span>
-                                            <strong>{run.hyperparameters?.epochs !== undefined ? String(run.hyperparameters.epochs) : '50'} epochs</strong>
+                                            <strong>
+                                              {run.hyperparameters?.epochs !==
+                                              undefined
+                                                ? String(
+                                                    run.hyperparameters.epochs,
+                                                  )
+                                                : '50'}{' '}
+                                              epochs
+                                            </strong>
                                           </li>
                                         </ul>
                                       </div>
@@ -574,11 +715,21 @@ export default function Models() {
                                         <ul>
                                           <li>
                                             <span>Start Timestamp:</span>
-                                            <strong>{new Date(run.started_at).toLocaleString()}</strong>
+                                            <strong>
+                                              {new Date(
+                                                run.started_at,
+                                              ).toLocaleString()}
+                                            </strong>
                                           </li>
                                           <li>
                                             <span>End Timestamp:</span>
-                                            <strong>{run.completed_at ? new Date(run.completed_at).toLocaleString() : '—'}</strong>
+                                            <strong>
+                                              {run.completed_at
+                                                ? new Date(
+                                                    run.completed_at,
+                                                  ).toLocaleString()
+                                                : '—'}
+                                            </strong>
                                           </li>
                                         </ul>
                                       </div>
@@ -601,7 +752,10 @@ export default function Models() {
               {/* Left Side: Register New Model */}
               <div className="models-card models-form-card">
                 <h3 className="card-title">Register Model Version</h3>
-                <p className="card-desc">Integrate new weights and register parameters directly into the U-Net registry.</p>
+                <p className="card-desc">
+                  Integrate new weights and register parameters directly into
+                  the U-Net registry.
+                </p>
 
                 <form onSubmit={handleRegisterModel} className="models-form">
                   <div className="form-group">
@@ -688,7 +842,9 @@ export default function Models() {
                     className="models-submit-btn"
                     disabled={actionLoading}
                   >
-                    {actionLoading ? 'Saving Registry record...' : 'Register Model Version'}
+                    {actionLoading
+                      ? 'Saving Registry record...'
+                      : 'Register Model Version'}
                   </button>
                 </form>
               </div>
@@ -696,7 +852,10 @@ export default function Models() {
               {/* Right Side: Registered Models Table */}
               <div className="models-card models-table-card">
                 <h3 className="card-title">Model Registry Monitor</h3>
-                <p className="card-desc">Supervise registered model versions, audit metrics, and deploy live.</p>
+                <p className="card-desc">
+                  Supervise registered model versions, audit metrics, and deploy
+                  live.
+                </p>
 
                 {loading ? (
                   <div className="models-table-loading">
@@ -705,13 +864,25 @@ export default function Models() {
                   </div>
                 ) : models.length === 0 ? (
                   <div className="models-table-empty">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      width="40"
+                      height="40"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="var(--color-text-muted)"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <circle cx="12" cy="12" r="10" />
                       <line x1="12" y1="8" x2="12" y2="16" />
                       <line x1="8" y1="12" x2="16" y2="12" />
                     </svg>
                     <h4>No Registered Models Found</h4>
-                    <p>Register your first trained weights file on the left to spawn U-Net registry logs.</p>
+                    <p>
+                      Register your first trained weights file on the left to
+                      spawn U-Net registry logs.
+                    </p>
                   </div>
                 ) : (
                   <div className="models-table-wrapper">
@@ -735,7 +906,9 @@ export default function Models() {
                             <React.Fragment key={model.model_id}>
                               <tr
                                 className={`run-row ${isExpanded ? 'run-row--expanded' : ''}`}
-                                onClick={() => toggleExpandModelRow(model.model_id)}
+                                onClick={() =>
+                                  toggleExpandModelRow(model.model_id)
+                                }
                               >
                                 <td className="cell-id">
                                   <code>{model.model_id.slice(0, 8)}</code>
@@ -744,13 +917,25 @@ export default function Models() {
                                   <strong>{model.name}</strong>
                                 </td>
                                 <td>
-                                  <span className={`status-badge status-badge--${model.status}`}>
-                                    {isDeployed && <span className="pulse-dot" style={{ backgroundColor: 'var(--color-success)' }} />}
+                                  <span
+                                    className={`status-badge status-badge--${model.status}`}
+                                  >
+                                    {isDeployed && (
+                                      <span
+                                        className="pulse-dot"
+                                        style={{
+                                          backgroundColor:
+                                            'var(--color-success)',
+                                        }}
+                                      />
+                                    )}
                                     {model.status}
                                   </span>
                                 </td>
                                 <td className="cell-time">
-                                  {new Date(model.created_at).toLocaleDateString([], {
+                                  {new Date(
+                                    model.created_at,
+                                  ).toLocaleDateString([], {
                                     month: 'short',
                                     day: 'numeric',
                                     year: 'numeric',
@@ -761,7 +946,9 @@ export default function Models() {
                                     {!isDeployed && (
                                       <button
                                         className="deploy-btn"
-                                        onClick={(e) => handleDeployModel(model.model_id, e)}
+                                        onClick={(e) =>
+                                          handleDeployModel(model.model_id, e)
+                                        }
                                         title="Deploy this version active"
                                         disabled={actionLoading}
                                       >
@@ -770,7 +957,9 @@ export default function Models() {
                                     )}
                                     <button
                                       className="delete-btn"
-                                      onClick={(e) => handleDeleteModel(model.model_id, e)}
+                                      onClick={(e) =>
+                                        handleDeleteModel(model.model_id, e)
+                                      }
                                       title="Delete model version"
                                       disabled={actionLoading}
                                     >
@@ -789,15 +978,28 @@ export default function Models() {
                                         <ul>
                                           <li>
                                             <span>Artifact URI:</span>
-                                            <strong className="artifact-strong">{detail?.artifact_uri || '—'}</strong>
+                                            <strong className="artifact-strong">
+                                              {detail?.artifact_uri || '—'}
+                                            </strong>
                                           </li>
                                           <li>
                                             <span>Description:</span>
-                                            <strong style={{ textAlign: "right" }}>{detail?.description || 'No description provided.'}</strong>
+                                            <strong
+                                              style={{ textAlign: 'right' }}
+                                            >
+                                              {detail?.description ||
+                                                'No description provided.'}
+                                            </strong>
                                           </li>
                                           <li>
                                             <span>Registration Time:</span>
-                                            <strong>{detail ? new Date(detail.created_at).toLocaleString() : '—'}</strong>
+                                            <strong>
+                                              {detail
+                                                ? new Date(
+                                                    detail.created_at,
+                                                  ).toLocaleString()
+                                                : '—'}
+                                            </strong>
                                           </li>
                                         </ul>
                                       </div>
@@ -807,19 +1009,42 @@ export default function Models() {
                                         <ul>
                                           <li>
                                             <span>F1 Validation:</span>
-                                            <strong>{detail?.f1_score ? (detail.f1_score * 100).toFixed(2) + '%' : '—'}</strong>
+                                            <strong>
+                                              {detail?.f1_score
+                                                ? (
+                                                    detail.f1_score * 100
+                                                  ).toFixed(2) + '%'
+                                                : '—'}
+                                            </strong>
                                           </li>
                                           <li>
                                             <span>Precision:</span>
-                                            <strong>{detail?.precision ? (detail.precision * 100).toFixed(2) + '%' : '—'}</strong>
+                                            <strong>
+                                              {detail?.precision
+                                                ? (
+                                                    detail.precision * 100
+                                                  ).toFixed(2) + '%'
+                                                : '—'}
+                                            </strong>
                                           </li>
                                           <li>
                                             <span>Recall:</span>
-                                            <strong>{detail?.recall ? (detail.recall * 100).toFixed(2) + '%' : '—'}</strong>
+                                            <strong>
+                                              {detail?.recall
+                                                ? (detail.recall * 100).toFixed(
+                                                    2,
+                                                  ) + '%'
+                                                : '—'}
+                                            </strong>
                                           </li>
                                           <li>
                                             <span>Inference Latency:</span>
-                                            <strong>{detail?.inference_latency_ms ? detail.inference_latency_ms + ' ms' : '—'}</strong>
+                                            <strong>
+                                              {detail?.inference_latency_ms
+                                                ? detail.inference_latency_ms +
+                                                  ' ms'
+                                                : '—'}
+                                            </strong>
                                           </li>
                                         </ul>
                                       </div>

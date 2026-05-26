@@ -39,7 +39,8 @@ export default function Dashboard() {
   // ── Data State ──
   const [metrics, setMetrics] = useState<DashboardMetricsResponse | null>(null);
   const [f1History, setF1History] = useState<F1HistoryResponse | null>(null);
-  const [distribution, setDistribution] = useState<DataDistributionResponse | null>(null);
+  const [distribution, setDistribution] =
+    useState<DataDistributionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [runs, setRuns] = useState<TrainingRunSummary[]>([]);
@@ -67,7 +68,9 @@ export default function Dashboard() {
         listTrainingRuns().catch(() => []),
       ]);
 
-      setRuns(runsRes.filter(r => (r.status === 'completed' || r.status == 'failed')));
+      setRuns(
+        runsRes.filter((r) => r.status === 'completed' || r.status == 'failed'),
+      );
       setMetrics(metricsRes);
       setF1History(f1Res);
       setDistribution(distRes);
@@ -80,8 +83,10 @@ export default function Dashboard() {
 
   // ── Chart Mathematics (Line Chart) ──
   const rawPoints = f1History?.data_points || [];
-  const minEpoch = rawPoints.length > 0 ? Math.min(...rawPoints.map((p) => p.epoch)) : 0;
-  const maxEpoch = rawPoints.length > 0 ? Math.max(...rawPoints.map((p) => p.epoch)) : 50;
+  const minEpoch =
+    rawPoints.length > 0 ? Math.min(...rawPoints.map((p) => p.epoch)) : 0;
+  const maxEpoch =
+    rawPoints.length > 0 ? Math.max(...rawPoints.map((p) => p.epoch)) : 50;
   const rangeEpoch = maxEpoch - minEpoch || 1;
 
   const points = rawPoints.map((p) => {
@@ -94,8 +99,11 @@ export default function Dashboard() {
   const linePath =
     points.length > 0
       ? points
-        .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-        .join(' ')
+          .map(
+            (p, i) =>
+              `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`,
+          )
+          .join(' ')
       : '';
 
   // SVG Closed Path for linear-gradient area fill
@@ -143,11 +151,17 @@ export default function Dashboard() {
 
   // ── Chart Mathematics (Bar Chart) ──
   const barData = distribution?.species_counts || [];
-  const maxCount = barData.length > 0 ? Math.max(...barData.map((d) => d.count)) : 10;
+  const maxCount =
+    barData.length > 0 ? Math.max(...barData.map((d) => d.count)) : 10;
 
   // Deployed Model Version Info
-  const hasActiveModel = f1History && f1History.model_version && f1History.model_version !== 'unknown';
-  const modelName = hasActiveModel ? f1History.model_version : 'No Deployed Model';
+  const hasActiveModel =
+    f1History &&
+    f1History.model_version &&
+    f1History.model_version !== 'unknown';
+  const modelName = hasActiveModel
+    ? f1History.model_version
+    : 'No Deployed Model';
 
   return (
     <div className="dash-page">
@@ -161,7 +175,8 @@ export default function Dashboard() {
               <span className="dash-breadcrumb">MONITORING &amp; KPI</span>
               <h1 className="dash-title">Dashboard Analytics</h1>
               <p className="dash-subtitle">
-                System telemetry, retraining validation, and dataset annotation indices.
+                System telemetry, retraining validation, and dataset annotation
+                indices.
               </p>
             </div>
             <div className="dash-header-right">
@@ -182,9 +197,14 @@ export default function Dashboard() {
                     disabled={loading}
                   >
                     <option value="">All Runs</option>
-                    {runs.map(r => (
+                    {runs.map((r) => (
                       <option key={r.run_id} value={r.run_id}>
-                        {r.status === 'completed' ? '✓' : '✗'} {new Date(r.started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} — F1: {((r.final_f1 ?? 0) * 100).toFixed(1)}%
+                        {r.status === 'completed' ? '✓' : '✗'}{' '}
+                        {new Date(r.started_at).toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                        })}{' '}
+                        — F1: {((r.final_f1 ?? 0) * 100).toFixed(1)}%
                       </option>
                     ))}
                   </select>
@@ -193,7 +213,9 @@ export default function Dashboard() {
             </div>
           </header>
 
-          {error && <div className="dash-alert dash-alert--warning">{error}</div>}
+          {error && (
+            <div className="dash-alert dash-alert--warning">{error}</div>
+          )}
 
           {loading && !metrics ? (
             <div className="dash-loading-screen">
@@ -209,14 +231,21 @@ export default function Dashboard() {
                   <div className="dash-card-kpi-left">
                     <span className="kpi-label">VALIDATION F1 SCORE</span>
                     <span className="kpi-value">
-                      {metrics && metrics.f1_score > 0 ? (metrics.f1_score * 100).toFixed(2) : '0.00'}%
+                      {metrics && metrics.f1_score > 0
+                        ? (metrics.f1_score * 100).toFixed(2)
+                        : '0.00'}
+                      %
                     </span>
                     {metrics && metrics.f1_score > 0 ? (
                       <span className="kpi-badge kpi-badge--success">
-                        {selectedRunId ? 'This training run' : 'Best across all runs'}
+                        {selectedRunId
+                          ? 'This training run'
+                          : 'Best across all runs'}
                       </span>
                     ) : (
-                      <span className="kpi-badge kpi-badge--muted">No retraining data</span>
+                      <span className="kpi-badge kpi-badge--muted">
+                        No retraining data
+                      </span>
                     )}
                   </div>
                   <div className="dash-card-kpi-right">
@@ -235,7 +264,11 @@ export default function Dashboard() {
                           cy="18"
                           r="15.915"
                           fill="none"
-                          stroke={metrics && metrics.f1_score > 0 ? 'var(--color-primary-light)' : 'var(--color-text-muted)'}
+                          stroke={
+                            metrics && metrics.f1_score > 0
+                              ? 'var(--color-primary-light)'
+                              : 'var(--color-text-muted)'
+                          }
                           strokeWidth="2.5"
                           strokeDasharray={`${metrics && metrics.f1_score > 0 ? metrics.f1_score * 100 : 0} ${100 - (metrics && metrics.f1_score > 0 ? metrics.f1_score * 100 : 0)}`}
                           strokeDashoffset="25"
@@ -261,14 +294,24 @@ export default function Dashboard() {
                     </span>
                     {metrics && metrics.throughput_img_per_s > 0 ? (
                       <span className="kpi-badge kpi-badge--info">
-                        {selectedRunId ? 'This run benchmark' : 'Latest benchmark'}
+                        {selectedRunId
+                          ? 'This run benchmark'
+                          : 'Latest benchmark'}
                       </span>
                     ) : (
-                      <span className="kpi-badge kpi-badge--muted">Calculation Failed</span>
+                      <span className="kpi-badge kpi-badge--muted">
+                        Calculation Failed
+                      </span>
                     )}
                   </div>
                   <div className="dash-card-kpi-right">
-                    <div className="throughput-gauge-icon" style={{ opacity: metrics && metrics.throughput_img_per_s > 0 ? 1 : 0.4 }}>
+                    <div
+                      className="throughput-gauge-icon"
+                      style={{
+                        opacity:
+                          metrics && metrics.throughput_img_per_s > 0 ? 1 : 0.4,
+                      }}
+                    >
                       <svg
                         width="36"
                         height="36"
@@ -287,16 +330,20 @@ export default function Dashboard() {
                 </div>
 
                 {/* Model Details Summary */}
-                <div className={`dash-card dash-card--kpi dash-card--model ${hasActiveModel ? '' : 'dash-card--model-inactive'}`}>
+                <div
+                  className={`dash-card dash-card--kpi dash-card--model ${hasActiveModel ? '' : 'dash-card--model-inactive'}`}
+                >
                   <div className="model-summary-info">
                     <span className="kpi-label">ACTIVE MODEL CONFIG</span>
-                    <span className="model-version-name">
-                      {modelName}
-                    </span>
+                    <span className="model-version-name">{modelName}</span>
                     {hasActiveModel ? (
-                      <span className="model-status-badge">DEPLOYED &amp; ACTIVE</span>
+                      <span className="model-status-badge">
+                        DEPLOYED &amp; ACTIVE
+                      </span>
                     ) : (
-                      <span className="model-status-badge model-status-badge--standby">STANDBY STATE</span>
+                      <span className="model-status-badge model-status-badge--standby">
+                        STANDBY STATE
+                      </span>
                     )}
                   </div>
                 </div>
@@ -305,16 +352,23 @@ export default function Dashboard() {
               {/* ── Section 2: Charts Grid ─────────────────────────────────── */}
               {f1History?.data_points.length === 0 ? (
                 <div className="chart-empty-state">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
-                    stroke="var(--color-text-muted)" strokeWidth="1.5"
-                    strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="48"
+                    height="48"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="var(--color-text-muted)"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                   </svg>
                   <h4>No Training History Yet</h4>
                   <p>
                     Start a training run from the{' '}
-                    <a href="/models?tab=retraining">Models page</a>{' '}
-                    to see validation metrics here.
+                    <a href="/models?tab=retraining">Models page</a> to see
+                    validation metrics here.
                   </p>
                 </div>
               ) : (
@@ -339,14 +393,26 @@ export default function Dashboard() {
                     <div className="line-chart-wrapper">
                       {rawPoints.length === 0 ? (
                         <div className="chart-empty-state">
-                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <svg
+                            width="48"
+                            height="48"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="var(--color-text-muted)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
                             <line x1="18" y1="20" x2="18" y2="10" />
                             <line x1="12" y1="20" x2="12" y2="4" />
                             <line x1="6" y1="20" x2="6" y2="14" />
                             <line x1="2" y1="20" x2="22" y2="20" />
                           </svg>
                           <h4>No Retraining F1 Logged</h4>
-                          <p>Establish a training pipeline run to visualize F1 validation score progression across epochs.</p>
+                          <p>
+                            Establish a training pipeline run to visualize F1
+                            validation score progression across epochs.
+                          </p>
                         </div>
                       ) : (
                         <svg
@@ -357,9 +423,23 @@ export default function Dashboard() {
                         >
                           {/* Gradient Definitions */}
                           <defs>
-                            <linearGradient id="chartAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="var(--color-primary-light)" stopOpacity="0.4" />
-                              <stop offset="100%" stopColor="var(--color-primary-light)" stopOpacity="0.0" />
+                            <linearGradient
+                              id="chartAreaGrad"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor="var(--color-primary-light)"
+                                stopOpacity="0.4"
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="var(--color-primary-light)"
+                                stopOpacity="0.0"
+                              />
                             </linearGradient>
                           </defs>
 
@@ -391,7 +471,8 @@ export default function Dashboard() {
 
                           {/* X-axis tick epoch tags */}
                           {epochTicks.map((val, idx) => {
-                            const x = PAD_L + ((val - minEpoch) / rangeEpoch) * CHART_W;
+                            const x =
+                              PAD_L + ((val - minEpoch) / rangeEpoch) * CHART_W;
                             return (
                               <g key={idx}>
                                 <text
@@ -477,7 +558,9 @@ export default function Dashboard() {
                             top: `${((hoveredPoint.y - 48) / VIEW_H) * 100}%`,
                           }}
                         >
-                          <span className="tooltip-title">Epoch {hoveredPoint.epoch}</span>
+                          <span className="tooltip-title">
+                            Epoch {hoveredPoint.epoch}
+                          </span>
                           <span className="tooltip-val">
                             F1: {(hoveredPoint.f1_score * 100).toFixed(2)}%
                           </span>
@@ -491,30 +574,52 @@ export default function Dashboard() {
                     <div className="chart-header">
                       <div className="chart-header-title">
                         <h3>Annotation Species Distribution</h3>
-                        <p>Aggregated sample count of verified annotations per species inside our database.</p>
+                        <p>
+                          Aggregated sample count of verified annotations per
+                          species inside our database.
+                        </p>
                       </div>
                     </div>
 
                     <div className="bar-chart-wrapper">
                       {barData.length === 0 ? (
                         <div className="chart-empty-state">
-                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <svg
+                            width="48"
+                            height="48"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="var(--color-text-muted)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
                             <circle cx="12" cy="12" r="10" />
                             <line x1="12" y1="8" x2="12" y2="12" />
                             <line x1="12" y1="16" x2="12.01" y2="16" />
                           </svg>
                           <h4>No Annotation Metrics Indexed</h4>
-                          <p>Verify and save predictions in the Inference Lab to populate plant species sample indices.</p>
+                          <p>
+                            Verify and save predictions in the Inference Lab to
+                            populate plant species sample indices.
+                          </p>
                         </div>
                       ) : (
                         <div className="bar-chart-list">
                           {barData.map((d, idx) => {
-                            const pctWidth = ((d.count / maxCount) * 100).toFixed(1);
+                            const pctWidth = (
+                              (d.count / maxCount) *
+                              100
+                            ).toFixed(1);
                             return (
                               <div key={idx} className="bar-row">
                                 <div className="bar-label-group">
-                                  <span className="bar-label-species">{d.species}</span>
-                                  <span className="bar-label-count">{d.count} confirmed</span>
+                                  <span className="bar-label-species">
+                                    {d.species}
+                                  </span>
+                                  <span className="bar-label-count">
+                                    {d.count} confirmed
+                                  </span>
                                 </div>
                                 <div className="bar-track">
                                   <div

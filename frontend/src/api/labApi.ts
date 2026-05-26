@@ -14,17 +14,17 @@ import type { AnnotationResponse } from '../types/api';
  * optionally scoped to a single dataset, in stable creation order.
  */
 export async function getLabQueue(params?: {
-    dataset_id?: string;
-    page?: number;
-    page_size?: number;
+  dataset_id?: string;
+  page?: number;
+  page_size?: number;
 }): Promise<AnnotationResponse[]> {
-    return getAnnotations({
-        status: 'review_required',
-        dataset_id: params?.dataset_id,
-        page: params?.page,
-        page_size: params?.page_size ?? 50,
-        order: 'asc',
-    });
+  return getAnnotations({
+    status: 'review_required',
+    dataset_id: params?.dataset_id,
+    page: params?.page,
+    page_size: params?.page_size ?? 50,
+    order: 'asc',
+  });
 }
 
 /**
@@ -33,14 +33,14 @@ export async function getLabQueue(params?: {
  * On success the annotation transitions to status `annotated`.
  */
 export async function submitCorrectedMask(
-    annotationId: string,
-    maskBlob: Blob,
+  annotationId: string,
+  maskBlob: Blob,
 ): Promise<AnnotationResponse> {
-    const form = new FormData();
-    form.append('mask', maskBlob, 'corrected_mask.png');
+  const form = new FormData();
+  form.append('mask', maskBlob, 'corrected_mask.png');
 
-    return apiClient<AnnotationResponse>(
-        `/annotations/${annotationId}/confirm`,
-        { method: 'POST', body: form },
-    );
+  return apiClient<AnnotationResponse>(`/annotations/${annotationId}/confirm`, {
+    method: 'POST',
+    body: form,
+  });
 }

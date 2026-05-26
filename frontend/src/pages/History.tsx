@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import ResultsView from '../components/ResultsView';
-import { getPredictions, deletePrediction, getPrediction } from '../api/inferenceApi';
+import {
+  getPredictions,
+  deletePrediction,
+  getPrediction,
+} from '../api/inferenceApi';
 import type { PredictionResponse } from '../types/api';
 import './History.css';
 
@@ -11,7 +15,8 @@ export default function History() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [predictions, setPredictions] = useState<PredictionResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPrediction, setSelectedPrediction] = useState<PredictionResponse | null>(null);
+  const [selectedPrediction, setSelectedPrediction] =
+    useState<PredictionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
 
@@ -26,7 +31,9 @@ export default function History() {
       getPrediction(predId)
         .then((pred) => {
           setSelectedPrediction(pred);
-          void getPredictions(1, 50).then(setPredictions).catch(() => undefined);
+          void getPredictions(1, 50)
+            .then(setPredictions)
+            .catch(() => undefined);
         })
         .catch((err) => {
           console.error('Failed to load specific prediction:', err);
@@ -54,7 +61,12 @@ export default function History() {
 
   async function handleDiscard(pred: PredictionResponse, e?: React.MouseEvent) {
     if (e) e.stopPropagation();
-    if (!window.confirm('Delete this prediction from history? This cannot be undone.')) return;
+    if (
+      !window.confirm(
+        'Delete this prediction from history? This cannot be undone.',
+      )
+    )
+      return;
     setDiscarding(true);
     try {
       await deletePrediction(pred.prediction_id);
@@ -87,15 +99,24 @@ export default function History() {
   // Filter predictions
   const filteredPredictions = predictions.filter((pred) => {
     const matchesSearch =
-      (pred.input_filename || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (pred.metadata.species || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (pred.metadata.treatment || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesModel = modelFilter === '' || pred.metadata.model_version === modelFilter;
+      (pred.input_filename || '')
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (pred.metadata.species || '')
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (pred.metadata.treatment || '')
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+    const matchesModel =
+      modelFilter === '' || pred.metadata.model_version === modelFilter;
     return matchesSearch && matchesModel;
   });
 
   // Extract unique model versions for filter dropdown
-  const uniqueModels = Array.from(new Set(predictions.map((p) => p.metadata.model_version))).filter(Boolean);
+  const uniqueModels = Array.from(
+    new Set(predictions.map((p) => p.metadata.model_version)),
+  ).filter(Boolean);
 
   return (
     <div className="history-page">
@@ -105,22 +126,31 @@ export default function History() {
         <div className="history-container">
           {selectedPrediction ? (
             <div className="history-detail-view">
-              <button
-                className="history-back-btn"
-                onClick={handleBack}
-              >
+              <button className="history-back-btn" onClick={handleBack}>
                 ← Back to History
               </button>
               <ResultsView
                 result={selectedPrediction}
                 filePreviewUrl={
-                  selectedPrediction.input_url ?? selectedPrediction.segmentation_mask_url ?? null
+                  selectedPrediction.input_url ??
+                  selectedPrediction.segmentation_mask_url ??
+                  null
                 }
                 deployedModelName={selectedPrediction.metadata.model_version}
                 isHistoryView={true}
                 onDiscard={() => void handleDiscard(selectedPrediction)}
               />
-              {discarding && <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', marginTop: '1rem' }}>Deleting...</p>}
+              {discarding && (
+                <p
+                  style={{
+                    textAlign: 'center',
+                    color: 'var(--color-text-muted)',
+                    marginTop: '1rem',
+                  }}
+                >
+                  Deleting...
+                </p>
+              )}
             </div>
           ) : (
             <div className="history-list-view">
@@ -165,7 +195,9 @@ export default function History() {
                       >
                         <option value="">All Models</option>
                         {uniqueModels.map((m) => (
-                          <option key={m} value={m}>{m}</option>
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -179,16 +211,31 @@ export default function History() {
                   <p>Loading your history...</p>
                 </div>
               ) : predictions.length === 0 ? (
-                <div className="history-empty" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+                <div
+                  className="history-empty"
+                  style={{ textAlign: 'center', padding: '3rem 1rem' }}
+                >
                   <h2>No history found</h2>
-                  <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>You haven't run any inference scans yet.</p>
-                  <button className="history-refresh-btn" onClick={() => navigate('/inference')}>
+                  <p
+                    style={{
+                      color: 'var(--color-text-muted)',
+                      marginBottom: '1.5rem',
+                    }}
+                  >
+                    You haven't run any inference scans yet.
+                  </p>
+                  <button
+                    className="history-refresh-btn"
+                    onClick={() => navigate('/inference')}
+                  >
                     + Launch Inference Lab
                   </button>
                 </div>
               ) : filteredPredictions.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem' }}>
-                  <p style={{ color: 'var(--color-text-muted)' }}>No logs match your search criteria.</p>
+                  <p style={{ color: 'var(--color-text-muted)' }}>
+                    No logs match your search criteria.
+                  </p>
                 </div>
               ) : (
                 <div className="history-grid">
@@ -226,15 +273,33 @@ export default function History() {
                             </span>
                           </td>
                           <td>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <button className="history-view-btn" style={{ padding: '4px 8px', fontSize: '11px', margin: 0 }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                gap: '8px',
+                                alignItems: 'center',
+                              }}
+                            >
+                              <button
+                                className="history-view-btn"
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  margin: 0,
+                                }}
+                              >
                                 View
                               </button>
                               <button
                                 className="lib-ds-delete-btn"
                                 title="Delete prediction"
                                 onClick={(e) => void handleDiscard(pred, e)}
-                                style={{ margin: 0, padding: '4px', display: 'flex', alignItems: 'center' }}
+                                style={{
+                                  margin: 0,
+                                  padding: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                }}
                               >
                                 <svg
                                   width="14"

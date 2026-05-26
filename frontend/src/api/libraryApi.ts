@@ -108,21 +108,33 @@ export async function getAnnotations(params?: {
 }
 
 /** GET /annotations/:id — single annotation detail. */
-export async function getAnnotationDetail(id: string): Promise<AnnotationResponse> {
+export async function getAnnotationDetail(
+  id: string,
+): Promise<AnnotationResponse> {
   return apiClient<AnnotationResponse>(`/annotations/${id}`);
 }
 
 /** POST /annotations:id/run-inference - (re)run inference on an annotatino*/
-export async function runAnnotationInference(annotationId: string): Promise<MessageResponse> {
-  return apiClient<MessageResponse>(`/annotations/${annotationId}/run-inference`, {
-    method: 'POST',
-  });
+export async function runAnnotationInference(
+  annotationId: string,
+): Promise<MessageResponse> {
+  return apiClient<MessageResponse>(
+    `/annotations/${annotationId}/run-inference`,
+    {
+      method: 'POST',
+    },
+  );
 }
 
 /** POST /annotations/:id/update — update annotation detail. */
 export async function updateAnnotationMetadata(
   id: string,
-  body: { species?: string; age_days?: number; treatment?: string; growth_stage?: string },
+  body: {
+    species?: string;
+    age_days?: number;
+    treatment?: string;
+    growth_stage?: string;
+  },
 ): Promise<AnnotationResponse> {
   return apiClient<AnnotationResponse>(`/annotations/${id}/update`, {
     method: 'POST',
@@ -174,11 +186,21 @@ export async function uploadDatasetImages(
       const message = (err as Error).message || 'Unknown error';
       // Map API error messages to user-friendly ones
       let friendly = `"${file.name}": `;
-      if (message.includes('413') || message.toLowerCase().includes('too large')) {
+      if (
+        message.includes('413') ||
+        message.toLowerCase().includes('too large')
+      ) {
         friendly += 'file exceeds the 50MB limit.';
-      } else if (message.includes('415') || message.toLowerCase().includes('unsupported')) {
+      } else if (
+        message.includes('415') ||
+        message.toLowerCase().includes('unsupported')
+      ) {
         friendly += 'unsupported format. Use PNG, TIFF, or JPEG.';
-      } else if (message.includes('409') || message.toLowerCase().includes('identical') || message.toLowerCase().includes('duplicate')) {
+      } else if (
+        message.includes('409') ||
+        message.toLowerCase().includes('identical') ||
+        message.toLowerCase().includes('duplicate')
+      ) {
         friendly += 'already exists in this dataset.';
       } else if (message.includes('404')) {
         friendly += 'dataset not found.';
@@ -194,12 +216,13 @@ export async function uploadDatasetImages(
 }
 
 /** POST /datasets/{id}/run-inference — trigger background inference on all pending images */
-export async function runDatasetInference(datasetId: string): Promise<MessageResponse> {
+export async function runDatasetInference(
+  datasetId: string,
+): Promise<MessageResponse> {
   return apiClient<MessageResponse>(`/datasets/${datasetId}/run-inference`, {
     method: 'POST',
   });
 }
-
 
 export interface DatasetImportResponse {
   dataset_id: string;
