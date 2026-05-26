@@ -53,6 +53,7 @@ COPY --from=deps /opt/npec_models /opt/npec_models
 
 # Application source only — npec_cv is installed, no longer copied
 COPY api/ ./api/
+COPY lineage/ ./lineage/
 
 # Non-root user
 RUN adduser --disabled-password --gecos "" --uid 1001 appuser \
