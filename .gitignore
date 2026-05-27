@@ -56,3 +56,5 @@ artifacts/models
 test_lineage_mock.py
 tree.py
 tree.txt
+
+*.zip

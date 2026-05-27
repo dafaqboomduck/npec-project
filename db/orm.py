@@ -536,7 +536,6 @@ class InferenceAuditLog(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     prediction_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("predictions.id", ondelete="SET NULL"),
         nullable=True,
     )
     model_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -564,7 +563,6 @@ class InferenceAuditLog(Base):
         server_default=func.now(),
     )
 
-    prediction: Mapped[Optional["Prediction"]] = relationship()
     model_version: Mapped[Optional["ModelVersion"]] = relationship()
 
     __table_args__ = (
