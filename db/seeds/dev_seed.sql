@@ -55,7 +55,7 @@ VALUES (
     'NPEC U-Net Baseline',
     'Placeholder baseline shipped with the project. Pre-pipeline artifact — no upstream training run. See migration 0010 for the baseline flag semantics.',
     'deployed',
-    0.87, 0.85, 0.89, 31352,
+    0.8813, 0.0, 0.0, 31352,
     '/app/artifacts/models/v1/',
     now(),
     true

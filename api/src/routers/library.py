@@ -1188,7 +1188,6 @@ async def delete_model(
 async def deploy_model(
     model_id: UUID,
     user: Annotated[TokenData, Depends(require_admin)] = None,
-    db: AsyncSession = Depends(get_session),
     deployment_service: AbstractDeploymentService = Depends(get_deployment_service),
 ) -> MessageResponse:
     """Trigge deployment for the model with `model_id`.
@@ -1198,7 +1197,6 @@ async def deploy_model(
     Args:
         model_id: UUID of the model to deploy.
         user: Admin-role authenticated user.
-        db: Injected database session.
         deployment_service: Injected deployment service.
 
     Returns:
