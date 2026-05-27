@@ -514,4 +514,28 @@
     font-size: 0.825rem;
     font-weight: 700;
     cursor: pointer;
-    transition: background var(--transition
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.lab-done-btn--secondary {
+    background: var(--color-bg-white);
+    border: 1.5px solid var(--color-border);
+    color: var(--color-text-secondary);
+}
+
+.lab-done-btn--secondary:hover {
+    background: var(--color-bg-subtle);
+    color: var(--color-primary);
+    border-color: var(--color-primary-light);
+}
+
+.lab-done-btn--primary {
+    background: var(--color-bg-white);
+    border: 1.5px solid var(--color-border);
+    color: var(--color-primary);
+}
+
+.lab-done-btn--primary:hover {
+    background: var(--color-bg-subtle);
+    border-color: var(--color-primary-light);
+}
