@@ -18,3 +18,6 @@ dependencies:
       # Azure ML experiment tracking
       - mlflow>=2.10
       - azureml-mlflow
+      # Azure ML SDK — needed by register_model_if_better.py inside the cluster
+      - azure-ai-ml>=1.12
+      - azure-identity>=1.15

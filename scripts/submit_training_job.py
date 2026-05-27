@@ -1,4 +1,4 @@
-"""Submit a root-detection retraining job to Azure ML and register the result.
+"""Submit a root-detection retraining job to Azure ML.
 
 Run this script from the repo root to kick off a training job:
     python scripts/submit_training_job.py
@@ -7,9 +7,9 @@ The script will:
   1. Register (or reuse) the training environment in Azure ML.
   2. Submit a Command job on the GPU compute cluster.
   3. Stream logs so you can follow progress.
-  4. Register the trained model as a new version of 'root-detection'.
 
-Every run produces a new model version — old versions are never deleted.
+After training completes, run submit_eval_job.py to evaluate and
+conditionally register the model if it meets the F1 threshold.
 """
 
 import json
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from azure.ai.ml import Input, MLClient, Output, command
 from azure.ai.ml.constants import AssetTypes, InputOutputModes
-from azure.ai.ml.entities import Environment, JobResourceConfiguration, Model
+from azure.ai.ml.entities import Environment, JobResourceConfiguration
 from azure.identity import AzureCliCredential
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -27,7 +27,7 @@ ENV_YAML = REPO_ROOT / "environments" / "azure-train-env.yml"
 COMPUTE_NAME = "lambda-0"
 INSTANCE_TYPE = "gpu"  # requests 1 GPU on lambda-0
 ENV_NAME = "root-detection-train"
-MODEL_NAME = "root-detection"
+MAX_IMAGES = 5  # set to None to train on the full dataset
 
 
 def get_client() -> MLClient:
@@ -67,17 +67,22 @@ def submit_job(client: MLClient, env_label: str) -> str:
         code=str(REPO_ROOT),
         command=(
             "python scripts/train_root_detection.py "
-            "--data_dir ${{inputs.raw_data}} "
-            "--output_dir ${{outputs.model_output}}"
+            "--data_dir ${{inputs.train_data}} "
+            "--val_dir ${{inputs.val_data}} "
+            "--output_dir ${{outputs.model_output}} " + (f"--max_images {MAX_IMAGES}" if MAX_IMAGES is not None else "")
         ),
         environment=env_label,
         compute=COMPUTE_NAME,
         resources=JobResourceConfiguration(instance_type=INSTANCE_TYPE),
         inputs={
-            # Raw images + masks from the Azure ML data asset
-            "raw_data": Input(
+            "train_data": Input(
                 type=AssetTypes.URI_FOLDER,
-                path="azureml:cv5_hades_raw:1.1.0",
+                path="azureml:cv5_train:1.0.0",
+                mode=InputOutputModes.RO_MOUNT,
+            ),
+            "val_data": Input(
+                type=AssetTypes.URI_FOLDER,
+                path="azureml:cv5_val:1.0.0",
                 mode=InputOutputModes.RO_MOUNT,
             ),
         },
@@ -96,31 +101,18 @@ def submit_job(client: MLClient, env_label: str) -> str:
     return returned_job.name
 
 
-def register_output_model(client: MLClient, job_name: str) -> None:
-    """Register the job output as a new version of root-detection."""
-    model = Model(
-        path=f"azureml://jobs/{job_name}/outputs/model_output",
-        name=MODEL_NAME,
-        description=f"Retrained root-detection — job {job_name}",
-        type=AssetTypes.CUSTOM_MODEL,
-    )
-    registered = client.models.create_or_update(model)
-    print(f"\nRegistered: {MODEL_NAME} v{registered.version}")
-    print(f"Azure ID  : {registered.id}")
-
-
 def main() -> None:
-    """Run the full submit → stream → register pipeline."""
+    """Submit training job and stream logs."""
     client = get_client()
-
     env_label = ensure_environment(client)
     job_name = submit_job(client, env_label)
 
     print("Streaming job logs (Ctrl+C to detach — job keeps running in Azure):")
     client.jobs.stream(job_name)
 
-    register_output_model(client, job_name)
-    print("\nDone. View all model versions at: https://ml.azure.com")
+    print(f"\nTraining complete. Job name: {job_name}")
+    print("Run submit_eval_job.py to evaluate and conditionally register the model.")
+    print(f"  python scripts/submit_eval_job.py --train_job {job_name}")
 
 
 if __name__ == "__main__":

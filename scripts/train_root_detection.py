@@ -2,11 +2,15 @@
 
 Usage (submitted by Azure ML, not run manually):
     python scripts/train_root_detection.py
-        --data_dir  <mounted path to cv5_hades_raw>
+        --data_dir  <mounted path to cv5_train>
         --output_dir <path where trained model is saved>
+        [--val_dir  <mounted path to cv5_val>]
         [--patch_size 512]
         [--epochs 30]
         [--batch_size 16]
+
+If --val_dir is provided the pre-split validation set is used directly.
+If omitted the training data is split 80/20 internally.
 """
 
 import argparse
@@ -45,11 +49,18 @@ IMG_CHANNELS = 3
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for the training job."""
     parser = argparse.ArgumentParser("train_root_detection")
-    parser.add_argument("--data_dir", required=True, help="Mounted path to cv5_hades_raw")
+    parser.add_argument("--data_dir", required=True, help="Mounted path to cv5_train")
+    parser.add_argument("--val_dir", default=None, help="Mounted path to cv5_val (optional pre-split validation set)")
     parser.add_argument("--output_dir", default="outputs", help="Directory to write the trained model")
     parser.add_argument("--patch_size", type=int, default=512)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument(
+        "--max_images",
+        type=int,
+        default=None,
+        help="Limit number of source images used (None = use all). Set low for fast test runs.",
+    )
     return parser.parse_args()
 
 
@@ -278,31 +289,28 @@ def _find_data_dirs(data_dir: str) -> tuple[str, str]:
     raise FileNotFoundError(f"Cannot find images/ and masks/ inside {data_dir}.\n" f"Contents: {os.listdir(data_dir)}")
 
 
-def patchify_and_split(data_dir: str, patch_dir: str, patch_size: int) -> tuple[str, str, str, str]:
-    """Patchify raw images+masks and split 80/20 into train/val directories.
+def patchify_dir(
+    data_dir: str, out_img_dir: str, out_msk_dir: str, patch_size: int, max_images: int | None = None
+) -> int:
+    """Patchify all image/mask pairs from data_dir into out_img_dir / out_msk_dir.
 
-    Supports .tif and .png source files.
-    Mask matching: tries exact stem, then stem + '_root_mask' suffix.
-    Returns (train_img_dir, train_msk_dir, val_img_dir, val_msk_dir).
+    Returns total number of patches written.
     """
     img_dir, mask_dir = _find_data_dirs(data_dir)
     print(f"Images : {img_dir}")
     print(f"Masks  : {mask_dir}")
 
-    # List images (flat)
     img_files = {Path(f).stem.lower(): f for f in os.listdir(img_dir) if Path(f).suffix.lower() in _IMG_EXTS}
 
-    # List masks recursively (masks may live in subdirectories)
     msk_files: dict[str, str] = {}
     for root, _, files in os.walk(mask_dir):
         for f in files:
             if Path(f).suffix.lower() in _IMG_EXTS:
                 msk_files[Path(f).stem.lower()] = os.path.join(root, f)
 
-    # Debug: show what's actually in the masks directory
     print(f"Masks dir contents (top level): {os.listdir(mask_dir)[:10]}")
     print(f"Image files found : {len(img_files)}  e.g. {list(img_files.keys())[:3]}")
-    print(f"Mask files found  : {len(msk_files)}  e.g. {list(msk_files.keys())[:3]}")
+    print(f"Mask  files found : {len(msk_files)}  e.g. {list(msk_files.keys())[:3]}")
 
     valid_pairs: list[tuple[str, str]] = []
     for stem, img_fname in sorted(img_files.items()):
@@ -319,15 +327,16 @@ def patchify_and_split(data_dir: str, patch_dir: str, patch_size: int) -> tuple[
             f"Mask stems  (sample): {list(msk_files.keys())[:5]}"
         )
 
-    save_img_dir = os.path.join(patch_dir, "train_images", "train")
-    save_msk_dir = os.path.join(patch_dir, "train_masks", "train")
-    os.makedirs(save_img_dir, exist_ok=True)
-    os.makedirs(save_msk_dir, exist_ok=True)
+    if max_images is not None:
+        valid_pairs = valid_pairs[:max_images]
+        print(f"max_images={max_images} — using {len(valid_pairs)} image(s) for this run.")
+
+    os.makedirs(out_img_dir, exist_ok=True)
+    os.makedirs(out_msk_dir, exist_ok=True)
 
     total = 0
     for img_fname, msk_fname in valid_pairs:
         img = cv2.imread(os.path.join(img_dir, img_fname))
-        # msk_fname is a full path (built by os.walk), not a bare filename
         msk = cv2.imread(msk_fname, cv2.IMREAD_GRAYSCALE)
         if img is None or msk is None:
             print(f"  Skipping {img_fname} — failed to load")
@@ -340,33 +349,67 @@ def patchify_and_split(data_dir: str, patch_dir: str, patch_size: int) -> tuple[
         for i in range(0, h, patch_size):
             for j in range(0, w, patch_size):
                 name = f"{stem}_patch_{idx}.png"
-                cv2.imwrite(os.path.join(save_img_dir, name), img[i : i + patch_size, j : j + patch_size])
-                cv2.imwrite(os.path.join(save_msk_dir, name), msk[i : i + patch_size, j : j + patch_size])
+                cv2.imwrite(os.path.join(out_img_dir, name), img[i : i + patch_size, j : j + patch_size])
+                cv2.imwrite(os.path.join(out_msk_dir, name), msk[i : i + patch_size, j : j + patch_size])
                 idx += 1
         total += idx
 
-    print(f"Total patches: {total}")
+    print(f"Patches written: {total}")
     if total == 0:
         raise ValueError("Patchify produced 0 patches.")
+    return total
 
-    all_files = sorted(os.listdir(save_img_dir))
+
+def patchify_presplit(
+    train_dir: str, val_dir: str, patch_dir: str, patch_size: int, max_images: int | None = None
+) -> tuple[str, str, str, str]:
+    """Patchify pre-split train and val directories separately.
+
+    Returns (tr_img, tr_msk, vl_img, vl_msk).
+    """
+    tr_img = os.path.join(patch_dir, "train_images")
+    tr_msk = os.path.join(patch_dir, "train_masks")
+    vl_img = os.path.join(patch_dir, "val_images")
+    vl_msk = os.path.join(patch_dir, "val_masks")
+
+    print("Patchifying training set...")
+    patchify_dir(train_dir, tr_img, tr_msk, patch_size, max_images=max_images)
+    print("Patchifying validation set...")
+    patchify_dir(val_dir, vl_img, vl_msk, patch_size, max_images=max_images)
+
+    return tr_img, tr_msk, vl_img, vl_msk
+
+
+def patchify_and_split(
+    data_dir: str, patch_dir: str, patch_size: int, max_images: int | None = None
+) -> tuple[str, str, str, str]:
+    """Patchify a single data directory and split 80/20 into train/val.
+
+    Used as fallback when no pre-split val set is provided.
+    Returns (tr_img, tr_msk, vl_img, vl_msk).
+    """
+    raw_img = os.path.join(patch_dir, "all_images")
+    raw_msk = os.path.join(patch_dir, "all_masks")
+    patchify_dir(data_dir, raw_img, raw_msk, patch_size, max_images=max_images)
+
+    all_files = sorted(os.listdir(raw_img))
     train_files, val_files = train_test_split(all_files, test_size=0.2, random_state=42)
-    print(f"Train: {len(train_files)}  Val: {len(val_files)}")
+    print(f"Internal split — Train: {len(train_files)}  Val: {len(val_files)}")
 
-    tr_img = os.path.join(patch_dir, "split_train_images", "train")
-    tr_msk = os.path.join(patch_dir, "split_train_masks", "train")
-    vl_img = os.path.join(patch_dir, "split_val_images", "val")
-    vl_msk = os.path.join(patch_dir, "split_val_masks", "val")
+    tr_img = os.path.join(patch_dir, "train_images")
+    tr_msk = os.path.join(patch_dir, "train_masks")
+    vl_img = os.path.join(patch_dir, "val_images")
+    vl_msk = os.path.join(patch_dir, "val_masks")
 
     for d in [tr_img, tr_msk, vl_img, vl_msk]:
         os.makedirs(d, exist_ok=True)
 
     for f in train_files:
-        shutil.copy(os.path.join(save_img_dir, f), os.path.join(tr_img, f))
-        shutil.copy(os.path.join(save_msk_dir, f), os.path.join(tr_msk, f))
+        shutil.copy(os.path.join(raw_img, f), os.path.join(tr_img, f))
+        shutil.copy(os.path.join(raw_msk, f), os.path.join(tr_msk, f))
     for f in val_files:
-        shutil.copy(os.path.join(save_img_dir, f), os.path.join(vl_img, f))
-        shutil.copy(os.path.join(save_msk_dir, f), os.path.join(vl_msk, f))
+        shutil.copy(os.path.join(raw_img, f), os.path.join(vl_img, f))
+        shutil.copy(os.path.join(raw_msk, f), os.path.join(vl_msk, f))
 
     return tr_img, tr_msk, vl_img, vl_msk
 
@@ -382,7 +425,16 @@ def main() -> None:
     patch_dir = "/tmp/patches_512px"
 
     # 1. Patchify + split
-    tr_img, tr_msk, vl_img, vl_msk = patchify_and_split(args.data_dir, patch_dir, args.patch_size)
+    if args.val_dir:
+        print("Using pre-split validation set.")
+        tr_img, tr_msk, vl_img, vl_msk = patchify_presplit(
+            args.data_dir, args.val_dir, patch_dir, args.patch_size, max_images=args.max_images
+        )
+    else:
+        print("No val_dir provided — splitting training data 80/20 internally.")
+        tr_img, tr_msk, vl_img, vl_msk = patchify_and_split(
+            args.data_dir, patch_dir, args.patch_size, max_images=args.max_images
+        )
 
     # 2. Data generators
     print("Creating data generators...")
@@ -417,6 +469,9 @@ def main() -> None:
     # 5. Train
     print("\nStarting training...")
     with mlflow.start_run():
+        mlflow.log_param("batch_size", args.batch_size)
+        mlflow.log_param("epochs", args.epochs)
+        mlflow.log_param("patch_size", args.patch_size)
         mlflow.tensorflow.autolog()
 
         history = model.fit(
