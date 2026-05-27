@@ -32,7 +32,7 @@ services:
       start_period: 15s
 
   migrations:
-    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-migrations:sha-a6657dc
+    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-migrations:latest
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
@@ -40,7 +40,7 @@ services:
     restart: on-failure
 
   api:
-    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-api:sha-a6657dc
+    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-api:latest
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -59,7 +59,7 @@ services:
       - migrations
 
   frontend:
-    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-frontend:sha-a6657dc
+    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-frontend:latest
     restart: unless-stopped
     ports:
       - "2022:3000"
