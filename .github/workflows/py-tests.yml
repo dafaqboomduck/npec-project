@@ -1,8 +1,8 @@
-name: Tests
+name: PyTests
 
 on:
-  push:
   pull_request:
+    branches: [main]
 
 jobs:
   test:
