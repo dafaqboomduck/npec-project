@@ -15,3 +15,5 @@ psutil
 minio
 mlflow
 pynvml
+azure-ai-ml
+azure-identity
