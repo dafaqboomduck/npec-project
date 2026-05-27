@@ -32,9 +32,10 @@ RUN --mount=type=secret,id=github_token,required=true \
     GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
     NPEC_MODELS_CACHE_DIR=/opt/npec_models \
     npec-cv download-models \
+    && mkdir -p /opt/npec_models/current \
     && ln -sfn "$(NPEC_MODELS_CACHE_DIR=/opt/npec_models \
     python -c 'from npec_cv.helpers.model_loader import get_models_dir; print(get_models_dir())')" \
-    /opt/npec_models/current
+    /opt/npec_models/current/v1
 
 # 2. Runtime
 FROM python:3.11-slim AS runtime
