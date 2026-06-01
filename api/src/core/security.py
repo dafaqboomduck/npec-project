@@ -16,8 +16,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.config import settings
+from api.src.db.session import get_session
 from api.src.schemas.auth import TokenData, UserRole
 from api.src.schemas.common import ErrorCode, ErrorResponse
 
@@ -118,8 +120,9 @@ def decode_access_token(token: str) -> TokenData:
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 
-def get_current_user(
+async def get_current_user(
     token: Annotated[str, Depends(_oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenData:
     """Validate the Bearer token and return the current user's claims.
 
@@ -131,6 +134,7 @@ def get_current_user(
 
     Args:
         token: JWT extracted from the Authorization header by FastAPI.
+        db: AsyncSession for database queries.
 
     Returns:
         TokenData for the authenticated user.
@@ -138,7 +142,20 @@ def get_current_user(
     Raises:
         HTTPException: 401 if the token is missing, invalid, or expired.
     """
-    return decode_access_token(token)
+    from api.src.repositories.users import UserRepository
+
+    token_data = decode_access_token(token)
+    user = await UserRepository(db).get_by_id(uuid.UUID(token_data.sub))
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ErrorResponse(
+                error_code=ErrorCode.UNAUTHORIZED,
+                message="Could not validate credentials.",
+            ).model_dump(),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return token_data
 
 
 def require_admin(
