@@ -56,6 +56,7 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-npec-artifacts}
       NPEC_MASKS_DIR: /tmp/npec_masks
       NPEC_ANNOTATION_MASK_DIR: /tmp/npec_annotation_masks
+      BASELINE_MODEL_URI: ${BASELINE_MODEL_URI}
     ports:
       - "2021:8000"
     volumes:
