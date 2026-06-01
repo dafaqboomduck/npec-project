@@ -30,6 +30,55 @@ export default function MaskEditor({
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
   const [maskOpacity, setMaskOpacity] = useState(0.5);
   const [isLoaded, setIsLoaded] = useState(false);
+  const historyRef = useRef<ImageData[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+
+  const saveStateToHistory = () => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    try {
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      historyRef.current.push(imgData);
+      if (historyRef.current.length > 30) {
+        historyRef.current.shift();
+      }
+      setCanUndo(true);
+    } catch (err) {
+      console.error('Failed to save state to history:', err);
+    }
+  };
+
+  const handleUndo = () => {
+    if (!canvasRef.current || historyRef.current.length === 0) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    const previousState = historyRef.current.pop();
+    if (previousState) {
+      ctx.putImageData(previousState, 0, 0);
+    }
+    setCanUndo(historyRef.current.length > 0);
+  };
+
+  // Keyboard shortcut Ctrl+Z / Cmd+Z for Undo
+  useEffect(() => {
+    if (!inline && !isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [inline, isOpen, canUndo]);
 
   // Load image and mask onto canvas
   useEffect(() => {
@@ -60,6 +109,8 @@ export default function MaskEditor({
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(mask, 0, 0);
         setIsLoaded(true);
+        historyRef.current = [];
+        setCanUndo(false);
       }
     };
 
@@ -75,6 +126,7 @@ export default function MaskEditor({
   }, [inline, isOpen, originalImageUrl, maskImageUrl]);
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+    saveStateToHistory();
     setIsDrawing(true);
     draw(e);
   };
@@ -197,6 +249,40 @@ export default function MaskEditor({
                 🧽 Eraser
               </button>
             </div>
+          </div>
+
+          <div className="me-tool-group">
+            <label>History</label>
+            <button
+              className="me-btn me-btn--secondary"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                padding: '8px',
+                fontSize: '0.8rem',
+                margin: 0,
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 7v6h6" />
+                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+              </svg>
+              Undo (Ctrl+Z)
+            </button>
           </div>
 
           <div className="me-tool-group">

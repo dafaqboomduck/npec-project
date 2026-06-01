@@ -21,6 +21,7 @@ import type {
   F1HistoryResponse,
   DataDistributionResponse,
   TrainingRunSummary,
+  F1HistoryPoint,
 } from '../types/api';
 import './Dashboard.css';
 import { listTrainingRuns } from '../api/trainingApi';
@@ -47,10 +48,13 @@ export default function Dashboard() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   // ── Interactive Hover State ──
-  const [hoveredPoint, setHoveredPoint] = useState<any | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<
+    (F1HistoryPoint & { x: number; y: number }) | null
+  >(null);
 
   useEffect(() => {
     fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchDashboardData() {
@@ -74,7 +78,7 @@ export default function Dashboard() {
       setMetrics(metricsRes);
       setF1History(f1Res);
       setDistribution(distRes);
-    } catch (err) {
+    } catch {
       setError('Could not establish connection to the analytics server.');
     } finally {
       setLoading(false);
@@ -232,9 +236,8 @@ export default function Dashboard() {
                     <span className="kpi-label">VALIDATION F1 SCORE</span>
                     <span className="kpi-value">
                       {metrics && metrics.f1_score > 0
-                        ? (metrics.f1_score * 100).toFixed(2)
+                        ? metrics.f1_score
                         : '0.00'}
-                      %
                     </span>
                     {metrics && metrics.f1_score > 0 ? (
                       <span className="kpi-badge kpi-badge--success">

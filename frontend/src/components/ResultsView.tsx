@@ -38,6 +38,7 @@ export default function ResultsView({
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [maskSaving, setMaskSaving] = useState(false);
   const [maskSaveError, setMaskSaveError] = useState<string | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const meta = result.metadata;
 
   const overlayModes: OverlayMode[] = ['scan', 'mask', 'tips'];
@@ -151,6 +152,9 @@ export default function ResultsView({
                 src={displayImageUrl}
                 alt={`${overlayMode} view`}
                 className="rv-overlay-img"
+                onClick={() => setLightboxSrc(displayImageUrl)}
+                title="Click to enlarge"
+                style={{ cursor: 'pointer' }}
               />
             ) : (
               <span className="rv-overlay-placeholder">
@@ -284,6 +288,34 @@ export default function ResultsView({
         >
           {maskSaveError}
         </p>
+      )}
+      {/* ── Lightbox ── */}
+      {lightboxSrc && (
+        <div className="ann-lightbox" onClick={() => setLightboxSrc(null)}>
+          <button
+            className="ann-lightbox-close"
+            onClick={() => setLightboxSrc(null)}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Enlarged view"
+            className="ann-lightbox-img"
+          />
+        </div>
       )}
     </div>
   );

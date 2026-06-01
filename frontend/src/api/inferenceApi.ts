@@ -39,7 +39,7 @@ export async function predict(
 
 /** Fetch all models — used in the sidebar "Inference Model" selector. */
 export async function getModelsForInference(): Promise<ModelSummary[]> {
-  return apiClient<ModelSummary[]>('/models');
+  return apiClient<ModelSummary[]>('/models', { staleTime: 10000 });
 }
 
 /** GET /predictions — paginated list of past predictions for this user. */
@@ -62,6 +62,18 @@ export async function deletePrediction(id: string): Promise<MessageResponse> {
   return apiClient<MessageResponse>(`/predictions/${id}`, {
     method: 'DELETE',
   });
+}
+
+/**
+ * GET /predictions?confirmed=false — list predictions that have not yet been
+ * confirmed (saved to the library). Newest first, capped at pageSize.
+ */
+export async function getUnconfirmedPredictions(
+  pageSize = 5,
+): Promise<PredictionResponse[]> {
+  return apiClient<PredictionResponse[]>(
+    `/predictions?confirmed=false&page_size=${pageSize}`,
+  );
 }
 
 /**

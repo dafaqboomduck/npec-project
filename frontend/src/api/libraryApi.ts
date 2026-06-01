@@ -42,7 +42,7 @@ export async function getDatasets(params?: {
   if (params?.species) qs.set('species', params.species);
   if (params?.growth_stage) qs.set('growth_stage', params.growth_stage);
   const query = qs.toString() ? `?${qs}` : '';
-  return apiClient<DatasetSummary[]>(`/datasets${query}`);
+  return apiClient<DatasetSummary[]>(`/datasets${query}`, { staleTime: 10000 });
 }
 
 /** GET /datasets/:id — single dataset detail. */

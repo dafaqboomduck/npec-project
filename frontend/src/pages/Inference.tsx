@@ -17,6 +17,7 @@ import {
   getModelsForInference,
   confirmPrediction,
   deletePrediction,
+  getUnconfirmedPredictions,
 } from '../api/inferenceApi';
 import type { PredictionResponse, ModelSummary } from '../types/api';
 import { useInferenceJobs } from '../context/InferenceJobsContext';
@@ -51,7 +52,8 @@ export default function Inference() {
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { jobs, addJob, removeJob, cancelJob } = useInferenceJobs();
+  const { jobs, addJob, removeJob, cancelJob, isDatasetRunning } =
+    useInferenceJobs();
 
   // ── Modals ──
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -84,6 +86,17 @@ export default function Inference() {
     Record<string, number>
   >({});
 
+  // ── Recent runs (persists across refreshes) ──
+  const [recentRuns, setRecentRuns] = useState<
+    import('../types/api').PredictionResponse[]
+  >([]);
+
+  function refreshRecentRuns() {
+    void getUnconfirmedPredictions(5)
+      .then(setRecentRuns)
+      .catch(() => undefined);
+  }
+
   // ── Active Session Stats ──
   const username = getUsername();
   const role = getRole();
@@ -98,7 +111,25 @@ export default function Inference() {
     dsId: string,
     dsName: string,
     count: number,
+    jobIdToUse?: string,
   ) {
+    const isResume = !!jobIdToUse;
+    // Guard: prevent duplicate runs on the same dataset unless resuming
+    if (!isResume && isDatasetRunning(dsId)) return;
+
+    const jobId = jobIdToUse || `ds-${dsId}-${Date.now()}`;
+    if (!isResume) {
+      addJob({
+        id: jobId,
+        filename: dsName,
+        startedAt: Date.now(),
+        controller: new AbortController(), // not used for cancellation yet
+        type: 'dataset',
+        datasetId: dsId,
+        datasetName: dsName,
+      });
+    }
+
     setShowSelectDatasetModal(false);
     setShowBatchProgress(true);
     setBatchDatasetName(dsName);
@@ -107,16 +138,21 @@ export default function Inference() {
     setBatchPercent(0);
     setBatchCompleted(false);
 
-    try {
-      // Trigger background inference
-      const res = await runDatasetInference(dsId);
+    let interval: ReturnType<typeof setInterval> | undefined;
 
-      // If no pending images
-      if (res.message.toLowerCase().includes('no pending')) {
-        setBatchCompleted(true);
-        setBatchPercent(100);
-        setBatchCurrentIndex(count);
-        return;
+    try {
+      if (!isResume) {
+        // Trigger background inference
+        const res = await runDatasetInference(dsId);
+
+        // If no pending images
+        if (res.message.toLowerCase().includes('no pending')) {
+          setBatchCompleted(true);
+          setBatchPercent(100);
+          setBatchCurrentIndex(count);
+          removeJob(jobId);
+          return;
+        }
       }
 
       const initialAnnotations = await getAnnotations({
@@ -135,11 +171,20 @@ export default function Inference() {
         realTotal > 0 ? Math.round((initialDone / realTotal) * 100) : 0,
       );
 
+      // If already done before resume polled
+      if (initialPending === 0) {
+        setBatchCompleted(true);
+        setBatchPercent(100);
+        setBatchCurrentIndex(realTotal);
+        removeJob(jobId);
+        return;
+      }
+
       // Poll annotations until none are pending
       const MAX_POLLS = 120; // 10 minutes at 5s intervals
       let polls = 0;
 
-      const interval = setInterval(async () => {
+      interval = setInterval(async () => {
         polls++;
         try {
           const annotations = await getAnnotations({
@@ -162,17 +207,19 @@ export default function Inference() {
             setBatchCurrentIndex(total);
             setBatchPercent(100);
             setBatchCompleted(true);
+            removeJob(jobId);
           }
         } catch {
           clearInterval(interval);
           setBatchCompleted(true);
+          removeJob(jobId);
         }
       }, 5000);
     } catch (err) {
       setBatchCompleted(true);
-      setBatchPercent(100);
-      // Show error in completed state
+      if (interval) clearInterval(interval);
       setBatchDatasetName(`Error: ${(err as Error).message}`);
+      removeJob(jobId);
     }
   }
 
@@ -180,7 +227,53 @@ export default function Inference() {
     void getModelsForInference()
       .then((ms) => setModels(ms))
       .catch(() => undefined);
+    refreshRecentRuns();
+
+    // Periodically poll recent runs every 5 seconds so they update dynamically on this page
+    const interval = setInterval(refreshRecentRuns, 5000);
+
+    // Auto-resume active dataset batch jobs from persistent state
+    const activeDatasetJob = jobs.find((j) => j.type === 'dataset');
+    if (activeDatasetJob && activeDatasetJob.datasetId) {
+      const dId = activeDatasetJob.datasetId;
+      const dName =
+        activeDatasetJob.datasetName || activeDatasetJob.filename || '';
+      const jobId = activeDatasetJob.id;
+      Promise.resolve().then(() => {
+        void runBatchInference(
+          dId,
+          dName,
+          0, // count will be fetched via initialAnnotations
+          jobId,
+        );
+      });
+    }
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Monitor recentRuns to automatically clean up active single-image jobs when they complete
+  useEffect(() => {
+    const singleImageJobs = jobs.filter((j) => j.type === 'image');
+    if (singleImageJobs.length === 0) return;
+
+    singleImageJobs.forEach((job) => {
+      // 1. Check if the file has appeared in the recent unconfirmed runs list AND was processed after the job started
+      const foundInRecent = recentRuns.some((run) => {
+        if (run.input_filename !== job.filename) return false;
+        const runTime = new Date(run.metadata.inference_timestamp).getTime();
+        return runTime >= job.startedAt - 5000; // 5-second allowance for clock sync/latency
+      });
+
+      // 2. Check if the job has timed out (e.g. 2 minutes) to prevent getting stuck
+      const isTimedOut = Date.now() - job.startedAt > 120000;
+
+      if (foundInRecent || isTimedOut) {
+        removeJob(job.id);
+      }
+    });
+  }, [recentRuns, jobs, removeJob]);
 
   const deployedModel = models.find((m) => m.status === 'deployed') ?? null;
 
@@ -227,13 +320,13 @@ export default function Inference() {
 
     const controller = new AbortController();
     const jobId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const newJob = {
+    addJob({
       id: jobId,
       filename: file.name,
       startedAt: Date.now(),
       controller,
-    };
-    addJob(newJob);
+      type: 'image',
+    });
 
     // Capture file in local scope and clear dropzone immediately to support concurrent runs!
     const currentFile = file;
@@ -243,6 +336,8 @@ export default function Inference() {
 
     try {
       const res = await predict(currentFile, controller.signal);
+      // Immediately prepend to recent runs so the entry appears without a page refresh
+      setRecentRuns((prev) => [res, ...prev].slice(0, 5));
       setResult(res);
       setFile(currentFile);
       if (currentFile.type.startsWith('image/')) {
@@ -256,6 +351,8 @@ export default function Inference() {
       }
     } finally {
       removeJob(jobId);
+      // Background sync to pick up the server-side state
+      refreshRecentRuns();
     }
   }
 
@@ -415,6 +512,55 @@ export default function Inference() {
                       {jobs.map((job) => (
                         <li key={job.id} className="running-job">
                           <div className="running-job-info">
+                            {/* Type icon */}
+                            {job.type === 'dataset' ? (
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                style={{
+                                  flexShrink: 0,
+                                  color: 'var(--color-primary)',
+                                }}
+                                aria-label="Dataset batch inference"
+                              >
+                                <ellipse cx="12" cy="5" rx="9" ry="3" />
+                                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                              </svg>
+                            ) : (
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                style={{
+                                  flexShrink: 0,
+                                  color: 'var(--color-text-muted)',
+                                }}
+                                aria-label="Single image inference"
+                              >
+                                <rect
+                                  x="3"
+                                  y="3"
+                                  width="18"
+                                  height="18"
+                                  rx="2"
+                                  ry="2"
+                                />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                              </svg>
+                            )}
                             <span
                               className="running-job-name"
                               title={job.filename}
@@ -428,16 +574,130 @@ export default function Inference() {
                               aria-hidden="true"
                             />
                           </div>
-                          <button
-                            className="running-job-cancel"
-                            title="Cancel inference"
-                            onClick={() => cancelJob(job.id)}
-                          >
-                            ✕
-                          </button>
+                          {job.type === 'image' && (
+                            <button
+                              className="running-job-cancel"
+                              title="Cancel inference"
+                              onClick={() => cancelJob(job.id)}
+                            >
+                              ✕
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ul>
+                  )}
+                </section>
+
+                {/* Recent Runs */}
+                <section className="sidebar-section">
+                  <span className="sidebar-section-label">RECENT RUNS</span>
+                  {recentRuns.length === 0 ? (
+                    <p className="running-empty">No recent unconfirmed runs.</p>
+                  ) : (
+                    <ul className="running-list" style={{ gap: '4px' }}>
+                      {recentRuns.map((run) => {
+                        const when = (() => {
+                          const diff =
+                            Date.now() -
+                            new Date(
+                              run.metadata
+                                .inference_timestamp as unknown as string,
+                            ).getTime();
+                          const m = Math.floor(diff / 60000);
+                          const h = Math.floor(m / 60);
+                          if (m < 1) return '';
+                          if (m < 60) return `${m}m`;
+                          if (h < 24) return `${h}h`;
+                          return `${Math.floor(h / 24)}d`;
+                        })();
+                        return (
+                          <li
+                            key={run.prediction_id}
+                            className="running-job"
+                            style={{
+                              cursor: 'pointer',
+                              padding: '3px 7px',
+                              gap: '6px',
+                            }}
+                            onClick={() => navigate('/library?tab=predictions')}
+                            title="View in Library → Unconfirmed Predictions"
+                          >
+                            <div
+                              className="running-job-info"
+                              style={{
+                                gap: '4px',
+                                overflow: 'hidden',
+                                flex: 1,
+                                minWidth: 0,
+                              }}
+                            >
+                              <span
+                                className="running-job-name"
+                                title={run.input_filename ?? run.prediction_id}
+                                style={{
+                                  fontSize: '11px',
+                                  flex: 1,
+                                  minWidth: 0,
+                                }}
+                              >
+                                {(run.input_filename ?? run.prediction_id)
+                                  .length > 20
+                                  ? (
+                                      run.input_filename ?? run.prediction_id
+                                    ).slice(0, 18) + '…'
+                                  : (run.input_filename ?? run.prediction_id)}
+                              </span>
+                              {when && (
+                                <span
+                                  style={{
+                                    fontSize: '9px',
+                                    color: 'var(--color-text-muted)',
+                                    flexShrink: 0,
+                                    marginLeft: 'auto',
+                                    paddingLeft: '4px',
+                                  }}
+                                >
+                                  {when}
+                                </span>
+                              )}
+                            </div>
+                            <span
+                              style={{
+                                fontSize: '9px',
+                                color: 'var(--color-primary)',
+                                fontWeight: 700,
+                                padding: '1px 5px',
+                                background: 'var(--color-tag-bg)',
+                                borderRadius: 'var(--radius-full)',
+                                flexShrink: 0,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {run.plants.length}p
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {recentRuns.length > 0 && (
+                    <button
+                      style={{
+                        marginTop: '8px',
+                        fontSize: '11px',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--color-primary)',
+                        cursor: 'pointer',
+                        padding: '4px 0',
+                        fontWeight: 600,
+                        textAlign: 'left',
+                      }}
+                      onClick={() => navigate('/library?tab=predictions')}
+                    >
+                      View all in Library ↗
+                    </button>
                   )}
                 </section>
               </aside>
@@ -658,71 +918,95 @@ export default function Inference() {
                   margin: '16px 0',
                 }}
               >
-                {datasets.map((ds) => (
-                  <button
-                    key={ds.dataset_id}
-                    disabled={datasetPendingCounts[ds.dataset_id] === 0}
-                    onClick={() =>
-                      void runBatchInference(ds.dataset_id, ds.name, ds.count)
-                    }
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '12px 16px',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      border: '1px solid var(--color-border-subtle)',
-                      borderRadius: '8px',
-                      opacity:
-                        datasetPendingCounts[ds.dataset_id] === 0 ? 0.4 : 1,
-                      cursor:
-                        datasetPendingCounts[ds.dataset_id] === 0
-                          ? 'not-allowed'
-                          : 'pointer',
-                      textAlign: 'left',
-                      color: 'var(--color-text)',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor =
-                        'var(--color-primary-light)';
-                      e.currentTarget.style.background =
-                        'rgba(255, 255, 255, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor =
-                        'var(--color-border-subtle)';
-                      e.currentTarget.style.background =
-                        'rgba(255, 255, 255, 0.03)';
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{ds.name}</div>
-                      {ds.species ||
-                        (ds.owner_email && (
-                          <div
-                            style={{
-                              fontSize: '10px',
-                              color: 'var(--color-text-muted)',
-                            }}
-                          >
-                            {ds.species ?? `Owner: ${ds.owner_email}`}
-                          </div>
-                        ))}
-                    </div>
-                    <span
-                      className="model-badge"
+                {datasets.map((ds) => {
+                  const isRunning = isDatasetRunning(ds.dataset_id);
+                  const noPending = datasetPendingCounts[ds.dataset_id] === 0;
+                  const isDisabled = isRunning || noPending;
+                  return (
+                    <button
+                      key={ds.dataset_id}
+                      disabled={isDisabled}
+                      onClick={() =>
+                        void runBatchInference(ds.dataset_id, ds.name, ds.count)
+                      }
                       style={{
-                        marginLeft: '10px',
-                        background: 'var(--color-primary-light',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 16px',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: isRunning
+                          ? '1px solid var(--color-primary-light)'
+                          : '1px solid var(--color-border-subtle)',
+                        borderRadius: '8px',
+                        opacity: isDisabled ? 0.5 : 1,
+                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        textAlign: 'left',
+                        color: 'var(--color-text)',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isDisabled) {
+                          e.currentTarget.style.borderColor =
+                            'var(--color-primary-light)';
+                          e.currentTarget.style.background =
+                            'rgba(255, 255, 255, 0.05)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isDisabled) {
+                          e.currentTarget.style.borderColor =
+                            'var(--color-border-subtle)';
+                          e.currentTarget.style.background =
+                            'rgba(255, 255, 255, 0.03)';
+                        }
                       }}
                     >
-                      {datasetPendingCounts[ds.dataset_id] !== undefined
-                        ? `${datasetPendingCounts[ds.dataset_id]} pending`
-                        : `${ds.count} scans`}
-                    </span>
-                  </button>
-                ))}
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{ds.name}</div>
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            color: isRunning
+                              ? 'var(--color-primary)'
+                              : 'var(--color-text-muted)',
+                            marginTop: '2px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          {isRunning && (
+                            <span
+                              className="running-job-spinner"
+                              style={{ width: '8px', height: '8px' }}
+                              aria-hidden="true"
+                            />
+                          )}
+                          {isRunning
+                            ? 'Inference running…'
+                            : (ds.species ?? `Owner: ${ds.owner_email}`)}
+                        </div>
+                      </div>
+                      <span
+                        className="model-badge"
+                        style={{
+                          marginLeft: '10px',
+                          background: isRunning
+                            ? 'rgba(var(--color-primary-rgb,27,67,50),0.15)'
+                            : 'var(--color-primary-light)',
+                          color: isRunning ? 'var(--color-primary)' : undefined,
+                        }}
+                      >
+                        {isRunning
+                          ? 'running'
+                          : datasetPendingCounts[ds.dataset_id] !== undefined
+                            ? `${datasetPendingCounts[ds.dataset_id]} pending`
+                            : `${ds.count} scans`}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
             <div className="modal-actions">

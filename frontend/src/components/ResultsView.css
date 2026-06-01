@@ -356,3 +356,45 @@
   color: var(--color-text-muted);
   font-family: monospace;
 }
+
+/* ── Lightbox ── */
+.ann-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.ann-lightbox-img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+}
+
+.ann-lightbox-close {
+  position: fixed;
+  top: var(--space-5);
+  right: var(--space-5);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-full);
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+  z-index: 10000;
+}
+
+.ann-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

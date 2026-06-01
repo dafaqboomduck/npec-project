@@ -13,19 +13,41 @@ function getAuthHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-interface ClientOptions extends Omit<RequestInit, 'body'> {
-  body?: any;
+export interface ClientOptions extends Omit<RequestInit, 'body'> {
+  body?: unknown;
+  staleTime?: number;
+  bypassCache?: boolean;
 }
+
+interface CacheEntry {
+  data: unknown;
+  timestamp: number;
+  staleTime: number;
+}
+
+const apiCache = new Map<string, CacheEntry>();
 
 /**
  * Core fetch wrapper that automatically handles the base URL, authentication
- * headers, and JSON serialization.
+ * headers, and JSON serialization. Includes an optional in-memory caching system
+ * that invalidates automatically on write operations.
  */
 export async function apiClient<T>(
   endpoint: string,
   options: ClientOptions = {},
 ): Promise<T> {
-  const { headers, signal, ...customOptions } = options;
+  const { headers, signal, staleTime, bypassCache, ...customOptions } = options;
+
+  const method = (customOptions.method ?? 'GET').toUpperCase();
+  const cacheKey = `${method}:${endpoint}`;
+
+  // 1. Read-Cache check
+  if (method === 'GET' && staleTime && staleTime > 0 && !bypassCache) {
+    const cached = apiCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < cached.staleTime) {
+      return cached.data as T;
+    }
+  }
 
   const config: RequestInit = {
     ...customOptions,
@@ -74,10 +96,30 @@ export async function apiClient<T>(
 
   // Handle empty responses
   if (response.status === 204) {
+    // 2. Clear cache on mutations (write operations)
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+      apiCache.clear();
+    }
     return {} as T;
   }
 
-  return response.json() as Promise<T>;
+  const result = (await response.json()) as T;
+
+  // 3. Write-Cache update
+  if (method === 'GET' && staleTime && staleTime > 0) {
+    apiCache.set(cacheKey, {
+      data: result,
+      timestamp: Date.now(),
+      staleTime,
+    });
+  }
+
+  // 4. Clear cache on mutations (write operations)
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    apiCache.clear();
+  }
+
+  return result;
 }
 
 /**

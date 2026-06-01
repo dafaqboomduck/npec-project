@@ -33,8 +33,15 @@ import type {
   DatasetImportResponse,
 } from '../api/libraryApi';
 import type { AnnotationResponse, PredictionResponse } from '../types/api';
-import { getPrediction } from '../api/inferenceApi';
+import {
+  getPrediction,
+  getUnconfirmedPredictions,
+  confirmPrediction,
+  deletePrediction,
+} from '../api/inferenceApi';
 import { getArtifactUrl } from '../api/client';
+import ResultsView from '../components/ResultsView';
+import { useInferenceJobs } from '../context/InferenceJobsContext';
 import './Library.css';
 import { useNavigate } from 'react-router-dom';
 
@@ -48,7 +55,9 @@ interface AnnotationsTabProps {
   growthFilter: string;
   speciesFilter: string;
   refreshKey?: number;
-  onAnnotationsFetched?: (annotations: AnnotationResponse[]) => void; // ADD
+  onAnnotationsFetched?: (annotations: AnnotationResponse[]) => void;
+  onHasAnnotationsChange?: (hasAny: boolean) => void;
+  onClearFilters?: () => void;
 }
 
 function AnnotationsTab({
@@ -58,15 +67,20 @@ function AnnotationsTab({
   speciesFilter,
   refreshKey,
   onAnnotationsFetched,
+  onHasAnnotationsChange,
+  onClearFilters,
 }: AnnotationsTabProps) {
   const [annotations, setAnnotations] = useState<AnnotationResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchAnnotations(page, statusFilter, growthFilter, speciesFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, statusFilter, growthFilter, speciesFilter, refreshKey]);
 
   const prevFilters = useRef({ statusFilter, growthFilter, speciesFilter });
@@ -100,6 +114,9 @@ function AnnotationsTab({
       });
       setAnnotations(data);
       onAnnotationsFetched?.(data);
+      if (!status && !growth && !species) {
+        onHasAnnotationsChange?.(data.length > 0);
+      }
     } catch (err) {
       setError((err as Error).message || 'Failed to load annotations.');
     } finally {
@@ -107,13 +124,19 @@ function AnnotationsTab({
     }
   }
 
-  async function handleDelete(e: React.MouseEvent, annotationId: string) {
+  function handleDelete(e: React.MouseEvent, annotationId: string) {
     e.stopPropagation();
-    if (!window.confirm('Delete this annotation? This cannot be undone.'))
-      return;
-    setDeleting(annotationId);
+    setDeleteTarget(annotationId);
+    setShowDeleteModal(true);
+  }
+
+  async function executeDelete() {
+    if (!deleteTarget) return;
+    setDeleting(deleteTarget);
     try {
-      await deleteAnnotation(annotationId);
+      await deleteAnnotation(deleteTarget);
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
       await fetchAnnotations(page, statusFilter, growthFilter, speciesFilter);
     } catch (err) {
       setError((err as Error).message || 'Failed to delete annotation.');
@@ -162,9 +185,27 @@ function AnnotationsTab({
   }
 
   if (annotations.length === 0) {
+    const hasAnyFilter =
+      statusFilter !== '' || growthFilter !== '' || speciesFilter !== '';
+    if (hasAnyFilter) {
+      return (
+        <div className="lib-empty">
+          <p className="lib-empty-text">No annotations match your filters.</p>
+          {onClearFilters && (
+            <button
+              className="modal-close"
+              onClick={onClearFilters}
+              style={{ marginTop: '1rem' }}
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="lib-empty">
-        <p className="lib-empty-text">No annotations found.</p>
+        <p className="lib-empty-text">No annotations have been created yet.</p>
         <p className="lib-empty-hint">
           Run inference and save a result to create annotations.
         </p>
@@ -332,6 +373,49 @@ function AnnotationsTab({
           </svg>
         </button>
       </div>
+
+      {showDeleteModal && deleteTarget && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteModal(false);
+              setDeleteTarget(null);
+            }
+          }}
+        >
+          <div className="modal-card" style={{ maxWidth: '400px' }}>
+            <h2 className="modal-title" style={{ color: '#ef4444' }}>
+              Delete Annotation
+            </h2>
+            <p className="modal-body">
+              Are you sure you want to delete this annotation? This action
+              cannot be undone.
+            </p>
+            <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+              <button
+                className="modal-close modal-close--secondary"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteTarget(null);
+                }}
+                disabled={deleting !== null}
+              >
+                Cancel
+              </button>
+              <button
+                className="delete-btn"
+                disabled={deleting !== null}
+                onClick={() => void executeDelete()}
+              >
+                {deleting !== null ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -339,7 +423,610 @@ function AnnotationsTab({
 const _inferenceRunningDatasets = new Set<string>();
 const _inferenceRunningAnnotations = new Set<string>();
 
-type LibraryTab = 'datasets' | 'annotations';
+// ---------------------------------------------------------------------------
+// UnconfirmedPredictionsTab sub-component
+// ---------------------------------------------------------------------------
+
+interface UnconfirmedPredictionsTabProps {
+  onCountChange: (count: number) => void;
+}
+
+function UnconfirmedPredictionsTab({
+  onCountChange,
+}: UnconfirmedPredictionsTabProps) {
+  const [predictions, setPredictions] = useState<PredictionResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  // Expanded result for inline review
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Save modal state
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveTarget, setSaveTarget] = useState<string | null>(null);
+  const [saveSpecies, setSaveSpecies] = useState('');
+  const [saveAgeDays, setSaveAgeDays] = useState('');
+  const [saveTreatment, setSaveTreatment] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Discard state
+  const [discardingId, setDiscardingId] = useState<string | null>(null);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const [discardTarget, setDiscardTarget] = useState<string | null>(null);
+  const [discarding, setDiscarding] = useState(false);
+
+  async function load(pageNum: number) {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getUnconfirmedPredictions(PAGE_SIZE * pageNum);
+      // Slice to the current page
+      const pageData = data.slice(
+        (pageNum - 1) * PAGE_SIZE,
+        pageNum * PAGE_SIZE,
+      );
+      setPredictions(pageData);
+      onCountChange(data.length);
+    } catch (err) {
+      setError(
+        (err as Error).message || 'Failed to load unconfirmed predictions.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    Promise.resolve().then(() => {
+      void load(page);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  function openSave(predId: string) {
+    setSaveTarget(predId);
+    setSaveSpecies('');
+    setSaveAgeDays('');
+    setSaveTreatment('');
+    setSaveError(null);
+    setShowSaveModal(true);
+  }
+
+  async function handleSave() {
+    if (!saveTarget) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await confirmPrediction(saveTarget, {
+        species: saveSpecies.trim() || undefined,
+        age_days: saveAgeDays ? parseInt(saveAgeDays, 10) : undefined,
+        treatment: saveTreatment.trim() || undefined,
+      });
+      setShowSaveModal(false);
+      setExpandedId(null);
+      setSaveTarget(null);
+      await load(page);
+    } catch (err) {
+      setSaveError((err as Error).message || 'Failed to save prediction.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleDiscard(predId: string) {
+    setDiscardTarget(predId);
+    setShowDiscardModal(true);
+  }
+
+  async function handleDiscardConfirm() {
+    if (!discardTarget) return;
+    setDiscarding(true);
+    setDiscardingId(discardTarget);
+    try {
+      await deletePrediction(discardTarget);
+      if (expandedId === discardTarget) setExpandedId(null);
+      setShowDiscardModal(false);
+      setDiscardTarget(null);
+      await load(page);
+    } catch {
+      // ignore
+    } finally {
+      setDiscarding(false);
+      setDiscardingId(null);
+    }
+  }
+
+  function relTime(iso: string): string {
+    // eslint-disable-next-line react-hooks/purity
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    const h = Math.floor(m / 60);
+    const d = Math.floor(h / 24);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    if (h < 24) return `${h}h ago`;
+    if (d === 1) return 'Yesterday';
+    return `${d}d ago`;
+  }
+
+  if (loading) {
+    return (
+      <div className="lib-empty">
+        <span className="spinner" aria-hidden="true" />
+        <p>Loading unconfirmed predictions…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="lib-empty">
+        <p className="lib-empty-text" style={{ color: '#b91c1c' }}>
+          {error}
+        </p>
+        <button
+          className="modal-close"
+          onClick={() => void load(page)}
+          style={{ marginTop: '1rem' }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (predictions.length === 0) {
+    return (
+      <div>
+        <div className="lib-content-header">
+          <div className="lib-content-header-left">
+            <span className="lib-breadcrumb">
+              LIBRARY / UNCONFIRMED PREDICTIONS
+            </span>
+            <h1 className="lib-content-title">Unconfirmed Predictions</h1>
+          </div>
+        </div>
+        <div className="lib-empty">
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ opacity: 0.3 }}
+          >
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <p className="lib-empty-text">No unconfirmed predictions.</p>
+          <p className="lib-empty-hint">
+            Run inference and the result will appear here until you save or
+            discard it.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const expandedPred =
+    predictions.find((p) => p.prediction_id === expandedId) ?? null;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-5)',
+      }}
+    >
+      {/* Header */}
+      <div className="lib-content-header">
+        <div className="lib-content-header-left">
+          <span className="lib-breadcrumb">
+            LIBRARY / UNCONFIRMED PREDICTIONS
+          </span>
+          <h1 className="lib-content-title">Unconfirmed Predictions</h1>
+        </div>
+        <button
+          className="modal-close modal-close--secondary"
+          onClick={() => void load(page)}
+          style={{ alignSelf: 'flex-end' }}
+        >
+          ↻ Refresh
+        </button>
+      </div>
+
+      {/* Expanded result view */}
+      {expandedPred && (
+        <div
+          style={{
+            background: 'var(--color-bg-white)',
+            border: '1px solid var(--color-primary-light)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--space-5)',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
+          <ResultsView
+            result={expandedPred}
+            file={null}
+            filePreviewUrl={null}
+            deployedModelName={expandedPred.metadata.model_version}
+            onNewScan={() => setExpandedId(null)}
+            onDiscard={() => void handleDiscard(expandedPred.prediction_id)}
+            onSave={() => openSave(expandedPred.prediction_id)}
+          />
+        </div>
+      )}
+
+      {/* Table */}
+      <div style={{ overflowX: 'auto' }}>
+        <table className="history-table">
+          <thead>
+            <tr>
+              <th>Preview</th>
+              <th>Filename</th>
+              <th>Plants</th>
+              <th>Model</th>
+              <th>When</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {predictions.map((pred) => (
+              <tr
+                key={pred.prediction_id}
+                className={`lib-annotation-row ${expandedId === pred.prediction_id ? 'lib-pred-row--active' : ''}`}
+                onClick={() =>
+                  setExpandedId(
+                    expandedId === pred.prediction_id
+                      ? null
+                      : pred.prediction_id,
+                  )
+                }
+                style={{ cursor: 'pointer' }}
+              >
+                <td>
+                  <img
+                    src={getArtifactUrl(pred.input_url)}
+                    alt="Scan preview"
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      objectFit: 'cover',
+                      borderRadius: '4px',
+                      border: '1px solid var(--color-border-subtle)',
+                      background: 'rgba(0,0,0,0.2)',
+                    }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src =
+                        'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><rect width="40" height="40" fill="%23222"/><text x="20" y="24" font-family="sans-serif" font-size="8" fill="%23666" text-anchor="middle">N/A</text></svg>';
+                    }}
+                  />
+                </td>
+                <td
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-xs)',
+                    maxWidth: '200px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={pred.input_filename ?? pred.prediction_id}
+                >
+                  {pred.input_filename ?? pred.prediction_id.slice(0, 8) + '…'}
+                </td>
+                <td>
+                  <span
+                    style={{
+                      background: 'var(--color-tag-bg)',
+                      color: 'var(--color-primary)',
+                      borderRadius: 'var(--radius-full)',
+                      padding: '2px 8px',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {pred.plants.length} plants
+                  </span>
+                </td>
+                <td
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
+                  {pred.metadata.model_version}
+                </td>
+                <td
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
+                  {relTime(
+                    pred.metadata.inference_timestamp as unknown as string,
+                  )}
+                </td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '8px',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <button
+                      className="modal-close"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 'var(--text-xs)',
+                        padding: '0 14px',
+                        fontWeight: 600,
+                        letterSpacing: '0.03em',
+                        height: '28px',
+                        boxSizing: 'border-box',
+                        marginTop: '0px',
+                      }}
+                      onClick={() => openSave(pred.prediction_id)}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="delete-btn"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '6px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        color: '#ef4444',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                      disabled={discardingId === pred.prediction_id}
+                      onClick={() => handleDiscard(pred.prediction_id)}
+                      title="Discard prediction"
+                    >
+                      {discardingId === pred.prediction_id ? (
+                        <span
+                          className="spinner"
+                          style={{ width: '12px', height: '12px' }}
+                        />
+                      ) : (
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="3 6 5 6 21 6"></polyline>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                          <line x1="10" y1="11" x2="10" y2="17"></line>
+                          <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="lib-pagination">
+        <button
+          className="lib-page-btn"
+          disabled={page === 1}
+          onClick={() => setPage((p) => p - 1)}
+          aria-label="Previous page"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          Prev
+        </button>
+        <span className="lib-page-indicator">
+          Page <strong>{page}</strong>
+        </span>
+        <button
+          className="lib-page-btn"
+          disabled={predictions.length < PAGE_SIZE}
+          onClick={() => setPage((p) => p + 1)}
+          aria-label="Next page"
+        >
+          Next
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Save modal */}
+      {showSaveModal && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowSaveModal(false);
+          }}
+        >
+          <div className="modal-card">
+            <h2 className="modal-title">Save to Library</h2>
+            <p className="modal-body">
+              Optionally add biological metadata before saving this scan as an
+              annotation.
+            </p>
+            {saveError && (
+              <p
+                style={{
+                  color: '#b91c1c',
+                  fontSize: 'var(--text-sm)',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                {saveError}
+              </p>
+            )}
+            <div className="lib-create-form" style={{ marginTop: '1rem' }}>
+              <div className="lib-form-group">
+                <label htmlFor="upred-species">Species</label>
+                <input
+                  id="upred-species"
+                  type="text"
+                  placeholder="e.g. Arabidopsis thaliana"
+                  value={saveSpecies}
+                  onChange={(e) => setSaveSpecies(e.target.value)}
+                  disabled={saving}
+                />
+              </div>
+              <div className="lib-form-row">
+                <div className="lib-form-group">
+                  <label htmlFor="upred-age">Age (days)</label>
+                  <input
+                    id="upred-age"
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 14"
+                    value={saveAgeDays}
+                    onChange={(e) => setSaveAgeDays(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+                <div className="lib-form-group">
+                  <label htmlFor="upred-treatment">Treatment</label>
+                  <input
+                    id="upred-treatment"
+                    type="text"
+                    placeholder="e.g. control"
+                    value={saveTreatment}
+                    onChange={(e) => setSaveTreatment(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="modal-close modal-close--secondary"
+                onClick={() => setShowSaveModal(false)}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-close"
+                id="upred-save-confirm"
+                disabled={saving}
+                onClick={() => void handleSave()}
+              >
+                {saving ? 'Saving…' : 'Save to Library'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discard confirmation modal */}
+      {showDiscardModal && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowDiscardModal(false);
+          }}
+        >
+          <div className="modal-card" style={{ maxWidth: '400px' }}>
+            <h2 className="modal-title" style={{ color: '#ef4444' }}>
+              Discard Prediction
+            </h2>
+            <p className="modal-body">
+              Are you sure you want to discard this prediction? This action
+              cannot be undone and the scan result will be permanently deleted.
+            </p>
+            <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+              <button
+                className="modal-close modal-close--secondary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '38px',
+                  padding: '0 20px',
+                  borderRadius: 'var(--radius-md)',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  boxSizing: 'border-box',
+                }}
+                onClick={() => setShowDiscardModal(false)}
+                disabled={discarding}
+              >
+                Cancel
+              </button>
+              <button
+                className="delete-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '38px',
+                  padding: '0 20px',
+                  borderRadius: 'var(--radius-md)',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  boxSizing: 'border-box',
+                }}
+                disabled={discarding}
+                onClick={() => void handleDiscardConfirm()}
+              >
+                {discarding ? 'Discarding…' : 'Yes, Discard'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type LibraryTab = 'datasets' | 'annotations' | 'predictions';
 
 export default function Library() {
   const navigate = useNavigate();
@@ -352,15 +1039,25 @@ export default function Library() {
         .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
+  const { jobs, addJob, removeJob, isDatasetRunning } = useInferenceJobs();
+
   // ── State ──
   const [activeTab, setActiveTab] = useState<LibraryTab>(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
-    if (tabParam === 'annotations' || tabParam === 'datasets') {
+    if (
+      tabParam === 'annotations' ||
+      tabParam === 'datasets' ||
+      tabParam === 'predictions'
+    ) {
       return tabParam as LibraryTab;
     }
     return 'datasets';
   });
+
+  const [unconfirmedCount, setUnconfirmedCount] = useState(0);
+  const [hasDatasetsOverall, setHasDatasetsOverall] = useState(true);
+  const [hasAnnotations, setHasAnnotations] = useState(true);
 
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -473,6 +1170,9 @@ export default function Library() {
         });
         setDatasets(data);
         setDbUp(true);
+        if (!speciesFilter && growthStages.length === 0) {
+          setHasDatasetsOverall(data.length > 0);
+        }
       } catch (err) {
         setDatasets([]);
         const message = (err as Error).message ?? '';
@@ -487,8 +1187,22 @@ export default function Library() {
     fetchDatasets();
   }, [speciesFilter, growthStages]);
 
+  // Fetch unconfirmed count for badge with a periodic 5-second poll so it updates dynamically as inference jobs complete
   useEffect(() => {
-    setScanPage(1);
+    const fetchCount = () => {
+      void getUnconfirmedPredictions(100)
+        .then((preds) => setUnconfirmedCount(preds.length))
+        .catch(() => undefined);
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    Promise.resolve().then(() => {
+      setScanPage(1);
+    });
     const fetchDetail = async () => {
       if (selectedDatasetId) {
         await Promise.resolve();
@@ -517,21 +1231,84 @@ export default function Library() {
   }, [selectedDatasetId]);
 
   useEffect(() => {
-    setScanPage(1);
-    setInferenceMessage(null);
+    Promise.resolve().then(() => {
+      setScanPage(1);
+      setInferenceMessage(null);
+      setInferenceRunning(false);
 
-    if (selectedDatasetId && _inferenceRunningDatasets.has(selectedDatasetId)) {
-      setInferenceRunning(true);
-      setInferenceMessage(
-        'Processing images in the background. The grid will update automatically.',
-      );
-    }
-  }, [selectedDatasetId]);
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+
+      if (!selectedDatasetId) return;
+
+      const isRunning =
+        _inferenceRunningDatasets.has(selectedDatasetId) ||
+        isDatasetRunning(selectedDatasetId);
+
+      if (isRunning) {
+        setInferenceRunning(true);
+        setInferenceMessage(
+          'Processing images in the background. The grid will update automatically.',
+        );
+
+        // Find the active jobId from the global context to allow removal when finished
+        const globalJob = jobs.find(
+          (j) => j.type === 'dataset' && j.datasetId === selectedDatasetId,
+        );
+        const jobId = globalJob?.id;
+
+        // Poll every 5s
+        const interval = setInterval(async () => {
+          try {
+            const scans = await getAnnotations({
+              dataset_id: selectedDatasetId,
+              page: 1, // check first page for pending scans
+              page_size: SCANS_PER_PAGE,
+            });
+            setDetailScans(scans);
+
+            const stillPending = scans.some((s) => s.status === 'pending');
+            if (!stillPending) {
+              clearInterval(interval);
+              pollingRef.current = null;
+              _inferenceRunningDatasets.delete(selectedDatasetId);
+              setInferenceRunning(false);
+              setInferenceMessage('All images processed successfully.');
+              if (jobId) removeJob(jobId);
+              // Refresh dataset details to update overall stats
+              const detail = await getDatasetDetail(selectedDatasetId);
+              setDatasetDetail(detail);
+            }
+          } catch {
+            clearInterval(interval);
+            pollingRef.current = null;
+            _inferenceRunningDatasets.delete(selectedDatasetId);
+            setInferenceRunning(false);
+            if (jobId) removeJob(jobId);
+          }
+        }, 5000);
+
+        pollingRef.current = interval;
+      }
+    });
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDatasetId, isDatasetRunning]);
 
   useEffect(() => {
-    setImageView('scan');
-    setTargetDatasetId('');
-    setAddToDatasetError(null);
+    Promise.resolve().then(() => {
+      setImageView('scan');
+      setTargetDatasetId('');
+      setAddToDatasetError(null);
+    });
     const fetchLinkedPrediction = async () => {
       if (selectedAnnotation && selectedAnnotation.prediction_id) {
         annotationModalClosedRef.current = null;
@@ -602,7 +1379,7 @@ export default function Library() {
     setSelectedDatasetId(null);
     setDatasetDetail(null);
     setDetailScans([]);
-    if (tab !== 'annotations') {
+    if (tab !== 'annotations' && tab !== 'predictions') {
       setAnnotStatusFilter('');
       setAnnotGrowthFilter('');
       setAnnotSpeciesFilter('');
@@ -672,7 +1449,11 @@ export default function Library() {
 
   async function handleRunInference() {
     if (!selectedDatasetId || !datasetDetail) return;
-    if (_inferenceRunningDatasets.has(selectedDatasetId)) return;
+    if (
+      _inferenceRunningDatasets.has(selectedDatasetId) ||
+      isDatasetRunning(selectedDatasetId)
+    )
+      return;
 
     setInferenceRunning(true);
     setInferenceMessage(null);
@@ -690,12 +1471,14 @@ export default function Library() {
           'Inference is already in progress for this dataset.',
         );
         _inferenceRunningDatasets.delete(selectedDatasetId);
+        setInferenceRunning(false);
         return;
       }
 
       if (res.message.toLowerCase().includes('no pending')) {
         setInferenceMessage('No pending images to process.');
         _inferenceRunningDatasets.delete(selectedDatasetId);
+        setInferenceRunning(false);
         return;
       }
 
@@ -705,45 +1488,17 @@ export default function Library() {
           : 'Processing images in the background. The grid will update automatically.',
       );
 
-      // Poll every 5s for up to 10 minutes
-      const interval = setInterval(async () => {
-        try {
-          const scans = await getAnnotations({
-            dataset_id: selectedDatasetId,
-            page: scanPage,
-            page_size: SCANS_PER_PAGE,
-          });
-          setDetailScans(scans);
-
-          const stillPending = scans.some((s) => s.status === 'pending');
-          if (!stillPending) {
-            clearInterval(interval);
-            _inferenceRunningDatasets.delete(selectedDatasetId);
-            setInferenceRunning(false);
-            setInferenceMessage('All images processed successfully.');
-            // Refresh dataset detail to get updated count
-            const detail = await getDatasetDetail(selectedDatasetId);
-            setDatasetDetail(detail);
-          }
-        } catch {
-          clearInterval(interval);
-          _inferenceRunningDatasets.delete(selectedDatasetId);
-          setInferenceRunning(false);
-        }
-      }, 5000);
-
-      // Safety timeout after 10 minutes
-      setTimeout(
-        () => {
-          clearInterval(interval);
-          _inferenceRunningDatasets.delete(selectedDatasetId);
-          setInferenceRunning(false);
-          setInferenceMessage(
-            'Inference is taking longer than expected. Check back later.',
-          );
-        },
-        10 * 60 * 1000,
-      );
+      // Add to global jobs list to kick off the polling and sidebar status
+      const jobId = `ds-${selectedDatasetId}-${Date.now()}`;
+      addJob({
+        id: jobId,
+        filename: datasetDetail.name,
+        startedAt: Date.now(),
+        controller: new AbortController(),
+        type: 'dataset',
+        datasetId: selectedDatasetId,
+        datasetName: datasetDetail.name,
+      });
     } catch (err) {
       _inferenceRunningDatasets.delete(selectedDatasetId);
       setInferenceRunning(false);
@@ -809,7 +1564,7 @@ export default function Library() {
         },
         5 * 60 * 1000,
       );
-    } catch (err) {
+    } catch {
       removeRunningAnnotation(annotationId);
       // Revert optimistic status update
       setSelectedAnnotation((prev) =>
@@ -1070,7 +1825,12 @@ export default function Library() {
     });
 
   // Tab labels for sidebar nav
-  const navItems: { key: LibraryTab; label: string; icon: JSX.Element }[] = [
+  const navItems: {
+    key: LibraryTab;
+    label: string;
+    icon: JSX.Element;
+    badge?: number;
+  }[] = [
     {
       key: 'datasets',
       label: 'Datasets',
@@ -1107,6 +1867,26 @@ export default function Library() {
         >
           <path d="M12 20h9" />
           <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'predictions' as LibraryTab,
+      label: 'Unconfirmed',
+      badge: unconfirmedCount,
+      icon: (
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
         </svg>
       ),
     },
@@ -1205,6 +1985,9 @@ export default function Library() {
                     >
                       {item.icon}
                       {item.label}
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span className="lib-nav-badge">{item.badge}</span>
+                      )}
                     </button>
                   </li>
                 ))}
@@ -1212,58 +1995,12 @@ export default function Library() {
             </div>
 
             {/* Filters */}
-            <div className="lib-filter-section">
-              <span className="lib-nav-label">FILTERS</span>
+            {((activeTab === 'datasets' && hasDatasetsOverall) ||
+              (activeTab === 'annotations' && hasAnnotations)) && (
+              <div className="lib-filter-section">
+                <span className="lib-nav-label">FILTERS</span>
 
-              {activeTab === 'datasets' ? (
-                <div className="lib-filter-group">
-                  <span className="lib-filter-label">GROWTH STAGE</span>
-                  <div className="lib-filter-chips">
-                    {[
-                      { value: '', label: 'All' },
-                      { value: 'seedling', label: 'Seedling' },
-                      { value: 'mature', label: 'Mature' },
-                    ].map((opt) => (
-                      <button
-                        key={opt.value}
-                        className={`lib-chip ${(growthStages.length === 0 && opt.value === '') || growthStages[0] === opt.value ? 'lib-chip--active' : ''}`}
-                        onClick={() =>
-                          setGrowthStages(opt.value === '' ? [] : [opt.value])
-                        }
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 'var(--space-3)',
-                  }}
-                >
-                  <div className="lib-filter-group">
-                    <span className="lib-filter-label">STATUS</span>
-                    <div className="lib-filter-chips">
-                      {[
-                        { value: '', label: 'All' },
-                        { value: 'pending', label: 'Pending' },
-                        { value: 'annotated', label: 'Annotated' },
-                        { value: 'review_required', label: 'Review Req.' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.value}
-                          className={`lib-chip ${annotStatusFilter === opt.value ? 'lib-chip--active' : ''}`}
-                          onClick={() => setAnnotStatusFilter(opt.value)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
+                {activeTab === 'datasets' ? (
                   <div className="lib-filter-group">
                     <span className="lib-filter-label">GROWTH STAGE</span>
                     <div className="lib-filter-chips">
@@ -1274,32 +2011,81 @@ export default function Library() {
                       ].map((opt) => (
                         <button
                           key={opt.value}
-                          className={`lib-chip ${annotGrowthFilter === opt.value ? 'lib-chip--active' : ''}`}
-                          onClick={() => setAnnotGrowthFilter(opt.value)}
+                          className={`lib-chip ${(growthStages.length === 0 && opt.value === '') || growthStages[0] === opt.value ? 'lib-chip--active' : ''}`}
+                          onClick={() =>
+                            setGrowthStages(opt.value === '' ? [] : [opt.value])
+                          }
                         >
                           {opt.label}
                         </button>
                       ))}
                     </div>
                   </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 'var(--space-3)',
+                    }}
+                  >
+                    <div className="lib-filter-group">
+                      <span className="lib-filter-label">STATUS</span>
+                      <div className="lib-filter-chips">
+                        {[
+                          { value: '', label: 'All' },
+                          { value: 'pending', label: 'Pending' },
+                          { value: 'annotated', label: 'Annotated' },
+                          { value: 'review_required', label: 'Review Req.' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            className={`lib-chip ${annotStatusFilter === opt.value ? 'lib-chip--active' : ''}`}
+                            onClick={() => setAnnotStatusFilter(opt.value)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                  <div className="lib-filter-group">
-                    <span className="lib-filter-label">SPECIES</span>
-                    <input
-                      type="text"
-                      className="lib-search-input"
-                      placeholder="e.g. Arabidopsis"
-                      value={annotSpeciesFilter}
-                      onChange={(e) => setAnnotSpeciesFilter(e.target.value)}
-                      style={{
-                        fontSize: 'var(--text-xs)',
-                        padding: 'var(--space-2) var(--space-3)',
-                      }}
-                    />
+                    <div className="lib-filter-group">
+                      <span className="lib-filter-label">GROWTH STAGE</span>
+                      <div className="lib-filter-chips">
+                        {[
+                          { value: '', label: 'All' },
+                          { value: 'seedling', label: 'Seedling' },
+                          { value: 'mature', label: 'Mature' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            className={`lib-chip ${annotGrowthFilter === opt.value ? 'lib-chip--active' : ''}`}
+                            onClick={() => setAnnotGrowthFilter(opt.value)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="lib-filter-group">
+                      <span className="lib-filter-label">SPECIES</span>
+                      <input
+                        type="text"
+                        className="lib-search-input"
+                        placeholder="e.g. Arabidopsis"
+                        value={annotSpeciesFilter}
+                        onChange={(e) => setAnnotSpeciesFilter(e.target.value)}
+                        style={{
+                          fontSize: 'var(--text-xs)',
+                          padding: 'var(--space-2) var(--space-3)',
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Footer links */}
             <div className="lib-sidebar-footer">
@@ -1341,7 +2127,9 @@ export default function Library() {
 
           {/* ── Content panel ──────────────────────────────────── */}
           <div className="lib-content">
-            {selectedDatasetId && activeTab === 'datasets' ? (
+            {activeTab === 'predictions' ? (
+              <UnconfirmedPredictionsTab onCountChange={setUnconfirmedCount} />
+            ) : selectedDatasetId && activeTab === 'datasets' ? (
               /* ── Detail View ── */
               detailLoading || !datasetDetail ? (
                 <div className="lib-empty">
@@ -1704,28 +2492,6 @@ export default function Library() {
                               })}
                             </span>
                           </div>
-                          {datasetDetail.description && (
-                            <div
-                              className="lib-meta-row"
-                              style={{
-                                flexDirection: 'column',
-                                gap: '4px',
-                                alignItems: 'flex-start',
-                              }}
-                            >
-                              <span className="lib-meta-k">Description</span>
-                              <span
-                                className="lib-meta-v"
-                                style={{
-                                  maxWidth: '100%',
-                                  whiteSpace: 'normal',
-                                  fontSize: 'var(--text-xs)',
-                                }}
-                              >
-                                {datasetDetail.description}
-                              </span>
-                            </div>
-                          )}
                         </div>
                       </div>
 
@@ -1739,10 +2505,12 @@ export default function Library() {
                               inferenceRunning ||
                               _inferenceRunningDatasets.has(
                                 selectedDatasetId ?? '',
-                              )
+                              ) ||
+                              isDatasetRunning(selectedDatasetId ?? '')
                             }
                           >
-                            {inferenceRunning ? (
+                            {inferenceRunning ||
+                            isDatasetRunning(selectedDatasetId ?? '') ? (
                               <>
                                 <span
                                   className="spinner"
@@ -1992,6 +2760,55 @@ export default function Library() {
                                   {ds.count}
                                 </span>
                               </span>
+                              {/* Inference status pill */}
+                              {isDatasetRunning(ds.dataset_id) ? (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: 'var(--radius-full)',
+                                    background: 'rgba(27,67,50,0.12)',
+                                    color: 'var(--color-primary)',
+                                  }}
+                                >
+                                  <span
+                                    className="running-job-spinner"
+                                    style={{
+                                      width: '7px',
+                                      height: '7px',
+                                      borderColor: 'rgba(27,67,50,0.25)',
+                                      borderTopColor: 'var(--color-primary)',
+                                    }}
+                                    aria-hidden="true"
+                                  />
+                                  Running
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: 'var(--radius-full)',
+                                    background:
+                                      ds.count === 0
+                                        ? 'var(--color-bg-subtle)'
+                                        : 'var(--color-tag-bg)',
+                                    color:
+                                      ds.count === 0
+                                        ? 'var(--color-text-muted)'
+                                        : 'var(--color-primary)',
+                                  }}
+                                >
+                                  {ds.count === 0 ? 'Empty' : 'Not started'}
+                                </span>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -2015,6 +2832,12 @@ export default function Library() {
                         );
                         return updated ?? prev;
                       });
+                    }}
+                    onHasAnnotationsChange={setHasAnnotations}
+                    onClearFilters={() => {
+                      setAnnotStatusFilter('');
+                      setAnnotGrowthFilter('');
+                      setAnnotSpeciesFilter('');
                     }}
                   />
                 )}

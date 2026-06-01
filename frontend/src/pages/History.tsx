@@ -19,6 +19,10 @@ export default function History() {
     useState<PredictionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const [discardTarget, setDiscardTarget] = useState<PredictionResponse | null>(
+    null,
+  );
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,7 +31,7 @@ export default function History() {
   useEffect(() => {
     const predId = searchParams.get('prediction_id');
     if (predId) {
-      setLoading(true);
+      Promise.resolve().then(() => setLoading(true));
       getPrediction(predId)
         .then((pred) => {
           setSelectedPrediction(pred);
@@ -59,20 +63,22 @@ export default function History() {
     }
   }
 
-  async function handleDiscard(pred: PredictionResponse, e?: React.MouseEvent) {
+  function handleDiscard(pred: PredictionResponse, e?: React.MouseEvent) {
     if (e) e.stopPropagation();
-    if (
-      !window.confirm(
-        'Delete this prediction from history? This cannot be undone.',
-      )
-    )
-      return;
+    setDiscardTarget(pred);
+    setShowDiscardModal(true);
+  }
+
+  async function executeDiscard() {
+    if (!discardTarget) return;
     setDiscarding(true);
     try {
-      await deletePrediction(pred.prediction_id);
-      if (selectedPrediction?.prediction_id === pred.prediction_id) {
+      await deletePrediction(discardTarget.prediction_id);
+      if (selectedPrediction?.prediction_id === discardTarget.prediction_id) {
         handleBack();
       }
+      setShowDiscardModal(false);
+      setDiscardTarget(null);
       await fetchHistory();
     } catch (err) {
       setError((err as Error).message || 'Failed to delete prediction.');
@@ -222,7 +228,7 @@ export default function History() {
                       marginBottom: '1.5rem',
                     }}
                   >
-                    You haven't run any inference scans yet.
+                    You haven&apos;t run any inference scans yet.
                   </p>
                   <button
                     className="history-refresh-btn"
@@ -327,6 +333,49 @@ export default function History() {
           )}
         </div>
       </main>
+
+      {showDiscardModal && discardTarget && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDiscardModal(false);
+              setDiscardTarget(null);
+            }
+          }}
+        >
+          <div className="modal-card" style={{ maxWidth: '400px' }}>
+            <h2 className="modal-title" style={{ color: '#ef4444' }}>
+              Delete Prediction
+            </h2>
+            <p className="modal-body">
+              Are you sure you want to delete this prediction from history? This
+              action cannot be undone.
+            </p>
+            <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+              <button
+                className="modal-close modal-close--secondary"
+                onClick={() => {
+                  setShowDiscardModal(false);
+                  setDiscardTarget(null);
+                }}
+                disabled={discarding}
+              >
+                Cancel
+              </button>
+              <button
+                className="delete-btn"
+                disabled={discarding}
+                onClick={() => void executeDiscard()}
+              >
+                {discarding ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

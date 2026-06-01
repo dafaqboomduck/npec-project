@@ -21,18 +21,22 @@ import type {
 } from '../types/api';
 
 export const getOverviewStatus = () =>
-  apiClient<OverviewStatusResponse>('/overview/status');
+  apiClient<OverviewStatusResponse>('/overview/status', { staleTime: 10000 });
 
 export const getOverviewActivity = (page = 1, pageSize = 10) =>
   apiClient<ActivityFeedResponse>(
     `/overview/activity?page=${page}&page_size=${pageSize}`,
+    { staleTime: 10000 },
   );
 
 export const getModelHealth = () =>
-  apiClient<ModelHealthResponse>('/overview/model-health');
+  apiClient<ModelHealthResponse>('/overview/model-health', {
+    staleTime: 15000,
+  });
 
 export const getEnvironment = () =>
-  apiClient<EnvironmentResponse>('/overview/environment');
+  apiClient<EnvironmentResponse>('/overview/environment', { staleTime: 10000 });
 
 /** Full model list — filter by status === 'deployed' for the active-model card. */
-export const getModels = () => apiClient<ModelSummary[]>('/models');
+export const getModels = () =>
+  apiClient<ModelSummary[]>('/models', { staleTime: 10000 });

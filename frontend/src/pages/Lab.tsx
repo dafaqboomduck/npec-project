@@ -107,10 +107,12 @@ export default function Lab() {
     } finally {
       setLoading(false);
     }
-  }, [paramDatasetId]);
+  }, [paramDatasetId, paramAnnotationId]);
 
   useEffect(() => {
-    void loadQueue();
+    Promise.resolve().then(() => {
+      void loadQueue();
+    });
   }, [loadQueue]);
 
   //  Handle mask submission

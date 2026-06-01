@@ -53,6 +53,19 @@ export default function Models() {
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isNotImplemented, setIsNotImplemented] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    show: boolean;
+    title: string;
+    body: string;
+    onConfirm: () => void | Promise<void>;
+    isDelete: boolean;
+  }>({
+    show: false,
+    title: '',
+    body: '',
+    onConfirm: () => {},
+    isDelete: false,
+  });
 
   // ── Hyperparameter Form Controls (Retraining) ──
   const [learningRate, setLearningRate] = useState<string>('0.001');
@@ -80,6 +93,7 @@ export default function Models() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   useEffect(() => {
@@ -107,6 +121,7 @@ export default function Models() {
         pollingRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runs]);
 
   async function fetchData() {
@@ -128,8 +143,8 @@ export default function Models() {
         const liveRuns = await listTrainingRuns();
         setRuns(liveRuns || []);
       }
-    } catch (err: any) {
-      const msg = err.message || '';
+    } catch (err) {
+      const msg = (err as Error).message || '';
       if (
         activeTab === 'retraining' &&
         (msg.includes('501') || msg.includes('Not implemented'))
@@ -140,7 +155,7 @@ export default function Models() {
         );
       } else {
         setError(
-          err.message ||
+          (err as Error).message ||
             'Connection failed. Could not fetch models workspace data.',
         );
       }
@@ -169,8 +184,8 @@ export default function Models() {
         `✓ Retraining initiated: ${res.message} (Run ID: ${res.run_id.slice(0, 8)})`,
       );
       await fetchData();
-    } catch (err: any) {
-      const msg = err.message || '';
+    } catch (err) {
+      const msg = (err as Error).message || '';
       if (msg.includes('501') || msg.includes('Not implemented')) {
         setError(
           'Retraining trigger failed: The training runner subprocess daemon is pending deployment (501).',
@@ -192,32 +207,37 @@ export default function Models() {
     }
   }
 
-  async function handleStopTraining(runId: string, e: React.MouseEvent) {
+  function handleStopTraining(runId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (
-      !window.confirm('Are you sure you want to terminate this retraining job?')
-    )
-      return;
-
-    setActionLoading(true);
-    setError(null);
-
-    try {
-      const res = await stopTrainingRun(runId);
-      setInfoMessage(res.message);
-      await fetchData();
-    } catch (err: any) {
-      const msg = err.message || '';
-      if (msg.includes('501') || msg.includes('Not implemented')) {
-        setError(
-          'Stop action failed: Training runner subprocess management is pending deployment (501).',
-        );
-      } else {
-        setError(err.message || 'Failed to stop retraining run.');
-      }
-    } finally {
-      setActionLoading(false);
-    }
+    setModalConfig({
+      show: true,
+      title: 'Terminate Retraining Job',
+      body: 'Are you sure you want to terminate this retraining job?',
+      isDelete: true,
+      onConfirm: async () => {
+        setActionLoading(true);
+        setError(null);
+        try {
+          const res = await stopTrainingRun(runId);
+          setInfoMessage(res.message);
+          await fetchData();
+        } catch (err) {
+          const msg = (err as Error).message || '';
+          if (msg.includes('501') || msg.includes('Not implemented')) {
+            setError(
+              'Stop action failed: Training runner subprocess management is pending deployment (501).',
+            );
+          } else {
+            setError(
+              (err as Error).message || 'Failed to stop retraining run.',
+            );
+          }
+        } finally {
+          setActionLoading(false);
+          setModalConfig((prev) => ({ ...prev, show: false }));
+        }
+      },
+    });
   }
 
   // ── Model Registry Actions ──
@@ -252,59 +272,63 @@ export default function Models() {
       setRegRecall('');
       setRegLatency('');
       await fetchData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to register new model version.');
+    } catch (err) {
+      setError(
+        (err as Error).message || 'Failed to register new model version.',
+      );
     } finally {
       setActionLoading(false);
     }
   }
 
-  async function handleDeployModel(modelId: string, e: React.MouseEvent) {
+  function handleDeployModel(modelId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (
-      !window.confirm(
-        'Deploy this U-Net model version? This will set it as the active inference engine.',
-      )
-    )
-      return;
-
-    setActionLoading(true);
-    setError(null);
-    setInfoMessage(null);
-
-    try {
-      const res = await deployModel(modelId);
-      setInfoMessage(`🚀 Deployment successful: ${res.message}`);
-      await fetchData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to deploy model.');
-    } finally {
-      setActionLoading(false);
-    }
+    setModalConfig({
+      show: true,
+      title: 'Deploy Model Version',
+      body: 'Deploy this U-Net model version? This will set it as the active inference engine.',
+      isDelete: false,
+      onConfirm: async () => {
+        setActionLoading(true);
+        setError(null);
+        setInfoMessage(null);
+        try {
+          const res = await deployModel(modelId);
+          setInfoMessage(`🚀 Deployment successful: ${res.message}`);
+          await fetchData();
+        } catch (err) {
+          setError((err as Error).message || 'Failed to deploy model.');
+        } finally {
+          setActionLoading(false);
+          setModalConfig((prev) => ({ ...prev, show: false }));
+        }
+      },
+    });
   }
 
-  async function handleDeleteModel(modelId: string, e: React.MouseEvent) {
+  function handleDeleteModel(modelId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (
-      !window.confirm(
-        'Are you sure you want to delete this registered model? This cannot be undone.',
-      )
-    )
-      return;
-
-    setActionLoading(true);
-    setError(null);
-    setInfoMessage(null);
-
-    try {
-      const res = await deleteModel(modelId);
-      setInfoMessage(res.message);
-      await fetchData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete model.');
-    } finally {
-      setActionLoading(false);
-    }
+    setModalConfig({
+      show: true,
+      title: 'Delete Registered Model',
+      body: 'Are you sure you want to delete this registered model? This cannot be undone.',
+      isDelete: true,
+      onConfirm: async () => {
+        setActionLoading(true);
+        setError(null);
+        setInfoMessage(null);
+        try {
+          const res = await deleteModel(modelId);
+          setInfoMessage(res.message);
+          await fetchData();
+        } catch (err) {
+          setError((err as Error).message || 'Failed to delete model.');
+        } finally {
+          setActionLoading(false);
+          setModalConfig((prev) => ({ ...prev, show: false }));
+        }
+      },
+    });
   }
 
   async function toggleExpandModelRow(modelId: string) {
@@ -1064,6 +1088,57 @@ export default function Models() {
           )}
         </div>
       </main>
+
+      {modalConfig.show && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setModalConfig((prev) => ({ ...prev, show: false }));
+            }
+          }}
+        >
+          <div className="modal-card" style={{ maxWidth: '400px' }}>
+            <h2
+              className="modal-title"
+              style={{
+                color: modalConfig.isDelete
+                  ? '#ef4444'
+                  : 'var(--color-primary)',
+              }}
+            >
+              {modalConfig.title}
+            </h2>
+            <p className="modal-body">{modalConfig.body}</p>
+            <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+              <button
+                className="modal-close modal-close--secondary"
+                onClick={() =>
+                  setModalConfig((prev) => ({ ...prev, show: false }))
+                }
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className={modalConfig.isDelete ? 'delete-btn' : 'modal-close'}
+                disabled={actionLoading}
+                onClick={() => {
+                  void modalConfig.onConfirm();
+                }}
+              >
+                {actionLoading
+                  ? 'Processing…'
+                  : modalConfig.isDelete
+                    ? 'Confirm'
+                    : 'Accept'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
