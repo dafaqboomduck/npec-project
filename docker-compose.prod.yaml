@@ -49,6 +49,11 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       USE_MOCK_INFERENCE: "false"
       CORS_ORIGINS: ${CORS_ORIGINS}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-npec-artifacts}
       NPEC_MASKS_DIR: /tmp/npec_masks
       NPEC_ANNOTATION_MASK_DIR: /tmp/npec_annotation_masks
     ports:
