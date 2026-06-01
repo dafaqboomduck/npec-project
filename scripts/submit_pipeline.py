@@ -164,7 +164,10 @@ def build_components(
             "--model_dir   ${{inputs.model_dir}} "
             "--eval_dir    ${{inputs.eval_dir}} "
             "--output_dir  ${{outputs.register_output}} "
-            "--f1_threshold ${{inputs.f1_threshold}}"
+            "--f1_threshold ${{inputs.f1_threshold}} "
+            "--train_dataset cv5_train:1.0.0 "  # NEW
+            "--val_dataset   cv5_val:1.0.0 "  # NEW
+            "--test_dataset  cv5_test:1.0.0"  # NEW
         ),
         environment=env_label,
         resources=resources,
