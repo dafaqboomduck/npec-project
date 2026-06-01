@@ -7,8 +7,9 @@ dependencies:
   - pip
   - pip:
       # TensorFlow with bundled CUDA — no separate CUDA base image needed
-      - tensorflow[and-cuda]>=2.15,<2.17
-      - keras>=2.15,<3.0
+      # tensorflow 2.16+ uses keras 3; custom_functions.py requires keras.ops (Keras 3 API)
+      - tensorflow[and-cuda]>=2.16,<2.17
+      - keras>=3.0,<4.0
       # Computer vision + data
       - opencv-python-headless>=4.8
       - numpy>=1.24

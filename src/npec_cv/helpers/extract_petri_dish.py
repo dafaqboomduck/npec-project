@@ -1,142 +1,161 @@
-"""Module for extracting the petri dish region from an image."""
+"""Module for extracting the petri dish region from an image.
+
+Plant phenotyping images from the HADES setup look like this:
+
+    +-----------------------------------------+
+    |              black border               |  pixels ≈ 0
+    |     +-----------------------------+     |
+    |     |        bright dish          |     |  pixels > ~30
+    |     |        + dark plants        |     |
+    |     +-----------------------------+     |
+    +-----------------------------------------+
+
+The dish content is bright relative to the surrounding black frame; plants
+inside the dish are dark again but are small and isolated. The earlier
+implementation used Otsu thresholding + the largest contour, which worked
+poorly when:
+
+  - The black border was very thin so Otsu picked a threshold inside the
+    plant/agar range and contoured fragments of plants instead of the dish.
+  - The image had glare or condensation droplets at the top that formed a
+    larger contiguous bright region than the dish itself.
+
+This rewrite uses a direct "anything brighter than the border is part of the
+dish" approach with morphological closing to bridge the plants' dark pixels.
+That's robust because the dish/border contrast is by far the dominant
+intensity transition in these images.
+"""
+
+import logging
+from typing import Tuple, Union
+
+import cv2
+import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
-def extract_petri_dish(img, padding=30, return_coords: bool = False):
-    """Identifies the largest object in an image and extracts a padded square region.
-
-    Uses Otsu's thresholding and contour finding to find the petri dish. The extracted
-    region is guaranteed to be a square and is clamped to the image boundaries.
+def extract_petri_dish(
+    img: np.ndarray,
+    padding: int = 30,
+    return_coords: bool = False,
+    *,
+    dark_thresh: int = 25,
+    min_dish_ratio: float = 0.25,
+) -> Union[np.ndarray, Tuple[int, int, int, int]]:
+    """Return the petri dish region (or its bounding box) from an HADES image.
 
     Args:
-        img (np.ndarray): The input image (BGR or grayscale).
-        padding (int, optional): Extra pixels to add around the bounding box
-                                    to form the final square side. Defaults to 30.
-        return_coords (bool, optional): If True, returns the coordinates (x_start,
-                                        y_start, x_end, y_end) instead of the
-                                        cropped image. Defaults to False.
+        img: The input image (BGR, RGB, or grayscale — color channels are
+            collapsed to luminance before processing).
+        padding: Extra pixels added on each side of the detected dish before
+            returning. Default 30.
+        return_coords: If True, return ``(x_start, y_start, x_end, y_end)``
+            instead of the cropped image. Default False.
+        dark_thresh: Pixel intensity (0-255) below which is considered the
+            "border" (i.e. not the dish). Default 25 — anything below ~10 %
+            brightness is treated as outside the dish. Lower if the border in
+            your images is paler than pure black; raise if the agar inside
+            the dish is very dim.
+        min_dish_ratio: The detected bright region must occupy at least this
+            fraction of the image area to be accepted as the dish. If it's
+            smaller (suggesting detection failed and we found a glare blob
+            or stray bright object instead), the function falls back to the
+            full image. Default 0.25 (25 %).
 
     Returns:
-        np.ndarray or tuple: The cropped square image, or a tuple of
-                                (x_start, y_start, x_end, y_end) if
-                                return_coords is True.
+        - When ``return_coords=False`` (default): the cropped image array.
+        - When ``return_coords=True``: a 4-tuple ``(x1, y1, x2, y2)`` giving
+          the crop coordinates in the original image. ``x2`` and ``y2`` are
+          exclusive (NumPy slice convention).
+
+    Notes:
+        Padding is applied *after* the bounding box of the largest bright
+        connected component is computed, then clamped to image bounds. The
+        returned region is not forced to be square — the U-Net works on
+        arbitrary aspect ratios because patching pads to a multiple of
+        ``patch_size`` regardless.
     """
-    import cv2
-
-    def bgr2gray(img):
-        """Converts a BGR image to grayscale.
-
-        Returns a copy if the image is already 2-dimensional (grayscale).
-
-        Args:
-            img (np.ndarray): The input image.
-
-        Returns:
-            np.ndarray: The grayscale image.
-        """
-        if len(img.shape) == 3:
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = img.copy()
-
-        return gray
-
-    def calculate_square(img, rect, padding):
-        """Calculates the coordinates for a padded square crop based on a bounding box.
-
-        The resulting square is centered on the bounding box and its side length
-        is max(width, height) + 2*padding. The coordinates are clamped to the
-        image boundaries (0 to img.shape[0/1]).
-
-        Args:
-            img (np.ndarray): The full image array.
-            rect (tuple): The bounding box (x, y, w, h) from cv2.boundingRect.
-            padding (int): The padding to add on all sides.
-
-        Returns:
-            tuple: A tuple (x_start, y_start, x_end, y_end) representing the
-                    final square crop coordinates.
-        """
-        x, y, w, h = rect
-
-        # 1. Determine the largest dimension (W or H) for the square's side
-        side = max(w, h)
-
-        # 2. Calculate the center point of the original bounding box
-        center_x = x + w // 2
-        center_y = y + h // 2
-
-        # 3. Calculate the new square coordinates based on the center and the side length
-        padded_side = side + 2 * padding
-        half_side = padded_side // 2
-
-        # New top-left corner without image bounds check yet
-        x_new = center_x - half_side
-        y_new = center_y - half_side
-
-        # 4. Define the final crop coordinates (x_start, y_start, x_end, y_end)
-        # Calculate final coordinates, clamping them to the image boundaries
-        x_start = max(0, x_new)
-        y_start = max(0, y_new)
-
-        # Calculate the *desired* bottom-right corner
-        x_desired_end = x_new + padded_side
-        y_desired_end = y_new + padded_side
-
-        # Clamp the end coordinates to the image width/height
-        x_end = min(img.shape[1], x_desired_end)
-        y_end = min(img.shape[0], y_desired_end)
-
-        # 5. Handle cases where clamping truncated the square (e.g., if the dish is at an edge)
-        # Calculate the actual dimensions after clamping
-        actual_w = x_end - x_start
-        actual_h = y_end - y_start
-
-        # Use the *smaller* of the actual dimensions as the final side length
-        final_side = min(actual_w, actual_h)
-
-        # Recalculate the end points to form a perfect square using 'final_side'
-        # This part adjusts the *start* point if the image boundary cut off the *end* point.
-
-        # If the X dimension was cut short, adjust x_start to maintain the square size
-        if actual_w < padded_side and x_end == img.shape[1]:
-            x_start = max(0, x_end - final_side)
-
-        # If the Y dimension was cut short, adjust y_start to maintain the square size
-        if actual_h < padded_side and y_end == img.shape[0]:
-            y_start = max(0, y_end - final_side)
-
-        # Ensure the final square uses the calculated 'final_side'
-        # (This is mostly a safety check after the boundary adjustments)
-        x_end = x_start + final_side
-        y_end = y_start + final_side
-
-        return x_start, y_start, x_end, y_end
-
-    # Convert to grayscale for easier processing
-    gray = bgr2gray(img)
-
-    # Thresholding
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Find Contours
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Find the Largest Contour
-    # Safety: handle case where no contours are found (shouldn't happen with Otsu)
-    if not contours:
-        return None if not return_coords else (0, 0, img.shape[1], img.shape[0])
-
-    largest_contour = max(contours, key=cv2.contourArea)
-
-    # Get the Bounding Box
-    # x, y are the top-left coordinates, w is width, h is height
-    rect = cv2.boundingRect(largest_contour)
-
-    # Calculate padded coordinates, ensuring they don't go out of image bounds
-    x_start, y_start, x_end, y_end = calculate_square(img, rect, padding)
-
-    cropped_image = img[y_start:y_end, x_start:x_end]
-    if not return_coords:
-        return cropped_image
+    # 1. Collapse to grayscale luminance.
+    if img.ndim == 3:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     else:
+        gray = img
+
+    h, w = gray.shape[:2]
+    img_area = h * w
+
+    # 2. Separate the bright dish from the dark border. Plants inside the
+    #    dish are dark too, so they'd punch holes through the dish mask;
+    #    the morphological close after this step seals those holes.
+    _, dish_mask = cv2.threshold(gray, dark_thresh, 255, cv2.THRESH_BINARY)
+
+    # 3. Close holes punched by plants/dust inside the dish. The kernel size
+    #    is set generously (relative to image size) because plants can be
+    #    several hundred pixels wide; a too-small kernel would leave a
+    #    fragmented mask that gives a tight bounding box around just one
+    #    plant. The kernel is at most 51 px to keep it cheap on big images.
+    kernel_size = max(15, min(51, min(h, w) // 80))
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+    dish_mask = cv2.morphologyEx(dish_mask, cv2.MORPH_CLOSE, kernel)
+
+    # 4. Pick the largest bright connected component.
+    num_labels, _, stats, _ = cv2.connectedComponentsWithStats(dish_mask, connectivity=8)
+    if num_labels <= 1:
+        logger.info(
+            f"DIAGNOSTIC: extract_petri_dish — no bright components found "
+            f"(num_labels={num_labels}); falling back to full image"
+        )
+        return _fallback_full_image(img, return_coords)
+
+    # Skip label 0 (background) when ranking by area.
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    largest_idx = 1 + int(np.argmax(areas))
+    largest_area = int(stats[largest_idx, cv2.CC_STAT_AREA])
+
+    largest_pct = 100.0 * largest_area / img_area
+    logger.info(
+        f"DIAGNOSTIC: extract_petri_dish — image {w}x{h}, dark_thresh={dark_thresh}, "
+        f"kernel={kernel_size}, num_components={num_labels-1}, "
+        f"largest_area={largest_area} ({largest_pct:.1f}% of image), "
+        f"min_dish_ratio={min_dish_ratio}"
+    )
+
+    # 5. Sanity check — if the biggest blob is too small, detection failed
+    #    (e.g. condensation droplets formed the largest single bright region
+    #    and the dish itself got fragmented). Fall back to the full image
+    #    rather than crop wildly off-centre.
+    if largest_area < min_dish_ratio * img_area:
+        logger.info(
+            f"DIAGNOSTIC: extract_petri_dish — largest blob {largest_pct:.1f}% < "
+            f"min_dish_ratio {100*min_dish_ratio:.0f}%; falling back to full image"
+        )
+        return _fallback_full_image(img, return_coords)
+
+    # 6. Bounding box of the dish blob, with padding clamped to image bounds.
+    bx = int(stats[largest_idx, cv2.CC_STAT_LEFT])
+    by = int(stats[largest_idx, cv2.CC_STAT_TOP])
+    bw = int(stats[largest_idx, cv2.CC_STAT_WIDTH])
+    bh = int(stats[largest_idx, cv2.CC_STAT_HEIGHT])
+
+    x_start = max(0, bx - padding)
+    y_start = max(0, by - padding)
+    x_end = min(w, bx + bw + padding)
+    y_end = min(h, by + bh + padding)
+
+    if return_coords:
         return x_start, y_start, x_end, y_end
+    return img[y_start:y_end, x_start:x_end]
+
+
+def _fallback_full_image(
+    img: np.ndarray,
+    return_coords: bool,
+) -> Union[np.ndarray, Tuple[int, int, int, int]]:
+    """Return the full image (or its full-bounds coordinates) when detection fails."""
+    h, w = img.shape[:2]
+    if return_coords:
+        return 0, 0, w, h
+    return img.copy()

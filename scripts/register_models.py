@@ -9,8 +9,8 @@ from azure.ai.ml.entities import Model
 from azure.identity import AzureCliCredential
 
 # ── Fill in your local model paths here ──────────────────────────────────────
-SHOOT_MODEL_PATH = r"C:\Users\koenm\Downloads\root_det_model_512px.keras"
-ROOT_MODEL_PATH = r"C:\Users\koenm\Downloads\anchor_det_model_512px.keras"
+ROOT_MODEL_PATH = r"C:\Users\koenm\Documents\repositorys\year_2\2025-26d-fai2-adsai-group-computervision5\scripts\root_det_model_512px.keras"
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
@@ -49,17 +49,10 @@ def register_model(client: MLClient, name: str, path: str, description: str) -> 
 
 def main() -> None:
     """Register both models in the Azure ML workspace."""
-    if not SHOOT_MODEL_PATH or not ROOT_MODEL_PATH:
+    if not ROOT_MODEL_PATH:
         raise ValueError("Please fill in SHOOT_MODEL_PATH and ROOT_MODEL_PATH at the top of this script.")
 
     client = get_client()
-
-    register_model(
-        client=client,
-        name="shoot-detection",
-        path=SHOOT_MODEL_PATH,
-        description="Keras model for shoot detection — Sprint 3 baseline",
-    )
 
     register_model(
         client=client,

@@ -1,0 +1,81 @@
+# .amlignore — tells Azure ML which files to skip when uploading the code package.
+# Syntax is identical to .gitignore.
+# Only the files needed by score.py are uploaded: src/ and scripts/score.py.
+
+# ── Version control ───────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ── Python caches ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+.env
+
+# ── Local Azure config — contains credentials, must not be uploaded ───────────
+config.json
+
+# ── Training data and model artifacts (largest directories) ──────────────────
+artifacts/
+*.keras
+*.h5
+*.onnx
+*.pt
+*.pth
+*.pkl
+
+# ── Notebooks ─────────────────────────────────────────────────────────────────
+*.ipynb
+.ipynb_checkpoints/
+
+# ── Docs and diagrams ─────────────────────────────────────────────────────────
+docs/
+*.drawio
+*.png
+*.jpg
+*.jpeg
+*.svg
+project-roadmap.png
+
+# ── Frontend and API web servers (not needed by score.py) ────────────────────
+frontend/
+api/
+
+# ── Docker and compose files ──────────────────────────────────────────────────
+Dockerfile
+docker-compose*.yml
+docker-compose*.yaml
+
+# ── Database ──────────────────────────────────────────────────────────────────
+db/
+*.db
+*.sqlite
+
+# ── Requirements and CI config ────────────────────────────────────────────────
+requirements/
+.github/
+.pre-commit-config.yaml
+
+# ── Tests (not needed at inference time) ─────────────────────────────────────
+tests/
+
+# ── Editor / OS noise ─────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/

@@ -7,10 +7,17 @@ Conditions for registration (both must pass):
   1. mean_f1 >= --f1_threshold  (minimum quality bar)
   2. mean_f1 >  best F1 of all existing registered versions
 
+The script writes a tiny `registered_version.txt` file into --output_dir,
+which the downstream deploy step reads to decide whether to roll the
+endpoint forward. Contents:
+    <integer version>   — a new version was registered, deploy it
+    none                — registration was skipped (model didn't pass), nothing to do
+
 Usage (called by the pipeline, not manually):
     python scripts/register_model_if_better.py
         --model_dir  <mounted model output directory>
         --eval_dir   <mounted eval output directory>
+        --output_dir <mounted output for registered_version.txt>
         [--model_name root-detection]
         [--f1_threshold 0.6]
 """
@@ -33,9 +40,33 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("register_model_if_better")
     parser.add_argument("--model_dir", required=True, help="Mounted path to trained model output")
     parser.add_argument("--eval_dir", required=True, help="Mounted path to eval output (contains eval_results.txt)")
+    parser.add_argument(
+        "--output_dir",
+        default=None,
+        help="Pipeline output dir to write registered_version.txt into. "
+        "If omitted (manual runs), the version file isn't written.",
+    )
     parser.add_argument("--model_name", default=MODEL_NAME_DEFAULT)
     parser.add_argument("--f1_threshold", type=float, default=F1_THRESHOLD_DEFAULT)
     return parser.parse_args()
+
+
+def write_version_marker(output_dir: str | None, version: str) -> None:
+    """Drop registered_version.txt into output_dir for the downstream deploy step.
+
+    Args:
+        output_dir: Pipeline-mounted output directory, or None (no-op).
+        version: The registered version string, or the literal "none" to
+            signal that no new model was registered this run.
+    """
+    if output_dir is None:
+        print(f"(no --output_dir provided — skipping registered_version.txt; would have been '{version}')")
+        return
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    marker = out / "registered_version.txt"
+    marker.write_text(version + "\n")
+    print(f"Wrote registered_version.txt: '{version}'  ({marker})")
 
 
 def get_client() -> MLClient:
@@ -92,6 +123,7 @@ def main() -> None:
 
     if mean_f1 < args.f1_threshold:
         print(f"\nNOT registered — F1 {mean_f1:.4f} is below threshold {args.f1_threshold}.")
+        write_version_marker(args.output_dir, "none")
         return
 
     client = get_client()
@@ -100,6 +132,7 @@ def main() -> None:
 
     if mean_f1 <= best_f1:
         print(f"\nNOT registered — F1 {mean_f1:.4f} does not beat best registered F1 {best_f1:.4f}.")
+        write_version_marker(args.output_dir, "none")
         return
 
     model = Model(
@@ -111,6 +144,7 @@ def main() -> None:
     registered = client.models.create_or_update(model)
     print(f"\nRegistered: {args.model_name} v{registered.version}  (mean_f1={mean_f1:.4f})")
     print(f"Azure ID  : {registered.id}")
+    write_version_marker(args.output_dir, str(registered.version))
 
 
 if __name__ == "__main__":

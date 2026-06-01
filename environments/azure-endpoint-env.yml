@@ -1,0 +1,30 @@
+name: root-detection-endpoint
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      # Required by Azure ML managed online endpoints
+      - azureml-defaults>=1.51
+      # Model loading (CPU inference — no GPU needed for serving)
+      # tensorflow 2.16+ uses keras 3 as its default backend; custom_functions.py
+      # requires keras.ops which is a Keras 3-only API.
+      - tensorflow>=2.16,<2.17
+      - keras>=3.0,<4.0
+      # Keras 2 backward-compat: the registered .keras model files were saved
+      # with Keras 2 (e.g. Conv2DTranspose still accepts `groups=1`, which
+      # Keras 3 rejects). tf-keras provides a Keras 2 loader we use from
+      # score.py to deserialize the model into a Keras 2 graph.
+      - tf-keras>=2.16,<2.17
+      # Image processing
+      - opencv-python-headless>=4.8
+      - numpy>=1.24
+      # Root length pipeline dependencies
+      - scipy>=1.11          # cKDTree used in root_lengths.py
+      - scikit-image>=0.21   # skeletonize used in root_lengths.py
+      - networkx>=3.2        # Dijkstra path finding in root_lengths.py
+      # Azure ML SDK — needed to download the anchor model from the registry at startup
+      - azure-ai-ml>=1.12
+      - azure-identity>=1.15

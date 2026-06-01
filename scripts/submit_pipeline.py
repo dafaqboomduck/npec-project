@@ -10,9 +10,12 @@ Both:
     python scripts/submit_pipeline.py --schedule --run-now
 
 Pipeline steps:
-  1. Train   — trains U-Net on cv5_train + cv5_val, outputs model
+  1. Train    — trains U-Net on cv5_train + cv5_val, outputs model
   2. Evaluate — runs patch inference on cv5_test, writes eval_results.txt
-  3. Register — registers model if F1 >= 0.6 AND beats best registered version
+  3. Register — registers model if F1 >= 0.6 AND beats best registered version;
+                writes registered_version.txt (version string or 'none')
+  4. Deploy   — reads registered_version.txt; if a new version was registered,
+                rolls the online endpoint forward to it. Otherwise a no-op.
 """
 
 import argparse
@@ -81,8 +84,10 @@ def ensure_environment(client: MLClient) -> str:
     return label
 
 
-def build_components(env_label: str) -> tuple[CommandComponent, CommandComponent, CommandComponent]:
-    """Create the three pipeline components (train, eval, register)."""
+def build_components(
+    env_label: str,
+) -> tuple[CommandComponent, CommandComponent, CommandComponent, CommandComponent]:
+    """Create the four pipeline components (train, eval, register, deploy)."""
     resources = JobResourceConfiguration(instance_type=INSTANCE_TYPE)
     code = str(REPO_ROOT)
 
@@ -143,36 +148,58 @@ def build_components(env_label: str) -> tuple[CommandComponent, CommandComponent
     register_component = CommandComponent(
         name="register_model_if_better",
         display_name="Register Model If Better",
-        description="Registers new model version only if F1 >= threshold and beats best registered",
+        description="Registers new model version only if F1 >= threshold and beats best registered. "
+        "Writes registered_version.txt to register_output (version or 'none').",
         inputs={
             "model_dir": Input(type="uri_folder"),
             "eval_dir": Input(type="uri_folder"),
             "f1_threshold": Input(type="number", default=0.6),
+        },
+        outputs={
+            "register_output": Output(type="uri_folder"),
         },
         code=code,
         command=(
             "python scripts/register_model_if_better.py "
             "--model_dir   ${{inputs.model_dir}} "
             "--eval_dir    ${{inputs.eval_dir}} "
+            "--output_dir  ${{outputs.register_output}} "
             "--f1_threshold ${{inputs.f1_threshold}}"
         ),
         environment=env_label,
         resources=resources,
     )
 
-    return train_component, eval_component, register_component
+    deploy_component = CommandComponent(
+        name="deploy_endpoint",
+        display_name="Deploy Endpoint If New Model",
+        description="Reads registered_version.txt from the register step and rolls the "
+        "online endpoint forward to that version. No-op if the register step "
+        "wrote 'none' (i.e. no new model was registered this run).",
+        inputs={
+            "register_output": Input(type="uri_folder"),
+        },
+        code=code,
+        command=("python scripts/deploy_endpoint.py " "--registered-version-file ${{inputs.register_output}}"),
+        environment=env_label,
+        resources=resources,
+    )
+
+    return train_component, eval_component, register_component, deploy_component
 
 
 def build_pipeline(
     train_comp: CommandComponent,
     eval_comp: CommandComponent,
     register_comp: CommandComponent,
+    deploy_comp: CommandComponent,
 ) -> pipeline:
-    """Wire the three components into an Azure ML pipeline."""
+    """Wire the four components into an Azure ML pipeline."""
 
     @pipeline(
         display_name="root-detection-weekly-retrain",
-        description="Weekly pipeline: sweep batch_size → evaluate best model → conditionally register",
+        description="Weekly pipeline: sweep batch_size → evaluate best model "
+        "→ conditionally register → conditionally redeploy endpoint",
     )
     def root_detection_pipeline(
         train_data: Input(type="uri_folder"),
@@ -208,6 +235,15 @@ def build_pipeline(
         )
         register_step.compute = COMPUTE_NAME
 
+        # -- Deploy endpoint if a new model was registered -----------------------
+        # The deploy step ALWAYS runs, but `deploy_endpoint.py` reads
+        # registered_version.txt and exits cleanly when its contents are 'none'.
+        # That way we don't need conditional execution in the pipeline DSL.
+        deploy_step = deploy_comp(
+            register_output=register_step.outputs.register_output,
+        )
+        deploy_step.compute = COMPUTE_NAME
+
     return root_detection_pipeline
 
 
@@ -222,8 +258,8 @@ def main() -> None:
     client = get_client()
     env_label = ensure_environment(client)
 
-    train_comp, eval_comp, register_comp = build_components(env_label)
-    pipeline_func = build_pipeline(train_comp, eval_comp, register_comp)
+    train_comp, eval_comp, register_comp, deploy_comp = build_components(env_label)
+    pipeline_func = build_pipeline(train_comp, eval_comp, register_comp, deploy_comp)
 
     # Bind the fixed data assets
     pipeline_job = pipeline_func(

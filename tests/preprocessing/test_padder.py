@@ -3,17 +3,21 @@
 Module under test: src/npec_cv/helpers/padder.py
 Function:          padder(image, patch_size) -> np.ndarray
 
-Pads an image so its dimensions are multiples of patch_size, with
-padding distributed evenly using cv2.copyMakeBorder + BORDER_CONSTANT.
+Pads an image so its dimensions are multiples of patch_size. Padding is
+added on the BOTTOM and RIGHT only (top-left alignment), matching how the
+training pipeline pads inputs. Earlier versions of this helper distributed
+padding evenly on all sides; that introduced left/top zero-columns the model
+never saw during training and caused a right-side prediction bias. These
+tests pin the current corner-padding contract.
 
 Test coverage
 -------------
   TestPadderDivisibility
     - output H, W are multiples of patch_size for various inputs
-    - LOCKED quirk: already-divisible inputs still get a full extra patch
-  TestPadderSymmetry
-    - top/bottom and left/right padding differ by at most 1px
-    - original content is positioned at (top, left) in the output
+    - already-divisible inputs are returned UNPADDED (no extra phantom patch)
+  TestPadderCornerAlignment
+    - original content sits at (0, 0)
+    - padding is added on the bottom and right only
   TestPadderFillValue
     - padded regions are exactly zero (BGR and grayscale)
   TestPadderTypePreservation
@@ -50,28 +54,45 @@ class TestPadderDivisibility:
         assert out.shape[0] % patch_size == 0
         assert out.shape[1] % patch_size == 0
 
-    def test_already_divisible_still_pads_full_patch(self):
-        """LOCKED BEHAVIOR: input divisible by patch_size still gets +patch_size.
+    def test_already_divisible_returns_unpadded(self):
+        """LOCKED BEHAVIOR: input already divisible by patch_size is returned as-is.
 
-        Formula: ((h // P) + 1) * P - h. When h % P == 0 this equals P, not 0.
-        Pinning this to surface any silent change. May be reconsidered later.
+        Formula: (patch_size - h % patch_size) % patch_size, which is 0 when
+        h is already a multiple of patch_size. No phantom extra patch is added.
         """
         img = np.zeros((512, 512, 3), dtype=np.uint8)
 
         out = padder(img, patch_size=512)
 
-        assert out.shape == (1024, 1024, 3)
+        assert out.shape == (512, 512, 3)
+
+    def test_minimum_padding_added(self):
+        """Output is the smallest multiple of patch_size that fits the input."""
+        img = np.zeros((100, 150, 3), dtype=np.uint8)
+        patch_size = 64
+
+        out = padder(img, patch_size)
+
+        # 100 -> 128 (next multiple of 64); 150 -> 192 (next multiple of 64)
+        assert out.shape[:2] == (128, 192)
 
 
-class TestPadderSymmetry:
-    """Padding is split evenly across opposite sides."""
+class TestPadderCornerAlignment:
+    """Padding is added on the bottom and right; original sits at (0, 0)."""
 
-    def test_padding_symmetric_within_one_pixel(self):
-        """top/bottom and left/right padding sizes differ by at most 1 pixel.
+    def test_original_content_placed_at_origin(self):
+        """The original image content sits at (0, 0) in the output."""
+        h, w = 100, 100
+        patch_size = 64
+        # unique pattern: ascending values so equality is meaningful
+        img = np.arange(h * w * 3, dtype=np.uint8).reshape(h, w, 3)
 
-        Use a uniformly-bright image so the zero-padded border is identifiable
-        by simply finding rows/cols that are all zero.
-        """
+        out = padder(img, patch_size)
+
+        assert np.array_equal(out[:h, :w], img)
+
+    def test_padding_added_to_bottom_and_right_only(self):
+        """top/left padding = 0; bottom and right hold all the zero padding."""
         img = np.full((99, 99, 3), 255, dtype=np.uint8)
         patch_size = 32
 
@@ -82,67 +103,46 @@ class TestPadderSymmetry:
         col_nonzero = np.where(out.any(axis=(0, 2)))[0]
 
         top = int(row_nonzero[0])
-        bottom = out.shape[0] - 1 - int(row_nonzero[-1])
         left = int(col_nonzero[0])
+
+        # original content starts at the very top-left
+        assert top == 0
+        assert left == 0
+
+        # bottom and right contain padding rows/cols
+        bottom = out.shape[0] - 1 - int(row_nonzero[-1])
         right = out.shape[1] - 1 - int(col_nonzero[-1])
-
-        assert abs(top - bottom) <= 1
-        assert abs(left - right) <= 1
-
-    def test_original_content_placed_at_top_left_offset(self):
-        """The original image content sits at (top_pad, left_pad) in the output."""
-        h, w = 100, 100
-        patch_size = 64
-        # unique pattern: ascending values so equality is meaningful
-        img = np.arange(h * w * 3, dtype=np.uint8).reshape(h, w, 3)
-
-        out = padder(img, patch_size)
-
-        # mirror padder's formula
-        height_padding = ((h // patch_size) + 1) * patch_size - h
-        width_padding = ((w // patch_size) + 1) * patch_size - w
-        top = height_padding // 2
-        left = width_padding // 2
-
-        assert np.array_equal(out[top : top + h, left : left + w], img)
+        assert bottom > 0
+        assert right > 0
 
 
 class TestPadderFillValue:
     """Padded regions must be exactly zero."""
 
     def test_padded_region_is_zero_for_bgr(self):
-        """All-bright BGR input → padded border is exactly [0, 0, 0]."""
-        img = np.full((100, 100, 3), 255, dtype=np.uint8)
+        """All-bright BGR input → padded border (bottom + right) is exactly [0, 0, 0]."""
+        h, w = 100, 100
         patch_size = 64
+        img = np.full((h, w, 3), 255, dtype=np.uint8)
 
         out = padder(img, patch_size)
 
-        # locate where the original image content sits
-        height_padding = ((100 // patch_size) + 1) * patch_size - 100
-        width_padding = ((100 // patch_size) + 1) * patch_size - 100
-        top = height_padding // 2
-        left = width_padding // 2
-
-        # build a mask of the "padded region" — everything except [top:top+100, left:left+100]
+        # Padded region is everything outside [:h, :w]
         mask = np.ones(out.shape[:2], dtype=bool)
-        mask[top : top + 100, left : left + 100] = False
+        mask[:h, :w] = False
 
         assert (out[mask] == 0).all()
 
     def test_padded_region_is_zero_for_grayscale(self):
         """All-bright grayscale input → padded border is exactly 0."""
-        img = np.full((100, 100), 255, dtype=np.uint8)
+        h, w = 100, 100
         patch_size = 64
+        img = np.full((h, w), 255, dtype=np.uint8)
 
         out = padder(img, patch_size)
 
-        height_padding = ((100 // patch_size) + 1) * patch_size - 100
-        width_padding = ((100 // patch_size) + 1) * patch_size - 100
-        top = height_padding // 2
-        left = width_padding // 2
-
         mask = np.ones(out.shape, dtype=bool)
-        mask[top : top + 100, left : left + 100] = False
+        mask[:h, :w] = False
 
         assert (out[mask] == 0).all()
 

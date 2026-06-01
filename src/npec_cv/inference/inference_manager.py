@@ -325,14 +325,10 @@ class InferenceManager:
         h_crop = y_end - y_start
         w_crop = x_end - x_start
 
-        # Calculate padding that was added (mirrors padder() logic)
-        height_padding = ((h_crop // patch_size) + 1) * patch_size - h_crop
-        width_padding = ((w_crop // patch_size) + 1) * patch_size - w_crop
-        top_pad = height_padding // 2
-        left_pad = width_padding // 2
-
-        # Remove padding
-        unpadded_mask = padded_mask[top_pad : top_pad + h_crop, left_pad : left_pad + w_crop]
+        # padder() now adds zeros on the BOTTOM and RIGHT only (top-left
+        # alignment), so the original content lives at [0:h_crop, 0:w_crop]
+        # in the padded mask. No top/left offset to subtract.
+        unpadded_mask = padded_mask[:h_crop, :w_crop]
 
         # Place into full-size canvas
         final_mask = np.zeros(self.img_shape[:2], dtype=padded_mask.dtype)
