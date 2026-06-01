@@ -1,0 +1,5 @@
+asyncpg
+azure-ai-ml
+azure-identity
+azure-storage-blob
+httpx

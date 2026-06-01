@@ -24,6 +24,7 @@ from the injected DB session.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -136,7 +137,7 @@ async def _run_inference_background(
         async with db_session_factory() as db:
             try:
                 # Fetch image bytes from storage
-                image_bytes = storage.download(annotation["image_uri"])
+                image_bytes = await asyncio.to_thread(storage.download, annotation["image_uri"])
                 filename = annotation["image_uri"].split("/")[-1]
 
                 # Run inference
@@ -451,7 +452,7 @@ async def upload_dataset_image(
     # Save to storage
     storage_key = f"datasets/{dataset_id}/{uuid.uuid4()}{_ext(file.filename or '')}"
     try:
-        image_uri = storage.upload(storage_key, image_bytes)
+        image_uri = await asyncio.to_thread(storage.upload, storage_key, image_bytes)
     except Exception as exc:
         logger.error("Storage save failed for dataset %s: %s", dataset_id, exc)
         raise HTTPException(

@@ -55,6 +55,7 @@ COPY --from=deps /opt/npec_models /opt/npec_models
 # Application source only — npec_cv is installed, no longer copied
 COPY api/ ./api/
 COPY lineage/ ./lineage/
+COPY scripts/*.py /app/scripts/
 
 # Non-root user
 RUN adduser --disabled-password --gecos "" --uid 1001 appuser \
@@ -72,3 +73,23 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
 
 CMD ["uvicorn", "api.src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# 3. Cloud
+# Extends the runtime target with Azure dependencies and cloud defaults.
+# Build with: docker build --target cloud -t cv5-api:cloud .
+FROM runtime AS cloud
+
+# Switch to root temporarily to install cloud dependencies
+USER root
+
+COPY requirements/cloud.txt requirements/cloud.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements/cloud.txt
+
+# Back to non-root
+USER appuser
+
+# Cloud defaults — override any of these at runtime via env vars or Key Vault
+ENV DEPLOYMENT_ENV=cloud \
+    STORAGE_BACKEND=minio \
+    USE_MOCK_INFERENCE=false

@@ -26,15 +26,17 @@ from __future__ import annotations
 import logging
 import os
 from abc import ABC, abstractmethod
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # Config
 
-
+_DEPLOYMENT_ENV: str = os.getenv("DEPLOYMENT_ENV", "local")
 STORAGE_BACKEND: str = os.getenv("STORAGE_BACKEND", "minio")
+
+# Minio config
 
 MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "localhost:9000")
 MINIO_PUBLIC_ENDPOINT: str = os.getenv("MINIO_PUBLIC_ENDPOINT", MINIO_ENDPOINT)
@@ -43,6 +45,13 @@ MINIO_ROOT_PASSWORD: str = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin")
 MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "npec-artifacts")
 MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "false").lower() == "true"
 MINIO_PRESIGN_TTL: int = int(os.getenv("MINIO_PRESIGN_TTL", str(7 * 24 * 3600)))
+
+# Azure config
+AZURE_STORAGE_PUBLIC_URL: str = os.getenv("AZURE_STORAGE_PUBLIC_URL", "")
+AZURE_STORAGE_CONNECTION_STRING: str = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
+AZURE_STORAGE_CONTAINER: str = os.getenv("AZURE_STORAGE_CONTAINER", "npec-artifacts")
+AZURE_PRESIGN_TTL: int = int(os.getenv("AZURE_PRESIGN_TTL", str(7 * 24 * 3600)))
+
 
 # Local fallback base path
 LOCAL_STORAGE_BASE = Path(os.getenv("LOCAL_STORAGE_PATH", "./data"))
@@ -326,6 +335,142 @@ class MinIOStorageBackend(AbstractStorageBackend):
             response.release_conn()
 
 
+# Azure implementation
+
+
+class AzureBlobStorageBackend(AbstractStorageBackend):
+    """Uploads artifacts to Azure Blob Storage and returns presigned URLs."""
+
+    def __init__(
+        self,
+        connection_string: str = AZURE_STORAGE_CONNECTION_STRING,
+        container: str = AZURE_STORAGE_CONTAINER,
+        presigned_ttl_seconds: int = AZURE_PRESIGN_TTL,
+    ) -> None:
+        """Uploads artifacts to Azure Blob Storage and returns presigned URLs.
+
+        Args:
+            connection_string: Azure Storage connection string.
+            container: Blob contianer name.
+            presigned_ttl_seconds: SAS URL time-to-live in seconds.
+        """
+        self._connection_string = connection_string
+        self._container = container
+        self._ttl_seconds = presigned_ttl_seconds
+        self._client = None
+
+    def _get_client(self):
+        """Return the BlobServiceClient, initialising it on first call.
+
+        Also ensures the container exists, creating it if not.
+
+        Returns:
+            An initialized `BlobServiceClient`.
+        """
+        if self._client is None:
+            from azure.storage.blob import BlobServiceClient
+
+            self._client = BlobServiceClient.from_connection_string(
+                self._connection_string,
+            )
+            container_client = self._client.get_container_client(self._container)
+            if not container_client.exists():
+                container_client.create_container()
+                logger.info("AzureBlobStorageBackend: created contianer '%s'", self._container)
+        return self._client
+
+    def upload(
+        self,
+        object_name: str,
+        data: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        """Upload bytes to Azure Blob Storage.
+
+        Args:
+            object_name: Blob name (path withing the container).
+            data: Raw bytes to upload.
+            content_type: MIME type stored as blob metadata.
+
+        Returns:
+            The blob name (object_name), used as the key for sign().
+        """
+        blob_client = self._get_client().get_blob_client(
+            container=self._container,
+            blob=object_name,
+        )
+        blob_client.upload_blob(
+            data,
+            overwrite=True,
+            content_settings=self._content_settings(content_type),
+        )
+        logger.debug("AzureBlobStorageBackend: uploaded: '%s'", object_name)
+        return object_name
+
+    def download(self, uri: str) -> bytes:
+        """Download blob bytes by object name or URL.
+
+        Args:
+            uri: Blob name or SAS URL returned by previous upload()/sign() call.
+
+        Returns:
+            Raw bytes of the stored blob.
+        """
+        # If it's a full URL, extract the blob name from the path
+        if uri.startswith("http"):
+            from urllib.parse import urlparse
+
+            parsed = urlparse(uri)
+            # Path is /<container>/<blob_name>
+            object_name = "/".join(parsed.path.lstrip("/").split("/")[1:])
+        else:
+            object_name = uri
+
+        blob_client = self._get_client().get_blob_client(
+            container=self._container,
+            blob=object_name,
+        )
+        return blob_client.download_blob().readall()
+
+    def sign(self, object_name: str) -> str:
+        """Generate a SAS URL for an already-uploaded blob.
+
+        Args:
+            object_name: The key returned by upload().
+
+        Returns:
+            A presigned SAS URL valid for `presign_ttl_seconds`.
+        """
+        from azure.storage.blob import BlobSasPermissions, generate_blob_sas
+
+        client = self._get_client()
+        account = client.account_name
+        account_key = self._get_client().credential.account_key
+        expiry = datetime.now(timezone.utc) + timedelta(seconds=self._ttl_seconds)
+
+        sas_token = generate_blob_sas(
+            account_name=account,
+            container_name=self._container,
+            blob_name=object_name,
+            account_key=account_key,
+            permission=BlobSasPermissions(read=True),
+            expiry=expiry,
+        )
+
+        # Use the client's own URL as base
+        base_url = AZURE_STORAGE_PUBLIC_URL.rstrip("/") if AZURE_STORAGE_PUBLIC_URL else client.url.rstrip("/")
+        url = f"{base_url}/{self._container}/{object_name}?{sas_token}"
+
+        logger.debug("AzureBlobStorageBackend: signed '%s'", object_name)
+        return url
+
+    @staticmethod
+    def _content_settings(content_type: str):
+        from azure.storage.blob import ContentSettings
+
+        return ContentSettings(content_type=content_type)
+
+
 # Factory - called once by dependencies
 
 
@@ -335,10 +480,15 @@ def get_storage_backend() -> AbstractStorageBackend:
     Controlled by the `STORAGE_BACKEND` environment variable.
     - `local` -> `LocalStorageBackend`
     - `minio` -> `MinIOStorageBackend`
+    - `cloud` -> `AzureBlobStorageBackend`
 
     Returns:
         The active `AbstractStorageBackend` implementation.
     """
+    if _DEPLOYMENT_ENV == "cloud":
+        logger.info("Storage backend: Azure Blob (container=%s)", AZURE_STORAGE_CONTAINER)
+        return AzureBlobStorageBackend()
+
     if STORAGE_BACKEND == "minio":
         logger.info("Storage backend: MinIO (%s / bucket=%s)", MINIO_ENDPOINT, MINIO_BUCKET)
         return MinIOStorageBackend()

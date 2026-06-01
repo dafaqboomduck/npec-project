@@ -71,9 +71,9 @@ class RetrainingService:
             .where(
                 TrainingRun.status.in_(
                     [
-                        TrainingRun.COMPLETED.value,
-                        TrainingRun.STOPPED.value,
-                        TrainingRun.FAILED.value,
+                        TrainingRunStatus.COMPLETED.value,
+                        TrainingRunStatus.STOPPED.value,
+                        TrainingRunStatus.FAILED.value,
                     ]
                 )
             )
@@ -123,9 +123,16 @@ class RetrainingService:
             RETRAIN_MIN_SAMPLES,
         )
 
-        from api.src.services.training import LocalTrainingService
+        from api.src.dependencies import DEPLOYMENT_ENV
 
-        training_service = LocalTrainingService(db=self._db)
+        if DEPLOYMENT_ENV == "cloud":
+            from api.src.services.azure_training import AzureMLTrainingService
+
+            training_service = AzureMLTrainingService(db=self._db)
+        else:
+            from api.src.services.training import LocalTrainingService
+
+            training_service = LocalTrainingService(db=self._db)
 
         try:
             response = await training_service.start(hyperparameters=None)

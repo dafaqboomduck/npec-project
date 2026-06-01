@@ -17,11 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.src.db.session import get_session
 from api.src.services.base import AbstractInferenceService
 from api.src.services.deployment import AbstractDeploymentService
-from api.src.services.mock_inference import MockInferenceService
 from api.src.services.storage import AbstractStorageBackend, get_storage_backend
-from api.src.services.training import AbstractTrainingService, LocalTrainingService
+from api.src.services.training import AbstractTrainingService
 
 logger = logging.getLogger(__name__)
+
+# Deployment environment
+DEPLOYMENT_ENV = os.getenv("DEPLOYMENT_ENV", "local")
 
 # Feature flags
 
@@ -50,19 +52,21 @@ def get_inference_service() -> AbstractInferenceService:
     global _inference_service
 
     if _inference_service is None:
-        if _USE_MOCK:
+        if DEPLOYMENT_ENV == "cloud":
+            from api.src.services.azure_inference import AzureMLInferenceService
+
+            _inference_service = AzureMLInferenceService()
+            logger.info("Inference service: AzureMLInferenceService")
+        elif _USE_MOCK:
+            from api.src.services.mock_inference import MockInferenceService
+
             _inference_service = MockInferenceService()
             logger.info("Inference service: MockInferenceService")
         else:
             from api.src.services.unet_inference import UNetInferenceService
 
-            _inference_service = UNetInferenceService(
-                artifact_path=_FALLBACK_ARTIFACT_DIR,
-            )
-            logger.info(
-                "Inference service: UNetInferenceService (artifact_path=%s)",
-                _FALLBACK_ARTIFACT_DIR,
-            )
+            _inference_service = UNetInferenceService(artifact_path=_FALLBACK_ARTIFACT_DIR)
+            logger.info("Inference service: UNetInferenceService (artifact_path=%s)", _FALLBACK_ARTIFACT_DIR)
 
     return _inference_service
 
@@ -81,19 +85,27 @@ def get_training_service(
 ) -> AbstractTrainingService:
     """Return the active training service.
 
+    Controlled by DEPLOYMENT_ENV.
+
     Args:
         db: Injected database session.
 
     Returns:
       The configured AbstractTrainingService implementation.
     """
+    if DEPLOYMENT_ENV == "cloud":
+        from api.src.services.azure_training import AzureMLTrainingService
+
+        return AzureMLTrainingService(db)
+    from api.src.services.training import LocalTrainingService
+
     return LocalTrainingService(db)
 
 
 def get_deployment_service(db) -> AbstractDeploymentService:
     """Return the active deployment service.
 
-    Injects the DB session required by LocalDeploymentService.
+    Controlled by DEPLOYMENT_ENV.
 
     Args:
         db: An open AsyncSession from get_session().
@@ -113,15 +125,18 @@ async def warmup_inference_service() -> None:
     weights are loaded before the first request arrives. This moves the
     ~30s cold-start cost to server startup rather than the first prediction.
     """
+    if DEPLOYMENT_ENV == "cloud":
+        logger.info("Inference warmup skipped — AzureMLInferenceService has no local pipeline.")
+        return
+
     if _USE_MOCK:
         logger.info("Inference warmup skipped (mock mode)")
         return
 
-    service = get_inference_service()
-
     try:
         import asyncio
 
+        service = get_inference_service()
         await asyncio.to_thread(service._get_pipeline)
         logger.info("Inference pipeline warmed up successfully")
     except Exception as exc:

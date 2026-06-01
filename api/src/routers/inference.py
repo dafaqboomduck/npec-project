@@ -143,7 +143,8 @@ async def predict(
     logger.info("Inference complete for '%s' - prediction_id=%s user=%s", original_filename, prediction_id, user.sub)
 
     # Save input image
-    input_uri: str | None = save_input_image(
+    input_uri: str | None = await asyncio.to_thread(
+        save_input_image,
         prediction_id=prediction_id,
         image_bytes=image_bytes,
         original_filename=original_filename,
@@ -155,12 +156,14 @@ async def predict(
     tip_photo_uri: str | None = None
 
     if image_result is not None:
-        mask_uri = save_segmentation_mask(
+        mask_uri = await asyncio.to_thread(
+            save_segmentation_mask,
             prediction_id=prediction_id,
             image_result=image_result,
             backend=storage,
         )
-        tip_photo_uri = save_tip_photo(
+        tip_photo_uri = await asyncio.to_thread(
+            save_tip_photo,
             prediction_id=prediction_id,
             image_result=image_result,
             original_image_bytes=image_bytes,

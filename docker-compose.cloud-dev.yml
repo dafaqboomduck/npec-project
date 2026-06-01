@@ -1,0 +1,118 @@
+# docker-compose.cloud-dev.yml — tests the cloud code path locally using Azure emulators.
+# Uses Azurite instead of MinIO to emulate Azure Blob Storage.
+#
+# Usage:
+#   docker compose -f docker-compose.cloud-dev.yml up -d
+
+services:
+  db:
+    image: postgres:16
+    container_name: cv5-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cv5}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cv5}
+      POSTGRES_DB: ${POSTGRES_DB:-cv5db}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - cv5_pgdata:/var/lib/postgresql/data
+      - ./db/seeds:/seeds:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5db}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    restart: unless-stopped
+    ports:
+      - "10000:10000"
+    volumes:
+      - azurite_data:/data
+    command: azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --location /data
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "127.0.0.1", "10000" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migrations:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    container_name: cv5-migrations
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cv5}:${POSTGRES_PASSWORD:-cv5}@db:5432/${POSTGRES_DB:-cv5db}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.dev
+    container_name: cv5-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cv5}:${POSTGRES_PASSWORD:-cv5}@db:5432/${POSTGRES_DB:-cv5db}
+      SECRET_KEY: ${SECRET_KEY:-devsecret}
+      USE_MOCK_INFERENCE: ${USE_MOCK_INFERENCE:-true}
+      DEPLOYMENT_ENV: "cloud"
+      AZURE_STORAGE_PUBLIC_URL: "http://localhost:10000/devstoreaccount1"
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-npec-artifacts}
+      AZUREML_ENDPOINT_URI: ${AZUREML_ENDPOINT_URI}
+      AZUREML_ENDPOINT_KEY: ${AZUREML_ENDPOINT_KEY}
+      AZUREML_SUBSCRIPTION_ID: ${AZUREML_SUBSCRIPTION_ID}
+      AZUREML_RESOURCE_GROUP: ${AZUREML_RESOURCE_GROUP}
+      AZUREML_REQUEST_TIMEOUT: ${AZUREML_REQUEST_TIMEOUT:-180}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ~/.azure:/root/.azure:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      azurite:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+    container_name: cv5-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  seeder:
+    image: postgres:16
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    environment:
+      DB_USER: ${POSTGRES_USER:-cv5}
+      DB_NAME: ${POSTGRES_DB:-cv5db}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-cv5}
+    volumes:
+      - ./db/seeds:/seeds:ro
+    command: >
+      bash -c 'psql -h db -U $${DB_USER} -d $${DB_NAME} -f /seeds/dev_seed.sql'
+
+volumes:
+  cv5_pgdata:
+  azurite_data:

@@ -37,11 +37,12 @@ from api.src.schemas.predictions import (
     PredictionStatus,
 )
 from api.src.services.base import AbstractInferenceService
-from lineage import InferenceLogger
 
 logger = logging.getLogger(__name__)
 
 # Config
+
+_DEPLOYMENT_ENV: str = os.getenv("DEPLOYMENT_ENV", "local")
 
 # Directory where output masks are written
 DEFAULT_MASK_OUTPUT_DIR = Path("/tmp/npec_masks")
@@ -180,16 +181,16 @@ class UNetInferenceService(AbstractInferenceService):
             mv_name = _FALLBACK_MODEL_NAME
 
         # Build the audit logger (no-op if db is None).
-        audit = (
-            InferenceLogger(
+        audit = None
+        if db is not None and _DEPLOYMENT_ENV == "cloud":
+            from lineage import InferenceLogger
+
+            audit = InferenceLogger(
                 db,
                 model_version_id=mv_id,
                 model_name=mv_name,
                 model_version_label=mv_label,
             )
-            if db is not None
-            else None
-        )
         input_ref = InferenceLogger.hash_input(image_bytes)
 
         # Write bytes to a temp file, the pipeline expects a Path

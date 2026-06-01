@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
 from api.src.core.security import get_current_user
+from api.src.dependencies import DEPLOYMENT_ENV
 from api.src.schemas.auth import TokenData
 from api.src.schemas.common import ErrorCode, ErrorResponse
 from api.src.services.storage import LOCAL_STORAGE_BASE, STORAGE_BACKEND
@@ -54,7 +55,7 @@ async def get_file(
     Raises:
         HTTPException: 404 if MinIO is active or the file does not exist.
     """
-    if STORAGE_BACKEND != "local":
+    if DEPLOYMENT_ENV == "cloud" or STORAGE_BACKEND != "local":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=ErrorResponse(

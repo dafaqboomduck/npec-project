@@ -94,6 +94,79 @@ class TrainingRunRepository:
         logger.info("Created training run %s", row.id)
         return row
 
+    async def set_job_name(self, run_id: uuid.UUID, job_name: str) -> None:
+        """Persist the Azure ML job name after submission.
+
+        Args:
+            run_id: UUID of the training run.
+            job_name: Azure ML job name to store.
+        """
+        row = await self._db.get(TrainingRun, run_id)
+        if row is not None:
+            row.azureml_job_name = job_name
+            await self._db.commit()
+
+    async def mark_completed(
+        self,
+        run_id: uuid.UUID,
+        final_f1: float | None = None,
+        model_version_id: uuid.UUID | None = None,
+    ) -> None:
+        """Mark a run as completed.
+
+        Args:
+            run_id: UUID of the training run.
+            final_f1: Optional final F1 score from the job.
+            model_version_id: UUID of the registered model_versions row.
+        """
+        row = await self._db.get(TrainingRun, run_id)
+        if row is None:
+            logger.warning("mark_completed: run %s not found", run_id)
+            return
+        row.status = TrainingRunStatus.COMPLETED.value
+        row.completed_at = datetime.now(timezone.utc)
+        if final_f1 is not None:
+            row.final_f1 = final_f1
+        if model_version_id is not None:
+            row.model_version_id = model_version_id
+        await self._db.commit()
+        logger.info("Training run %s marked completed", run_id)
+
+    async def mark_failed(
+        self,
+        run_id: uuid.UUID,
+        reason: str | None = None,
+    ) -> None:
+        """Mark a run as failed.
+
+        Args:
+            run_id: UUID of the training run.
+            reason: Optional fialure reason for logging.
+        """
+        row = await self._db.get(TrainingRun, run_id)
+        if row is None:
+            logger.warning("mark_failed: run %s not found", run_id)
+            return
+        row.status = TrainingRunStatus.FAILED.value
+        row.completed_at = datetime.now(timezone.utc)
+        await self._db.commit()
+        logger.warning("Training run %s marked failed: %s", run_id, reason)
+
+    async def mark_stopped(self, run_id: uuid.UUID) -> None:
+        """Mark a run as stopped.
+
+        Args:
+            run_id: UUID of the training run.
+        """
+        row = await self._db.get(TrainingRun, run_id)
+        if row is None:
+            logger.warning("mark_stopped: run %s not found", run_id)
+            return
+        row.status = TrainingRunStatus.STOPPED.value
+        row.completed_at = datetime.now(timezone.utc)
+        await self._db.commit()
+        logger.info("Training run %s marked stopped", run_id)
+
     async def get_raw(self, run_id: uuid.UUID) -> TrainingRun | None:
         """Return the raw ORM row for run_id, or None.
 
