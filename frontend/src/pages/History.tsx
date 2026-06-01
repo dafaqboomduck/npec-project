@@ -354,9 +354,22 @@ export default function History() {
               Are you sure you want to delete this prediction from history? This
               action cannot be undone.
             </p>
-            <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+            <div className="modal-actions" style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
               <button
                 className="modal-close modal-close--secondary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '38px',
+                  padding: '0 20px',
+                  borderRadius: 'var(--radius-md)',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  boxSizing: 'border-box',
+                  margin: 0,
+                  border: '1px solid transparent',
+                }}
                 onClick={() => {
                   setShowDiscardModal(false);
                   setDiscardTarget(null);
@@ -367,6 +380,19 @@ export default function History() {
               </button>
               <button
                 className="delete-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '38px',
+                  padding: '0 20px',
+                  borderRadius: 'var(--radius-md)',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  boxSizing: 'border-box',
+                  margin: 0,
+                  border: '1px solid #fca5a5',
+                }}
                 disabled={discarding}
                 onClick={() => void executeDiscard()}
               >

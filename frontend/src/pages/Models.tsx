@@ -1112,9 +1112,22 @@ export default function Models() {
               {modalConfig.title}
             </h2>
             <p className="modal-body">{modalConfig.body}</p>
-            <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+            <div className="modal-actions" style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
               <button
                 className="modal-close modal-close--secondary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '38px',
+                  padding: '0 20px',
+                  borderRadius: 'var(--radius-md)',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  boxSizing: 'border-box',
+                  margin: 0,
+                  border: '1px solid transparent',
+                }}
                 onClick={() =>
                   setModalConfig((prev) => ({ ...prev, show: false }))
                 }
@@ -1124,6 +1137,19 @@ export default function Models() {
               </button>
               <button
                 className={modalConfig.isDelete ? 'delete-btn' : 'modal-close'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '38px',
+                  padding: '0 20px',
+                  borderRadius: 'var(--radius-md)',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  boxSizing: 'border-box',
+                  margin: 0,
+                  border: modalConfig.isDelete ? '1px solid #fca5a5' : '1px solid transparent',
+                }}
                 disabled={actionLoading}
                 onClick={() => {
                   void modalConfig.onConfirm();

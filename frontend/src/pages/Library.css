@@ -711,7 +711,7 @@
   gap: var(--space-4);
 }
 
-.lib-form-row > .lib-form-group {
+.lib-form-row>.lib-form-group {
   flex: 1;
 }
 
@@ -1586,7 +1586,7 @@
   margin-bottom: var(--space-3);
 }
 
-.ann-prediction-meta > div {
+.ann-prediction-meta>div {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -1899,6 +1899,31 @@
 }
 
 .delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.delete-btn-icon {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+}
+
+.delete-btn-icon:hover:not(:disabled) {
+  background-color: #fca5a5;
+  color: #7f1d1d;
+}
+
+.delete-btn-icon:disabled {
   cursor: not-allowed;
   opacity: 0.4;
 }
