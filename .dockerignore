@@ -1,0 +1,59 @@
+# Repo-root .dockerignore. Shared by all builds that use the repo root as
+# context (api, db/migrations, frontend). Keep anything any Dockerfile COPYs:
+# requirements/, src/npec_cv/, api/, lineage/, scripts/, db/, environments/,
+# config.json, pyproject.toml, and the frontend source.
+
+# --- Heaviest offenders ---
+artifacts/
+code.zip
+tree.txt
+scripts/*.keras
+
+# --- Node (frontend builds inside its image; never ship host modules/build) ---
+node_modules
+**/node_modules
+frontend/dist
+
+# --- Version control ---
+.git
+.gitignore
+.gitattributes
+.github
+
+# --- Python caches / build artifacts ---
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+.eggs
+build/
+dist/
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov/
+.amlignore
+
+# --- Virtual environments ---
+.venv
+venv
+env
+
+# --- Secrets / local config (never bake into an image) ---
+.env
+.env.*
+!.env.example
+
+# --- Docs build output (source docs/ is kept) ---
+docs/_build
+
+# --- Editor / OS ---
+.vscode
+.idea
+.DS_Store
+*.log
+
+# --- Misc local files not needed at build ---
+*.drawio
+project-roadmap.png
+.pre-commit-config.yaml

@@ -50,9 +50,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=deps /usr/local/lib/python3.11/site-packages \
     /usr/local/lib/python3.11/site-packages
 COPY --from=deps /usr/local/bin /usr/local/bin
-COPY --from=deps /opt/npec_models /opt/npec_models
+# Set ownership at copy time
+COPY --from=deps --chown=1001:1001 /opt/npec_models /opt/npec_models
 
-# Application source only — npec_cv is installed, no longer copied
 COPY api/ ./api/
 COPY lineage/ ./lineage/
 COPY scripts/*.py /app/scripts/
@@ -60,7 +60,7 @@ COPY scripts/*.py /app/scripts/
 # Non-root user
 RUN adduser --disabled-password --gecos "" --uid 1001 appuser \
     && mkdir -p /tmp/npec_masks /tmp/npec_annotation_masks \
-    && chown -R appuser:appuser /tmp/npec_masks /tmp/npec_annotation_masks /opt/npec_models
+    && chown appuser:appuser /tmp/npec_masks /tmp/npec_annotation_masks
 USER appuser
 
 ENV PYTHONUNBUFFERED=1 \
@@ -81,6 +81,9 @@ FROM runtime AS cloud
 
 # Switch to root temporarily to install cloud dependencies
 USER root
+
+COPY config.json /app/config.json
+COPY /environments/ /app/environments/
 
 COPY requirements/cloud.txt requirements/cloud.txt
 RUN --mount=type=cache,target=/root/.cache/pip \

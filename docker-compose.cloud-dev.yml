@@ -70,11 +70,13 @@ services:
       AZUREML_SUBSCRIPTION_ID: ${AZUREML_SUBSCRIPTION_ID}
       AZUREML_RESOURCE_GROUP: ${AZUREML_RESOURCE_GROUP}
       AZUREML_REQUEST_TIMEOUT: ${AZUREML_REQUEST_TIMEOUT:-180}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
     ports:
       - "8000:8000"
     volumes:
       - ./artifacts:/app/artifacts
-      - ~/.azure:/root/.azure:ro
     depends_on:
       db:
         condition: service_healthy
