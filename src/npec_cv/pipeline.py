@@ -233,7 +233,11 @@ class CVPipeline:
         img = cv2.imread(str(img_path))
 
         if img is None:
-            raise ValueError(f"Failed to load image: {img_path}")
+            raise ValueError(f"Could not load image from {img_path}")
+            
+        # Add this color space correction before passing it on
+        if img.ndim == 3:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         return self.plant_master.process_image(img, img_path.stem)
 
