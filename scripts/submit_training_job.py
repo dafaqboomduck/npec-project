@@ -27,7 +27,7 @@ ENV_YAML = REPO_ROOT / "environments" / "azure-train-env.yml"
 COMPUTE_NAME = "lambda-0"
 INSTANCE_TYPE = "gpu"  # requests 1 GPU on lambda-0
 ENV_NAME = "root-detection-train"
-MAX_IMAGES = 5  # set to None to train on the full dataset
+MAX_IMAGES = None  # set to None to train on the full dataset
 
 
 def get_client() -> MLClient:

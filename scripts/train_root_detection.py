@@ -458,12 +458,32 @@ def main() -> None:
     os.makedirs(args.output_dir, exist_ok=True)
     best_model_path = os.path.join(args.output_dir, "root_det_model_512px.keras")
 
+    class MlflowEpochMetricsCallback(keras.callbacks.Callback):
+        """Logs every Keras metric to MLflow at the end of each epoch.
+
+        Workaround for mlflow.tensorflow.autolog() not capturing custom
+        Metric subclasses (e.g. our F1Score) on tf 2.16 / mlflow 2.x.
+        Without this callback the Studio's Metrics tab only shows the two
+        final scalars logged after fit() — no per-epoch curves.
+        """
+
+        def on_epoch_end(self, epoch, logs=None):
+            if not logs:
+                return
+            for name, value in logs.items():
+                try:
+                    mlflow.log_metric(name, float(value), step=epoch)
+                except Exception:
+                    # Don't let a logging failure crash training.
+                    pass
+
     callbacks = [
         keras.callbacks.ModelCheckpoint(
             best_model_path, monitor="val_f1_score", mode="max", verbose=1, save_best_only=True
         ),
         keras.callbacks.EarlyStopping(patience=5, monitor="val_f1_score", mode="max", restore_best_weights=True),
         keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=3, min_lr=1e-7, verbose=1),
+        MlflowEpochMetricsCallback(),
     ]
 
     # 5. Train
