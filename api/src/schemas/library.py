@@ -69,6 +69,16 @@ class DatasetDetail(DatasetSummary):
     species: str | None = None
 
 
+class DatasetImportResponse(BaseModel):
+    """Returned by POST /datasets/import."""
+
+    dataset_id: UUID
+    dataset_name: str
+    scans_imported: int
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
 # Annotation schemas
 
 

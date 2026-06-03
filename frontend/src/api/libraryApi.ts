@@ -232,12 +232,9 @@ export interface DatasetImportResponse {
   errors: string[];
 }
 
-/**
- * POST /datasets/import — import a dataset from a ZIP archive.
- * NOTE: Mocked for now because backend endpoint does not exist.
- */
+/** POST /datasets/import — import a dataset from a ZIP archive. */
 export async function importDataset(
-  _zipFile: File,
+  zipFile: File,
   config: {
     targetMode: 'new' | 'existing';
     datasetId?: string;
@@ -247,16 +244,17 @@ export async function importDataset(
     growthStage?: string;
   },
 ): Promise<DatasetImportResponse> {
-  // Simulate extraction & processing network delay
-  await new Promise((resolve) => setTimeout(resolve, 3000));
-
-  // Log usage to satisfy unused parameter TypeScript compile check
-  console.log(
-    `Importing dataset archive ${_zipFile.name} with config:`,
-    config,
-  );
+  const form = new FormData();
+  form.append('file', zipFile);
+  form.append('target_mode', config.targetMode);
+  if (config.datasetId) form.append('dataset_id', config.datasetId);
+  if (config.name) form.append('name', config.name);
+  if (config.description) form.append('description', config.description);
+  if (config.species) form.append('species', config.species);
+  if (config.growthStage) form.append('growth_stage', config.growthStage);
 
   return apiClient<DatasetImportResponse>('/datasets/import', {
     method: 'POST',
+    body: form, // do NOT set Content-Type; the browser sets the multipart boundary
   });
 }

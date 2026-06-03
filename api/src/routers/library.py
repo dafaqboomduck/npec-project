@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.src.core.security import get_current_user, require_admin
@@ -50,6 +50,7 @@ from api.src.schemas.library import (
     AnnotationUpdate,
     DatasetCreate,
     DatasetDetail,
+    DatasetImportResponse,
     DatasetSummary,
     GrowthStage,
     ModelCreate,
@@ -385,6 +386,157 @@ async def delete_dataset(
         raise _404("Dataset not found.")
     logger.info("Admin %s deleted dataset %s", user.sub, dataset_id)
     return MessageResponse(message=f"Dataset {dataset_id} deleted.")
+
+
+@router.post(
+    "/datasets/import",
+    response_model=DatasetImportResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Bulk-import a dataset from a ZIP archive (admin only)",
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse, "description": "Target dataset not found"},
+        415: {"model": ErrorResponse, "description": "Uploaded file is not a ZIP"},
+    },
+)
+async def import_dataset(
+    file: UploadFile = File(..., description="ZIP archive of root-scan images."),
+    target_mode: str = Form("new", description="'new' or 'existing'"),
+    dataset_id: UUID | None = Form(None, description="Required when target_mode='existing'"),
+    name: str | None = Form(None),
+    description: str | None = Form(None),
+    species: str | None = Form(None),
+    growth_stage: str | None = Form(None),
+    user: Annotated[TokenData, Depends(require_admin)] = None,
+    storage: AbstractStorageBackend = Depends(get_storage),
+    db: AsyncSession = Depends(get_session),
+) -> DatasetImportResponse:
+    """Extract images from a ZIP and create one pending annotation per image.
+
+    Reuses the single-upload pipeline (validate -> store -> dedup -> count). A bad
+    entry is reported in `warnings`/`errors`. It never aborts the whole import.
+
+    Args:
+        file: ZIP archive of root-scan images.
+        target_mode: 'new' or 'existing'.
+        dataset_id: If target_mode='existing', UUID of the dataset.
+        name: Optional name.
+        description: Optional description.
+        species: Optional species.
+        growth_stage: Optional growth stage.
+        user: Injected authenticated user.
+        storage: Injected backend storage.
+        db: Injected database session.
+
+    Returns:
+        DatasetImportResponse with the created/adjusted dataset.
+
+    Raises:
+        HTTPException: 403 for non-admin users.
+        HTTPException: 404 if the dataset does not exist.
+        HTTPException: 415 if the file is not a ZIP file.
+    """
+    import hashlib
+    import io
+    import zipfile
+
+    from sqlalchemy import select
+
+    from api.src.services.image_validation import validate_file_size
+
+    _IMAGE_EXT = {".png", ".tif", ".tiff", ".jpg", ".jpeg"}
+
+    dataset_repo = DatasetRepository(db)
+    annotation_repo = AnnotationRepository(db, storage)
+
+    # 1. Resolve / create the target dataset
+    if target_mode == "existing":
+        if dataset_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse(
+                    error_code=ErrorCode.NOT_FOUND,
+                    message="dataset_id is required when target_mode='existing'.",
+                ).model_dump(),
+            )
+        dataset = await dataset_repo.get(dataset_id)
+        if dataset is None:
+            raise _404("Dataset not found.")
+    else:
+        dataset = await dataset_repo.create(
+            name=name or "Imported dataset",
+            description=description,
+            species=species,
+            growth_stage=growth_stage,
+            created_by=UUID(user.sub),
+        )
+        await db.commit()
+        dataset_id = dataset.dataset_id
+
+    # 2. Read the ZIP
+    raw = await file.read()
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=ErrorResponse(
+                error_code=ErrorCode.NOT_FOUND,
+                message="Uploaded file is not a valid ZIP.",
+            ).model_dump(),
+        )
+
+    imported = 0
+    warnings: list[str] = []
+    errors: list[str] = []
+
+    # 3. One pending annotation per image, deduped within the dataset
+    for entry in archive.infolist():
+        if entry.is_dir():
+            continue
+        ext = ("." + entry.filename.rsplit(".", 1)[-1].lower()) if "." in entry.filename else ""
+        if ext not in _IMAGE_EXT:
+            warnings.append(f"Skipped non-image entry: {entry.filename}")
+            continue
+        try:
+            data = archive.read(entry)
+            validate_file_size(data)
+            validate_image(data, entry.filename)
+
+            image_hash = hashlib.sha256(data).hexdigest()
+            existing = await db.execute(
+                select(Annotation).where(
+                    Annotation.dataset_id == dataset_id,
+                    Annotation.image_hash == image_hash,
+                )
+            )
+            if existing.scalar_one_or_none() is not None:
+                warnings.append(f"Duplicate skipped: {entry.filename}")
+                continue
+
+            key = f"datasets/{dataset_id}/{uuid.uuid4()}/{ext}"
+            image_uri = await asyncio.to_thread(storage.upload, key, data)
+            await annotation_repo.create_pending(
+                dataset_id=dataset_id,
+                image_uri=image_uri,
+                image_hash=image_hash,
+                created_by=UUID(user.sub),
+            )
+            await dataset_repo.increment_count(dataset_id)
+            imported += 1
+        except Exception as exc:
+            errors.append(f"{entry.filename}: {type(exc).__name__}: {exc}")
+
+    await db.commit()
+    logger.info("User %s import %d image(s) into dataset %s", user.sub, imported, dataset_id)
+    return DatasetImportResponse(
+        dataset_id=dataset_id,
+        dataset_name=dataset.name,
+        scans_imported=imported,
+        warnings=warnings,
+        errors=errors,
+    )
 
 
 @router.post(
