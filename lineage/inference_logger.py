@@ -38,6 +38,8 @@ from typing import Any, AsyncIterator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lineage import resource_sampler
+
 log = logging.getLogger(__name__)
 
 
@@ -98,6 +100,7 @@ class InferenceLogger:
             input_ref=input_ref,
         )
         start = time.perf_counter()
+        rec.cpu_start = resource_sampler.process_cpu_seconds()
         try:
             yield rec
         except Exception as exc:
@@ -146,6 +149,14 @@ class InferenceLogger:
         if rec.latency_ms is None and start is not None:
             rec.latency_ms = int((time.perf_counter() - start) * 1000)
 
+        # Resource snapshot — fully guarded, must never break the write.
+        res = resource_sampler.sample_system()
+        cpu_pct_process = resource_sampler.process_cpu_pct(
+            rec.cpu_start,
+            resource_sampler.process_cpu_seconds(),
+            rec.latency_ms,
+        )
+
         row = InferenceAuditLog(
             prediction_id=rec.prediction_id,
             model_version_id=self._model_version_id,
@@ -158,6 +169,14 @@ class InferenceLogger:
             error=rec.error,
             endpoint=self._endpoint,
             deployment=self._deployment,
+            cpu_pct_system=res["cpu_pct_system"],
+            cpu_pct_process=cpu_pct_process,
+            cpu_count=res["cpu_count"],
+            ram_used_mb=res["ram_used_mb"],
+            ram_available_mb=res["ram_available_mb"],
+            gpu_pct=res["gpu_pct"],
+            vram_used_mb=res["vram_used_mb"],
+            disk_free_mb=res["disk_free_mb"],
         )
         self._db.add(row)
         try:
@@ -176,6 +195,7 @@ class _Record:
         "latency_ms",
         "error",
         "prediction_id",
+        "cpu_start",
     )
 
     def __init__(self, *, request_id: str, input_ref: str) -> None:
@@ -185,6 +205,7 @@ class _Record:
         self.latency_ms: Optional[int] = None
         self.error: Optional[str] = None
         self.prediction_id: Optional[uuid.UUID] = None
+        self.cpu_start: Optional[float] = None
 
     def set_output(self, output: Any) -> None:
         self.output_summary = _summarize(output)

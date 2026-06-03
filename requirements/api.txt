@@ -16,3 +16,5 @@ minio
 mlflow
 pynvml
 opencv-python
+psutil
+nvidia-ml-py

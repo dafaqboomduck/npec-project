@@ -1,0 +1,38 @@
+"""Add system resource metrics to inference_audit_log.
+
+All columns nullable, so this is non-blocking: no backfill, older rows
+and CPU-only hosts simply carry NULLs.
+"""
+
+from typing import Sequence, Union
+
+import sqlalchemy as sa
+from alembic import op
+
+revision: str = "0012"
+down_revision: Union[str, None] = "0011"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+_COLUMNS = (
+    ("cpu_pct_system", sa.Float()),
+    ("cpu_pct_process", sa.Float()),
+    ("cpu_count", sa.Integer()),
+    ("ram_used_mb", sa.Integer()),
+    ("ram_available_mb", sa.Integer()),
+    ("gpu_pct", sa.Float()),
+    ("vram_used_mb", sa.Integer()),
+    ("disk_free_mb", sa.Integer()),
+)
+
+
+def upgrade() -> None:
+    """Add the nullable resource-metric columns."""
+    for name, type_ in _COLUMNS:
+        op.add_column("inference_audit_log", sa.Column(name, type_, nullable=True))
+
+
+def downgrade() -> None:
+    """Drop the resource-metric columns in reverse order."""
+    for name, _ in reversed(_COLUMNS):
+        op.drop_column("inference_audit_log", name)

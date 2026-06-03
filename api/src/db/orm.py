@@ -557,6 +557,14 @@ class InferenceAuditLog(Base):
     endpoint: Mapped[str] = mapped_column(String(64), nullable=False, server_default="api")
     # One of: 'local', 'portainer', 'azureml', 'unknown'.
     deployment: Mapped[str] = mapped_column(String(32), nullable=False)
+    cpu_pct_system: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    cpu_pct_process: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    cpu_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    ram_used_mb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    ram_available_mb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    gpu_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    vram_used_mb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    disk_free_mb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     logged_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
