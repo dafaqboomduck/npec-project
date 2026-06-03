@@ -52,7 +52,7 @@ services:
     volumes:
       - ./artifacts:/app/artifacts
     depends_on:
-      migrations:
+      - migrations
     restart: "no"
 
   api:
