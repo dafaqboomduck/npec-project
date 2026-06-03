@@ -77,10 +77,6 @@ USER root
 COPY config.json /app/config.json
 COPY /environments/ /app/environments/
 
-COPY requirements/cloud.txt requirements/cloud.txt
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements/cloud.txt
-
 # Back to non-root
 USER appuser
 
