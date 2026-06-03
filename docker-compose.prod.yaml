@@ -63,7 +63,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: [ "3" ]
+              device_ids: [ "6" ]
               capabilities: [ gpu ]
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -79,7 +79,7 @@ services:
       NPEC_ANNOTATION_MASK_DIR: /tmp/npec_annotation_masks
       BASELINE_MODEL_URI: ${BASELINE_MODEL_URI}
       NPEC_ARTIFACT_DIR: ${NPEC_ARTIFACT_DIR}
-      NVIDIA_VISIBLE_DEVICES: "3"
+      NVIDIA_VISIBLE_DEVICES: "6"
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     ports:
       - "2021:8000"
