@@ -202,6 +202,9 @@ class CVPipeline:
                 logger.warning(f"Failed to read image: {img_path}")
                 continue
 
+            if img.ndim == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
             logger.debug(f"Processing: {img_name}")
 
             # Process with PlantMaster
