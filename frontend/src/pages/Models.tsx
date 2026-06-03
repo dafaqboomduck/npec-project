@@ -1112,7 +1112,16 @@ export default function Models() {
               {modalConfig.title}
             </h2>
             <p className="modal-body">{modalConfig.body}</p>
-            <div className="modal-actions" style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
+            <div
+              className="modal-actions"
+              style={{
+                marginTop: '1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 'var(--space-3)',
+              }}
+            >
               <button
                 className="modal-close modal-close--secondary"
                 style={{
@@ -1148,7 +1157,9 @@ export default function Models() {
                   fontSize: 'var(--text-sm)',
                   boxSizing: 'border-box',
                   margin: 0,
-                  border: modalConfig.isDelete ? '1px solid #fca5a5' : '1px solid transparent',
+                  border: modalConfig.isDelete
+                    ? '1px solid #fca5a5'
+                    : '1px solid transparent',
                 }}
                 disabled={actionLoading}
                 onClick={() => {

@@ -354,7 +354,16 @@ export default function History() {
               Are you sure you want to delete this prediction from history? This
               action cannot be undone.
             </p>
-            <div className="modal-actions" style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
+            <div
+              className="modal-actions"
+              style={{
+                marginTop: '1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 'var(--space-3)',
+              }}
+            >
               <button
                 className="modal-close modal-close--secondary"
                 style={{

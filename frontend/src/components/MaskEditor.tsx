@@ -25,13 +25,26 @@ export default function MaskEditor({
   saveLabel = 'Apply Correction',
 }: MaskEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [brushSize, setBrushSize] = useState(20);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
+  const [tool, setTool] = useState<'brush' | 'eraser' | 'pan'>('brush');
   const [maskOpacity, setMaskOpacity] = useState(0.5);
   const [isLoaded, setIsLoaded] = useState(false);
   const historyRef = useRef<ImageData[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+
+  // Zoom & Pan States
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [spacePressed, setSpacePressed] = useState(false);
+
+  const resetZoomPan = () => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  };
 
   const saveStateToHistory = () => {
     if (!canvasRef.current) return;
@@ -63,7 +76,7 @@ export default function MaskEditor({
     setCanUndo(historyRef.current.length > 0);
   };
 
-  // Keyboard shortcut Ctrl+Z / Cmd+Z for Undo
+  // Keyboard shortcut Ctrl+Z / Cmd+Z for Undo & Space keydown for panning
   useEffect(() => {
     if (!inline && !isOpen) return;
 
@@ -72,11 +85,23 @@ export default function MaskEditor({
         e.preventDefault();
         handleUndo();
       }
+      if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT') {
+        e.preventDefault();
+        setSpacePressed(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setSpacePressed(false);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
   }, [inline, isOpen, canUndo]);
 
@@ -111,6 +136,7 @@ export default function MaskEditor({
         setIsLoaded(true);
         historyRef.current = [];
         setCanUndo(false);
+        resetZoomPan();
       }
     };
 
@@ -125,7 +151,91 @@ export default function MaskEditor({
     };
   }, [inline, isOpen, originalImageUrl, maskImageUrl]);
 
+  // Mouse & Touch Pan-Zoom Handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const isMiddleClick = e.button === 1;
+    if (tool === 'pan' || spacePressed || isMiddleClick) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning) {
+      setOffset({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+    stopDrawing();
+  };
+
+  const handleMouseLeave = () => {
+    setIsPanning(false);
+    stopDrawing();
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (tool === 'pan') {
+      const touch = e.touches[0];
+      setIsPanning(true);
+      setPanStart({ x: touch.clientX - offset.x, y: touch.clientY - offset.y });
+    } else {
+      startDrawing(e);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isPanning) {
+      const touch = e.touches[0];
+      setOffset({
+        x: touch.clientX - panStart.x,
+        y: touch.clientY - panStart.y,
+      });
+    } else {
+      draw(e);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsPanning(false);
+    stopDrawing();
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (!containerRef.current) return;
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - containerRect.left;
+    const mouseY = e.clientY - containerRect.top;
+
+    const zoomFactor = 1.15;
+    let newScale = scale;
+    if (e.deltaY < 0) {
+      newScale = Math.min(scale * zoomFactor, 10);
+    } else {
+      newScale = Math.max(scale / zoomFactor, 0.5);
+    }
+
+    // Keep point under cursor invariant
+    const newOffsetX = mouseX - (mouseX - offset.x) * (newScale / scale);
+    const newOffsetY = mouseY - (mouseY - offset.y) * (newScale / scale);
+
+    setScale(newScale);
+    setOffset({ x: newOffsetX, y: newOffsetY });
+  };
+
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+    const isMiddleClick = 'button' in e && e.button === 1;
+    if (tool === 'pan' || spacePressed || isMiddleClick) {
+      return;
+    }
     saveStateToHistory();
     setIsDrawing(true);
     draw(e);
@@ -140,7 +250,7 @@ export default function MaskEditor({
   };
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing || !canvasRef.current) return;
+    if (!isDrawing || !canvasRef.current || isPanning) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -164,14 +274,6 @@ export default function MaskEditor({
     ctx.lineWidth = brushSize;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-
-    // if (tool === 'brush') {
-    //   ctx.globalCompositeOperation = 'source-over';
-    //   ctx.strokeStyle = '#ffffff'; // White for mask pixels
-    // } else {
-    //   ctx.globalCompositeOperation = 'destination-out';
-    //   ctx.strokeStyle = 'rgba(0,0,0,1)';
-    // }
 
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = tool === 'brush' ? '#ffffff' : '#000000';
@@ -248,6 +350,57 @@ export default function MaskEditor({
               >
                 🧽 Eraser
               </button>
+              <button
+                className={`me-toggle-btn ${tool === 'pan' ? 'active' : ''}`}
+                onClick={() => setTool('pan')}
+              >
+                ✋ Pan & Zoom
+              </button>
+            </div>
+          </div>
+
+          <div className="me-tool-group">
+            <label>Zoom: {(scale * 100).toFixed(0)}%</label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="me-btn me-btn--secondary"
+                onClick={() => setScale((prev) => Math.min(prev * 1.2, 10))}
+                style={{
+                  flex: 1,
+                  padding: '6px',
+                  fontSize: '0.8rem',
+                  margin: 0,
+                }}
+                title="Zoom In"
+              >
+                ➕
+              </button>
+              <button
+                className="me-btn me-btn--secondary"
+                onClick={() => setScale((prev) => Math.max(prev / 1.2, 0.5))}
+                style={{
+                  flex: 1,
+                  padding: '6px',
+                  fontSize: '0.8rem',
+                  margin: 0,
+                }}
+                title="Zoom Out"
+              >
+                ➖
+              </button>
+              <button
+                className="me-btn me-btn--secondary"
+                onClick={resetZoomPan}
+                style={{
+                  flex: 1.5,
+                  padding: '6px',
+                  fontSize: '0.8rem',
+                  margin: 0,
+                }}
+                title="Reset Zoom & Pan"
+              >
+                🔄 Reset
+              </button>
             </div>
           </div>
 
@@ -310,37 +463,68 @@ export default function MaskEditor({
 
           <div className="me-help">
             <p>
-              💡 Tip: Use the opacity slider to compare the mask against the
-              original scan.
+              💡 Tips:
+              <br />• Use <b>Scroll Wheel</b> to zoom.
+              <br />• Select <b>Pan</b> tool or hold <b>Spacebar</b> + drag to
+              pan.
+              <br />• Try opacity slider to compare masks.
             </p>
           </div>
         </aside>
 
-        <div className="me-canvas-container">
+        <div
+          ref={containerRef}
+          className="me-canvas-container"
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            cursor:
+              tool === 'pan' || spacePressed
+                ? isPanning
+                  ? 'grabbing'
+                  : 'grab'
+                : 'crosshair',
+          }}
+        >
           {!isLoaded && (
             <div className="me-loading">Loading high-res scan...</div>
           )}
 
-          {/* Background image (locked) */}
-          <img
-            src={originalImageUrl}
-            className="me-background-img"
-            alt="Scan background"
-          />
+          <div
+            className="me-workspace"
+            style={{
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              transformOrigin: '0 0',
+            }}
+          >
+            {/* Background image (locked) */}
+            <img
+              src={originalImageUrl}
+              className="me-background-img"
+              alt="Scan background"
+              draggable={false}
+            />
 
-          {/* Drawing Canvas */}
-          <canvas
-            ref={canvasRef}
-            className="me-canvas"
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            onMouseLeave={stopDrawing}
-            onTouchStart={startDrawing}
-            onTouchMove={draw}
-            onTouchEnd={stopDrawing}
-            style={{ opacity: maskOpacity }}
-          />
+            {/* Drawing Canvas */}
+            <canvas
+              ref={canvasRef}
+              className="me-canvas"
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseLeave={stopDrawing}
+              onTouchStart={startDrawing}
+              onTouchMove={draw}
+              onTouchEnd={stopDrawing}
+              style={{ opacity: maskOpacity }}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -32,6 +32,7 @@ export default function ResultsView({
   isHistoryView = false,
 }: ResultsViewProps) {
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('scan');
+  const [maskOpacity, setMaskOpacity] = useState<number>(0.5);
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(
     null,
   );
@@ -146,8 +147,64 @@ export default function ResultsView({
               ))}
             </div>
           </div>
+          {overlayMode === 'mask' && (
+            <div className="rv-opacity-slider-container">
+              <label htmlFor="rv-mask-opacity">
+                Mask Opacity: {(maskOpacity * 100).toFixed(0)}%
+              </label>
+              <input
+                id="rv-mask-opacity"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={maskOpacity}
+                onChange={(e) => setMaskOpacity(parseFloat(e.target.value))}
+              />
+            </div>
+          )}
           <div className="rv-overlay-canvas">
-            {displayImageUrl ? (
+            {overlayMode === 'mask' ? (
+              <div
+                className="rv-image-composite-wrapper"
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {inputDisplayUrl ? (
+                  <img
+                    src={inputDisplayUrl}
+                    alt="Base scan"
+                    className="rv-overlay-img"
+                    onClick={() => setLightboxSrc(inputDisplayUrl)}
+                    title="Click to enlarge base scan"
+                    style={{ cursor: 'pointer' }}
+                  />
+                ) : (
+                  <span className="rv-overlay-placeholder">
+                    No scan image available
+                  </span>
+                )}
+                {result.segmentation_mask_url && (
+                  <img
+                    src={getArtifactUrl(result.segmentation_mask_url)}
+                    alt="Mask overlay"
+                    className="rv-overlay-img-mask"
+                    style={{
+                      position: 'absolute',
+                      opacity: maskOpacity,
+                      mixBlendMode: 'screen',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
+              </div>
+            ) : displayImageUrl ? (
               <img
                 src={displayImageUrl}
                 alt={`${overlayMode} view`}

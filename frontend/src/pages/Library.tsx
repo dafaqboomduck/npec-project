@@ -318,7 +318,11 @@ function AnnotationsTab({
                     title="Delete annotation"
                   >
                     {deleting === ann.annotation_id ? (
-                      <span className="spinner" style={{ width: '12px', height: '12px', margin: 0 }} aria-hidden="true" />
+                      <span
+                        className="spinner"
+                        style={{ width: '12px', height: '12px', margin: 0 }}
+                        aria-hidden="true"
+                      />
                     ) : (
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -412,7 +416,16 @@ function AnnotationsTab({
               Are you sure you want to delete this annotation? This action
               cannot be undone.
             </p>
-            <div className="modal-actions" style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
+            <div
+              className="modal-actions"
+              style={{
+                marginTop: '1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 'var(--space-3)',
+              }}
+            >
               <button
                 className="modal-close modal-close--secondary"
                 style={{
@@ -1025,7 +1038,16 @@ function UnconfirmedPredictionsTab({
               Are you sure you want to discard this prediction? This action
               cannot be undone and the scan result will be permanently deleted.
             </p>
-            <div className="modal-actions" style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
+            <div
+              className="modal-actions"
+              style={{
+                marginTop: '1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 'var(--space-3)',
+              }}
+            >
               <button
                 className="modal-close modal-close--secondary"
                 style={{
@@ -1082,9 +1104,9 @@ export default function Library() {
   const role = getRole();
   const displayName = username.includes('@')
     ? username
-      .split('@')[0]
-      .replace(/[._-]/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
+        .split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
   const { jobs, addJob, removeJob, isDatasetRunning } = useInferenceJobs();
@@ -1889,66 +1911,66 @@ export default function Library() {
     icon: JSX.Element;
     badge?: number;
   }[] = [
-      {
-        key: 'datasets',
-        label: 'Datasets',
-        icon: (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <ellipse cx="12" cy="5" rx="9" ry="3" />
-            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-          </svg>
-        ),
-      },
-      {
-        key: 'annotations',
-        label: 'Annotations',
-        icon: (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-          </svg>
-        ),
-      },
-      {
-        key: 'predictions' as LibraryTab,
-        label: 'Unconfirmed',
-        badge: unconfirmedCount,
-        icon: (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-        ),
-      },
-    ];
+    {
+      key: 'datasets',
+      label: 'Datasets',
+      icon: (
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <ellipse cx="12" cy="5" rx="9" ry="3" />
+          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+        </svg>
+      ),
+    },
+    {
+      key: 'annotations',
+      label: 'Annotations',
+      icon: (
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'predictions' as LibraryTab,
+      label: 'Unconfirmed',
+      badge: unconfirmedCount,
+      icon: (
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      ),
+    },
+  ];
 
   return (
     <div className="library-page">
@@ -2055,10 +2077,58 @@ export default function Library() {
             {/* Filters */}
             {((activeTab === 'datasets' && hasDatasetsOverall) ||
               (activeTab === 'annotations' && hasAnnotations)) && (
-                <div className="lib-filter-section">
-                  <span className="lib-nav-label">FILTERS</span>
+              <div className="lib-filter-section">
+                <span className="lib-nav-label">FILTERS</span>
 
-                  {activeTab === 'datasets' ? (
+                {activeTab === 'datasets' ? (
+                  <div className="lib-filter-group">
+                    <span className="lib-filter-label">GROWTH STAGE</span>
+                    <div className="lib-filter-chips">
+                      {[
+                        { value: '', label: 'All' },
+                        { value: 'seedling', label: 'Seedling' },
+                        { value: 'mature', label: 'Mature' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          className={`lib-chip ${(growthStages.length === 0 && opt.value === '') || growthStages[0] === opt.value ? 'lib-chip--active' : ''}`}
+                          onClick={() =>
+                            setGrowthStages(opt.value === '' ? [] : [opt.value])
+                          }
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 'var(--space-3)',
+                    }}
+                  >
+                    <div className="lib-filter-group">
+                      <span className="lib-filter-label">STATUS</span>
+                      <div className="lib-filter-chips">
+                        {[
+                          { value: '', label: 'All' },
+                          { value: 'pending', label: 'Pending' },
+                          { value: 'annotated', label: 'Annotated' },
+                          { value: 'review_required', label: 'Review Req.' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            className={`lib-chip ${annotStatusFilter === opt.value ? 'lib-chip--active' : ''}`}
+                            onClick={() => setAnnotStatusFilter(opt.value)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <div className="lib-filter-group">
                       <span className="lib-filter-label">GROWTH STAGE</span>
                       <div className="lib-filter-chips">
@@ -2069,81 +2139,33 @@ export default function Library() {
                         ].map((opt) => (
                           <button
                             key={opt.value}
-                            className={`lib-chip ${(growthStages.length === 0 && opt.value === '') || growthStages[0] === opt.value ? 'lib-chip--active' : ''}`}
-                            onClick={() =>
-                              setGrowthStages(opt.value === '' ? [] : [opt.value])
-                            }
+                            className={`lib-chip ${annotGrowthFilter === opt.value ? 'lib-chip--active' : ''}`}
+                            onClick={() => setAnnotGrowthFilter(opt.value)}
                           >
                             {opt.label}
                           </button>
                         ))}
                       </div>
                     </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 'var(--space-3)',
-                      }}
-                    >
-                      <div className="lib-filter-group">
-                        <span className="lib-filter-label">STATUS</span>
-                        <div className="lib-filter-chips">
-                          {[
-                            { value: '', label: 'All' },
-                            { value: 'pending', label: 'Pending' },
-                            { value: 'annotated', label: 'Annotated' },
-                            { value: 'review_required', label: 'Review Req.' },
-                          ].map((opt) => (
-                            <button
-                              key={opt.value}
-                              className={`lib-chip ${annotStatusFilter === opt.value ? 'lib-chip--active' : ''}`}
-                              onClick={() => setAnnotStatusFilter(opt.value)}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
 
-                      <div className="lib-filter-group">
-                        <span className="lib-filter-label">GROWTH STAGE</span>
-                        <div className="lib-filter-chips">
-                          {[
-                            { value: '', label: 'All' },
-                            { value: 'seedling', label: 'Seedling' },
-                            { value: 'mature', label: 'Mature' },
-                          ].map((opt) => (
-                            <button
-                              key={opt.value}
-                              className={`lib-chip ${annotGrowthFilter === opt.value ? 'lib-chip--active' : ''}`}
-                              onClick={() => setAnnotGrowthFilter(opt.value)}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="lib-filter-group">
-                        <span className="lib-filter-label">SPECIES</span>
-                        <input
-                          type="text"
-                          className="lib-search-input"
-                          placeholder="e.g. Arabidopsis"
-                          value={annotSpeciesFilter}
-                          onChange={(e) => setAnnotSpeciesFilter(e.target.value)}
-                          style={{
-                            fontSize: 'var(--text-xs)',
-                            padding: 'var(--space-2) var(--space-3)',
-                          }}
-                        />
-                      </div>
+                    <div className="lib-filter-group">
+                      <span className="lib-filter-label">SPECIES</span>
+                      <input
+                        type="text"
+                        className="lib-search-input"
+                        placeholder="e.g. Arabidopsis"
+                        value={annotSpeciesFilter}
+                        onChange={(e) => setAnnotSpeciesFilter(e.target.value)}
+                        style={{
+                          fontSize: 'var(--text-xs)',
+                          padding: 'var(--space-2) var(--space-3)',
+                        }}
+                      />
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Footer links */}
             <div className="lib-sidebar-footer">
@@ -2568,7 +2590,7 @@ export default function Library() {
                             }
                           >
                             {inferenceRunning ||
-                              isDatasetRunning(selectedDatasetId ?? '') ? (
+                            isDatasetRunning(selectedDatasetId ?? '') ? (
                               <>
                                 <span
                                   className="spinner"
@@ -2605,34 +2627,34 @@ export default function Library() {
                       {detailScans.some(
                         (s) => s.status === 'review_required',
                       ) && (
-                          <button
-                            className="lib-btn-review-lab"
-                            onClick={() =>
-                              navigate(`/lab?dataset_id=${selectedDatasetId}`)
-                            }
+                        <button
+                          className="lib-btn-review-lab"
+                          onClick={() =>
+                            navigate(`/lab?dataset_id=${selectedDatasetId}`)
+                          }
+                        >
+                          <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                           >
-                            <svg
-                              width="13"
-                              height="13"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                            </svg>
-                            Review{' '}
-                            {
-                              detailScans.filter(
-                                (s) => s.status === 'review_required',
-                              ).length
-                            }{' '}
-                            in Lab
-                          </button>
-                        )}
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                          Review{' '}
+                          {
+                            detailScans.filter(
+                              (s) => s.status === 'review_required',
+                            ).length
+                          }{' '}
+                          in Lab
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3684,8 +3706,8 @@ export default function Library() {
                           selectedAnnotation.mask_url
                             ? getArtifactUrl(selectedAnnotation.mask_url)
                             : getArtifactUrl(
-                              linkedPrediction?.segmentation_mask_url,
-                            )
+                                linkedPrediction?.segmentation_mask_url,
+                              )
                         }
                         alt="Segmentation Mask"
                         className="ann-image"
@@ -3954,7 +3976,7 @@ export default function Library() {
                           } catch (err) {
                             setAddToDatasetError(
                               (err as Error).message ||
-                              'Failed to add to dataset.',
+                                'Failed to add to dataset.',
                             );
                           } finally {
                             setAddingToDataset(false);
@@ -4127,7 +4149,7 @@ export default function Library() {
                             setDetailScans((prev) =>
                               prev.map((s) =>
                                 s.annotation_id ===
-                                  selectedAnnotation.annotation_id
+                                selectedAnnotation.annotation_id
                                   ? { ...s, status: 'review_required' }
                                   : s,
                               ),
@@ -4159,7 +4181,7 @@ export default function Library() {
                             setDetailScans((prev) =>
                               prev.map((s) =>
                                 s.annotation_id ===
-                                  selectedAnnotation.annotation_id
+                                selectedAnnotation.annotation_id
                                   ? { ...s, status: 'annotated' }
                                   : s,
                               ),

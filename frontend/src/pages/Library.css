@@ -711,7 +711,7 @@
   gap: var(--space-4);
 }
 
-.lib-form-row>.lib-form-group {
+.lib-form-row > .lib-form-group {
   flex: 1;
 }
 
@@ -1586,7 +1586,7 @@
   margin-bottom: var(--space-3);
 }
 
-.ann-prediction-meta>div {
+.ann-prediction-meta > div {
   display: flex;
   justify-content: space-between;
   align-items: baseline;

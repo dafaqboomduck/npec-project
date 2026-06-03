@@ -22,8 +22,14 @@ export default function Login() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!username.trim() || !password.trim()) {
-      setError('Please enter your username and password.');
+    if (!username.trim()) {
+      setError('Please enter your username.');
+      return;
+    }
+
+    if (!password.trim()) {
+      setError('Please enter your password.');
+      document.getElementById('login-password')?.focus();
       return;
     }
 
@@ -60,6 +66,12 @@ export default function Login() {
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !password.trim()) {
+                  e.preventDefault();
+                  document.getElementById('login-password')?.focus();
+                }
+              }}
               disabled={loading}
             />
           </div>
