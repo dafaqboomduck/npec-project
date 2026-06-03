@@ -17,6 +17,17 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false   # slow; flip to true only if still tight
+          docker-images: false     # keep — we need docker
+          swap-storage: true
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -54,14 +65,17 @@ jobs:
           target: runtime
           push: true
           build-args: |
-            NPEC_CV_VERSION=${{ vars.NPEC_CV_VERSION }} 
+            NPEC_CV_VERSION=${{ vars.NPEC_CV_VERSION }}
           secrets: |
             github_token=${{ secrets.GITHUB_TOKEN }}
           tags: |
             ${{ env.IMAGE_PREFIX }}/cv5-api:latest
             ${{ env.IMAGE_PREFIX }}/cv5-api:sha-${{ steps.sha.outputs.short }}
           cache-from: type=gha,scope=api
-          cache-to: type=gha,scope=api,mode=max
+          cache-to: type=gha,scope=api   # mode=max dropped: too disk-heavy for the api image
+
+      - name: Reclaim build cache before frontend
+        run: docker buildx prune -af
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6
