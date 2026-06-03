@@ -102,13 +102,16 @@ def get_training_service(
     return LocalTrainingService(db)
 
 
-def get_deployment_service(db) -> AbstractDeploymentService:
+def get_deployment_service(
+    db: AsyncSession = Depends(get_session),
+) -> AbstractDeploymentService:
     """Return the active deployment service.
 
-    Controlled by DEPLOYMENT_ENV.
+    Cloud model deployment is handled by the Azure ML pipeline, so the local
+    service is used for local + on-premise deployments.
 
     Args:
-        db: An open AsyncSession from get_session().
+        db: Injected database session.
 
     Returns:
         The configured AbstractDeploymentService.

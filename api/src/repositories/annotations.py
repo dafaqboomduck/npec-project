@@ -256,6 +256,7 @@ class AnnotationRepository:
         treatment: str | None,
         dataset_id: uuid.UUID | None = None,
         created_by: uuid.UUID | None = None,
+        status: AnnotationStatus = AnnotationStatus.ANNOTATED,
     ) -> uuid.UUID:
         """Create a new annotation record from a confirmed prediction.
 
@@ -275,6 +276,7 @@ class AnnotationRepository:
                 When provided, the caller must also call
                 DatasetRepository.increment_count() in the same transaction.
             created_by: UUID of the logged in user.
+            status: Optional annotation status.
 
         Returns:
             UUID of the newly created annotation.
@@ -294,7 +296,7 @@ class AnnotationRepository:
             id=uuid.uuid4(),
             prediction_id=prediction_id,
             dataset_id=dataset_id,
-            status=AnnotationStatus.ANNOTATED,
+            status=status,
             image_uri=image_uri,
             mask_uri=mask_uri,
             tip_photo_uri=tip_photo_uri,
@@ -398,12 +400,16 @@ class AnnotationRepository:
         self,
         prediction_id: uuid.UUID,
         status: AnnotationStatus,
+        create_if_missing: bool = False,
     ) -> AnnotationResponse | None:
         """Set annotation status to review_required.
 
         Args:
             prediction_id: UUID of the prediction that the annotation is linked to.
             status: AnnotationStatus to set.
+            create_if_missing: if True and no annotation exists for the prediction,
+                a new annotation is created from the prediction's stored image/mask URIs
+                with the given status
 
         Returns:
             Updated AnnotationResponse, or None if not found.
@@ -412,9 +418,30 @@ class AnnotationRepository:
 
         row = result.scalar_one_or_none()
         if row is None:
-            return None
-        row.status = status
-        row.updated_at = datetime.now(timezone.utc)
+            if not create_if_missing:
+                return None
+            pred = (
+                await self._db.execute(select(PredictionORM).where(PredictionORM.id == prediction_id))
+            ).scalar_one_or_none()
+            if pred is None:
+                return None
+            row = Annotation(
+                id=uuid.uuid4(),
+                prediction_id=prediction_id,
+                status=status,
+                image_uri=pred.input_uri,
+                mask_uri=pred.segmentation_mask_uri,
+                tip_photo_uri=pred.tip_photo_uri,
+                image_hash=pred.input_hash,
+                created_by=pred.user_id,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+            self._db.add(row)
+        else:
+            row.status = status
+            row.updated_at = datetime.now(timezone.utc)
+
         await self._db.commit()
         await self._db.refresh(row)
         logger.info("Annotation %s flagged as review required.", row.id)

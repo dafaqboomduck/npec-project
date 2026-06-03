@@ -21,6 +21,7 @@ from api.src.repositories.base import AbstractPredictionRepository
 from api.src.repositories.datasets import DatasetRepository
 from api.src.repositories.feedback import FeedbackRepository
 from api.src.schemas.auth import UserRole
+from api.src.schemas.library import ModelStatus
 from api.src.schemas.predictions import (
     Plant,
     PredictionMetadata,
@@ -30,9 +31,6 @@ from api.src.schemas.predictions import (
 from api.src.services.storage import AbstractStorageBackend
 
 logger = logging.getLogger(__name__)
-
-# Sentinel used when no deployed model version row exists yet.
-_UNKNOWN_MODEL_VERSION_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 
 class DatabasePredictionRepository(AbstractPredictionRepository):
@@ -55,23 +53,22 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
     async def _get_model_version_id(self) -> uuid.UUID:
         """Return the UUID of the currently deployed model version.
 
-        Falls back to a sentinel UUID if no deployed model exists yet so
-        that predictions can still be stored before model management
-        endpoints are live.
-
         Returns:
             UUID of the deployed `ModelVersion` row, or the sentinel UUID.
+
+        Raises:
+            NoDeployedModelError if no model is deployed.
         """
-        result = await self._db.execute(select(ModelVersion.id).where(ModelVersion.status == "deployed"))
+        result = await self._db.execute(
+            select(ModelVersion.id).where(ModelVersion.status == ModelStatus.DEPLOYED.value)
+        )
         model_id = result.scalar_one_or_none()
 
         if model_id is None:
-            logger.warning(
-                "No deployed model version found - using sentinel UUID. "
-                "Register and deploy a model version to fix this."
+            raise NoDeployedModelError(
+                "No deployed model version found. Deploy a model via POST /models/{id}/deploy "
+                "or run bootstrap with a baseline artifact present."
             )
-            return _UNKNOWN_MODEL_VERSION_ID
-
         return model_id
 
     def _orm_to_schema(
@@ -380,3 +377,7 @@ class DatabasePredictionRepository(AbstractPredictionRepository):
         await self._db.commit()
         await self._db.refresh(row)
         return self._orm_to_schema(row), False, annotation_id
+
+
+class NoDeployedModelError(RuntimeError):
+    """Raised when an inference is attempted but not model is deployed."""

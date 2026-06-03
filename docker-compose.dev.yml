@@ -88,6 +88,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: ${MINIO_BUCKET:-npec-artifacts}
+      DEPLOYMENT_ENV: "local"
     ports:
       - "8000:8000"
     volumes:

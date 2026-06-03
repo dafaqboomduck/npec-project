@@ -490,6 +490,11 @@ def get_storage_backend() -> AbstractStorageBackend:
         return AzureBlobStorageBackend()
 
     if STORAGE_BACKEND == "minio":
+        if _DEPLOYMENT_ENV != "local" and (not MINIO_PUBLIC_ENDPOINT or MINIO_PUBLIC_ENDPOINT.startswith("localhost")):
+            raise RuntimeError(
+                "MINIO_PUBLIC_ENDPOINT must be set to a browser-reachable host:port "
+                "in non-local deployments (got %r)." % MINIO_PUBLIC_ENDPOINT
+            )
         logger.info("Storage backend: MinIO (%s / bucket=%s)", MINIO_ENDPOINT, MINIO_BUCKET)
         return MinIOStorageBackend()
     logger.info("Storage backend: local (%s)", LOCAL_STORAGE_BASE)

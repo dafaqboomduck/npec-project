@@ -1,1 +1,1 @@
-"""ROOTR REST API package."""
+"""CV5 REST API package."""

@@ -41,6 +41,21 @@ services:
       - db
     restart: on-failure
 
+  bootstrap:
+    image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-api:latest
+    command: [ "python", "-m", "db.bootstrap" ]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      BASELINE_MODEL_URI: ${BASELINE_MODEL_URI}
+    volumes:
+      - ./artifacts:/app/artifacts
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    restart: "no"
+
   api:
     image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-api:latest
     restart: unless-stopped
@@ -69,6 +84,7 @@ services:
       - db
       - minio
       - migrations
+      - bootstrap
 
   frontend:
     image: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5/cv5-frontend:latest

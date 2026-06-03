@@ -43,9 +43,12 @@ logger = logging.getLogger(__name__)
 _TRAINING_SCRIPT = Path(
     os.getenv(
         "NPEC_TRAINING_SCRIPT",
-        "/app/scripts/train_and_report.py",
+        "/app/scripts/train_local_and_report.py",
     )
 )
+
+# Runs older than this with no live pid are considered dead. Default 7h.
+_TRAINING_MAX_RUNTIME_S = int(os.getenv("NPEC_TRAINING_MAX_RUNTIME_S", str(7 * 3600)))
 
 # In-memory registry of running subprocesses keyed by run_id.
 # Lives in the API process because asyncio subprocess handles
@@ -757,3 +760,49 @@ async def _backfill_metric_model_version(
             run_id,
             exc,
         )
+
+
+def _pid_alive(pid: int | None) -> bool:
+    """Return True if `pid` is a live process in this PID namespace."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # Exists but owned by another user
+
+
+async def reconcile_orphaned_training_runs() -> None:
+    """Mark stale 'running' rows as failed at startup.
+
+    Subprocess handles do not survive an API restart, so any 'running' row
+    whose pid is dead (or that exceeded the max runtime) is orphaned. Marking
+    these failed unblocks `start()` and the retraining threshold check.
+    """
+    from datetime import timedelta
+
+    from api.src.db.session import get_sessionmaker
+
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=_TRAINING_MAX_RUNTIME_S)
+    try:
+        async with get_sessionmaker()() as db:
+            rows = (
+                (await db.execute(select(TrainingRun).where(TrainingRun.status == TrainingRunStatus.RUNNING.value)))
+                .scalars()
+                .all()
+            )
+            reconciled = 0
+            for row in rows:
+                if not _pid_alive(row.pid) or (row.started_at and row.started_at < cutoff):
+                    row.status = TrainingRunStatus.FAILED.value
+                    row.completed_at = datetime.now(timezone.utc)
+                    row.pid = None
+                    reconciled += 1
+            if reconciled:
+                await db.commit()
+                logger.warning("Reconciled %d orphaned training run(s) to 'failed'.", reconciled)
+    except Exception as exc:
+        logger.warning("Training-run reconciliation failed: %s", exc)

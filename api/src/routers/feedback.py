@@ -90,6 +90,7 @@ async def submit_feedback(
         await annot_repo.set_status(
             body.prediction_id,
             AnnotationStatus.REVIEW_REQUIRED,
+            create_if_missing=True,
         )
         asyncio.create_task(
             _trigger_retraining_check(),

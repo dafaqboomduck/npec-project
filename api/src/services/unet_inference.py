@@ -18,6 +18,7 @@ tests using a mock service), audit logging is skipped with a warning.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import time
@@ -181,6 +182,8 @@ class UNetInferenceService(AbstractInferenceService):
             mv_name = _FALLBACK_MODEL_NAME
 
         # Build the audit logger (no-op if db is None).
+        input_ref = f"sha256: {hashlib.sha256(image_bytes).hexdigest()}"
+
         audit = None
         if db is not None and _DEPLOYMENT_ENV == "cloud":
             from lineage import InferenceLogger
@@ -191,7 +194,6 @@ class UNetInferenceService(AbstractInferenceService):
                 model_name=mv_name,
                 model_version_label=mv_label,
             )
-        input_ref = InferenceLogger.hash_input(image_bytes)
 
         # Write bytes to a temp file, the pipeline expects a Path
         suffix = Path(filename).suffix or ".png"

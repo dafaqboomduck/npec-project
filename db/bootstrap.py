@@ -36,8 +36,11 @@ async def bootstrap() -> None:
 
     async with factory() as db:
         await _ensure_admin_user(db)
-        await _ensure_baseline_model(db)
+        deployed = await _ensure_baseline_model(db)
 
+    if not deployed:
+        logger.error("No deployed modoel exists (BASELINE_MODEL_URI missin on disk?). Refusing to start.")
+        raise SystemExit(1)
     await engine.dispose()
     logger.info("Bootstrap complete.")
 
@@ -47,7 +50,7 @@ async def _ensure_admin_user(db) -> None:
 
     from api.src.db.orm import User
 
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@cv5nl.")
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@cv5.nl")
     admin_password = os.environ.get("ADMIN_PASSWORD")
 
     if not admin_password:
@@ -81,7 +84,7 @@ async def _ensure_baseline_model(db) -> None:
     result = await db.execute(select(ModelVersion).where(ModelVersion.status == "deployed").limit(1))
     if result.scalar_one_or_none() is not None:
         logger.info("Deployed model already exists, skipping baseline registration.")
-        return
+        return True
 
     artifact_uri = os.environ.get("BASELINE_MODEL_URI", "/app/artifacts/models/v1/")
     if not Path(artifact_uri).exists():
@@ -90,7 +93,7 @@ async def _ensure_baseline_model(db) -> None:
             "Register a model manually via POST /models or place artifacts at that path.",
             artifact_uri,
         )
-        return
+        return False
 
     # Lineage: this model genuinely has no upstream training run. Mark
     # it as a baseline so traces report it honestly. See migration 0010
@@ -100,11 +103,9 @@ async def _ensure_baseline_model(db) -> None:
         ModelVersion(
             version="unet-npec-v1.0.0-baseline",
             name="NPEC U-Net Baseline",
-            description=(
-                "Baseline model shipped with the application. Pre-pipeline "
-                "artifact — no upstream training run in this repository."
-            ),
+            description="Baseline model shipped with the application.",
             status="deployed",
+            f1_score=0.8813,
             artifact_uri=artifact_uri,
             deployed_at=datetime.now(timezone.utc),
             baseline=True,
@@ -115,6 +116,7 @@ async def _ensure_baseline_model(db) -> None:
         "Registered and deployed baseline model from '%s' (marked baseline=True).",
         artifact_uri,
     )
+    return True
 
 
 if __name__ == "__main__":

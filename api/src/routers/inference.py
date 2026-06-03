@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.src.core.security import get_current_user
 from api.src.db.session import get_session
 from api.src.dependencies import get_inference_service, get_storage
-from api.src.repositories.database import DatabasePredictionRepository
+from api.src.repositories.database import DatabasePredictionRepository, NoDeployedModelError
 from api.src.schemas.auth import TokenData
 from api.src.schemas.common import ErrorCode, ErrorResponse, MessageResponse
 from api.src.schemas.predictions import (
@@ -133,54 +133,62 @@ async def predict(
         len(image_bytes),
     )
 
-    prediction, image_result = await inference_service.run(
-        image_bytes=image_bytes,
-        filename=original_filename,
-        db=db,
-    )
-
-    prediction_id = prediction.prediction_id
-    logger.info("Inference complete for '%s' - prediction_id=%s user=%s", original_filename, prediction_id, user.sub)
-
-    # Save input image
-    input_uri: str | None = await asyncio.to_thread(
-        save_input_image,
-        prediction_id=prediction_id,
-        image_bytes=image_bytes,
-        original_filename=original_filename,
-        backend=storage,
-    )
-
-    # Save mask and tip photo
-    mask_uri: str | None = None
-    tip_photo_uri: str | None = None
-
-    if image_result is not None:
-        mask_uri = await asyncio.to_thread(
-            save_segmentation_mask,
-            prediction_id=prediction_id,
-            image_result=image_result,
-            backend=storage,
+    try:
+        prediction, image_result = await inference_service.run(
+            image_bytes=image_bytes,
+            filename=original_filename,
+            db=db,
         )
-        tip_photo_uri = await asyncio.to_thread(
-            save_tip_photo,
+
+        prediction_id = prediction.prediction_id
+        logger.info(
+            "Inference complete for '%s' - prediction_id=%s user=%s", original_filename, prediction_id, user.sub
+        )
+
+        # Save input image
+        input_uri: str | None = await asyncio.to_thread(
+            save_input_image,
             prediction_id=prediction_id,
-            image_result=image_result,
-            original_image_bytes=image_bytes,
+            image_bytes=image_bytes,
+            original_filename=original_filename,
             backend=storage,
         )
 
-    # Patch prediction with URLs
-    prediction = prediction.model_copy(update={"segmentation_mask_url": mask_uri})
+        # Save mask and tip photo
+        mask_uri: str | None = None
+        tip_photo_uri: str | None = None
 
-    # Persist to repository
-    prediction = await repo.save(
-        prediction,
-        filename=original_filename,
-        input_hash=input_hash,
-        input_uri=input_uri,
-        tip_photo_uri=tip_photo_uri,
-    )
+        if image_result is not None:
+            mask_uri = await asyncio.to_thread(
+                save_segmentation_mask,
+                prediction_id=prediction_id,
+                image_result=image_result,
+                backend=storage,
+            )
+            tip_photo_uri = await asyncio.to_thread(
+                save_tip_photo,
+                prediction_id=prediction_id,
+                image_result=image_result,
+                original_image_bytes=image_bytes,
+                backend=storage,
+            )
+
+        # Patch prediction with URLs
+        prediction = prediction.model_copy(update={"segmentation_mask_url": mask_uri})
+
+        # Persist to repository
+        prediction = await repo.save(
+            prediction,
+            filename=original_filename,
+            input_hash=input_hash,
+            input_uri=input_uri,
+            tip_photo_uri=tip_photo_uri,
+        )
+    except NoDeployedModelError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=ErrorResponse(error_code=ErrorCode.INTERNAL_ERROR, message=str(exc)).model_dump(),
+        )
 
     # Write monitoring metrics
     try:
@@ -365,7 +373,9 @@ async def confirm_prediction(
         )
 
         if body and body.feedback_signal:
+            from api.src.repositories.annotations import AnnotationRepository
             from api.src.repositories.feedback import FeedbackRepository
+            from api.src.schemas.library import AnnotationStatus
 
             await FeedbackRepository(db).create(
                 user_id=UUID(user.sub),
@@ -373,6 +383,12 @@ async def confirm_prediction(
                 signal=body.feedback_signal,
                 comment=None,
             )
+            if body.feedback_signal == "incorrect":
+                # The annotation was just created by repo.confiirm()
+                await AnnotationRepository(db, storage).set_status(
+                    prediction_id,
+                    AnnotationStatus.REVIEW_REQUIRED,
+                )
     except ValueError as exc:
         if "identical image" in str(exc):
             raise HTTPException(

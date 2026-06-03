@@ -144,6 +144,7 @@ async def _run_inference_background(
                 prediction_response, image_result = await inference_service.run(
                     image_bytes=image_bytes,
                     filename=filename,
+                    db=db,
                 )
 
                 prediction_id = prediction_response.prediction_id
@@ -969,18 +970,7 @@ async def confirm_annotation(
                 message=f"Failed to save annotation mask: {exc}",
             ).model_dump(),
         )
-
-    try:
-        updated = await AnnotationRepository(db, storage).confirm(annotation_id, mask_url=mask_key)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=ErrorResponse(
-                error_code=ErrorCode.CONFLICT,
-                message="Annotation has already been confirmed.",
-            ).model_dump(),
-        )
-
+    updated = await AnnotationRepository(db, storage).confirm(annotation_id, mask_url=mask_key)
     if updated is None:
         raise _404("Annotation not found.")
 

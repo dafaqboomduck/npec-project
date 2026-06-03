@@ -34,6 +34,7 @@ from api.src.routers import (
     training,
 )
 from api.src.schemas.common import ErrorCode, ErrorResponse
+from api.src.services.training import reconcile_orphaned_training_runs
 
 # Logging
 
@@ -53,16 +54,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Future uses include opening a DB connection pool and pre-loading
     model weights.
     """
-    logger.info("ROOTR API starting up - docs at /docs")
+    logger.info("CV5 API starting up - docs at /docs")
     await warmup_inference_service()
+    await reconcile_orphaned_training_runs()
+
     yield
-    logger.info("ROOTR API shutting down")
+    logger.info("CV5 API shutting down")
 
 
 # Application
 
 app = FastAPI(
-    title="ROOTR API",
+    title="CV5 API",
     description=(
         "REST API for the NPEC plant root segmentation service. "
         "Accepts root scan images, runs U-Net inference, and returns "

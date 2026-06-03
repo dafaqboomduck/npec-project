@@ -20,7 +20,6 @@ Pipeline steps:
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 from azure.ai.ml import Input, MLClient, Output
@@ -34,7 +33,7 @@ from azure.ai.ml.entities import (
     JobSchedule,
 )
 from azure.ai.ml.sweep import Choice
-from azure.identity import AzureCliCredential
+from azure.identity import DefaultAzureCredential
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config.json"
@@ -58,12 +57,12 @@ def parse_args() -> argparse.Namespace:
 
 def get_client() -> MLClient:
     """Create an authenticated MLClient from config.json."""
-    _az_wbin = r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin"
-    if _az_wbin not in os.environ.get("PATH", ""):
-        os.environ["PATH"] = _az_wbin + os.pathsep + os.environ.get("PATH", "")
+    # _az_wbin = r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin"
+    # if _az_wbin not in os.environ.get("PATH", ""):
+    #     os.environ["PATH"] = _az_wbin + os.pathsep + os.environ.get("PATH", "")
     config = json.loads(CONFIG_PATH.read_text())
     return MLClient(
-        credential=AzureCliCredential(process_timeout=30),
+        credential=DefaultAzureCredential(),
         subscription_id=config["subscription_id"],
         resource_group_name=config["resource_group"],
         workspace_name=config["workspace_name"],
