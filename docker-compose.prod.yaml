@@ -80,6 +80,7 @@ services:
       - "2021:8000"
     volumes:
       - ./artifacts:/app/artifacts
+      - cv5_models:/opt/npec_models
     depends_on:
       - db
       - minio
@@ -101,3 +102,6 @@ volumes:
   minio_data:
     external: true
     name: cv5_minio_prod
+  cv5_models:
+    external: true
+    name: cv5_models_prod
