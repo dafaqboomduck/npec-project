@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.src.db.orm import Annotation
+from api.src.db.orm import Annotation, Prediction
 from api.src.db.orm import Prediction as PredictionORM
 from api.src.schemas.auth import UserRole
 from api.src.schemas.library import AnnotationResponse, AnnotationStatus
@@ -239,6 +239,13 @@ class AnnotationRepository:
         row.mask_uri = mask_url
         row.status = AnnotationStatus.ANNOTATED
         row.updated_at = datetime.now(timezone.utc)
+
+        # Sync the linked prediction's mask
+        if row.prediction_id is not None:
+            prediction = await self._db.get(Prediction, row.prediction_id)
+            if prediction is not None:
+                prediction.segmentation_mask_uri = mask_url
+
         await self._db.commit()
         await self._db.refresh(row)
         logger.info("Confirmed annotation %s", annotation_id)
