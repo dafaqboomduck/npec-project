@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ \
-    "npec-cv${NPEC_CV_VERSION:+==$NPEC_CV_VERSION}"
+    "npec-cv[cuda]${NPEC_CV_VERSION:+==$NPEC_CV_VERSION}"
 
 # Download models from the matching GitHub release.
 # Token comes in as a BuildKit secret so it never lands in a layer.
