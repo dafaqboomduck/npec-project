@@ -53,7 +53,6 @@ services:
       - ./artifacts:/app/artifacts
     depends_on:
       migrations:
-        condition: service_completed_successfully
     restart: "no"
 
   api:
