@@ -110,7 +110,7 @@ def build_components(
             "python scripts/train_root_detection.py "
             "--data_dir ${{inputs.train_data}} "
             "--val_dir  ${{inputs.val_data}} "
-            "--corrections_dir ${{inputs.corrections_data}} "
+            "$[[--corrections_dir ${{inputs.corrections_data}}]] "
             "--output_dir ${{outputs.model_output}} "
             "--patch_size ${{inputs.patch_size}} "
             "--epochs ${{inputs.epochs}} "
@@ -209,7 +209,7 @@ def build_pipeline(
         train_data: Input(type="uri_folder"),
         val_data: Input(type="uri_folder"),
         test_data: Input(type="uri_folder"),
-        corrections_data: Input(type="uri_folder"),
+        corrections_data: Input(type="uri_folder", optional=True),
     ):
         # -- Sweep: try each batch size, keep the best val_f1 --------------------
         train_step = train_comp(train_data=train_data, val_data=val_data, corrections_data=corrections_data)

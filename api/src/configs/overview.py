@@ -24,6 +24,5 @@ MEMORY_CRITICAL_THRESHOLD: int = 95  # %
 # Storage quota
 #
 # Total storage capacity used to compute quota_percent
-# Override via NPEC_STORAGE_CAPACITY_TB env var
 
-STORAGE_CAPACITY_TB: float = 10.0
+STORAGE_CAPACITY_TB: float = 1.0

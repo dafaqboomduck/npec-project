@@ -42,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 # How many rows to fetch from each event source before merging
 _ACTIVITY_FETCH_LIMIT = 50
+_ARTIFACTS_PER_PREDICTION = 3
+_AVG_ARTIFACT_MB = 9.0
 
 
 def _drift_status(score: float) -> DriftStatus:
@@ -96,15 +98,15 @@ class OverviewRepository:
         )
         active_model_count = model_result.scalar_one_or_none() or 0
 
-        # Data collected - rough estimate: predictions * 5MB average per image
-        # TODO: Replace with real Azure Blob storage accounting
-        estimated_tb = (total_experiments * 5) / (1024 * 1024)  # MB -> TB
-        quota_percent = min(int((estimated_tb / STORAGE_CAPACITY_TB) * 100), 100)
+        estimated_mb = total_experiments * _ARTIFACTS_PER_PREDICTION * _AVG_ARTIFACT_MB
+        estimated_gb = estimated_mb / 1024
+        estimated_tb = estimated_gb / 1024
+        quota_percent = min(int((estimated_tb / STORAGE_CAPACITY_TB) * 100), 100) if STORAGE_CAPACITY_TB else 0
 
         return OverviewStatusResponse(
             total_experiments=total_experiments,
             active_model_count=active_model_count,
-            data_collected_tb=round(estimated_tb, 4),
+            data_collected_tb=round(estimated_gb, 4),
             quota_percent=quota_percent,
         )
 
