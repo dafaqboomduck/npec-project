@@ -21,11 +21,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
-
-from azure.ai.ml import MLClient
-from azure.ai.ml.constants import AssetTypes
-from azure.ai.ml.entities import Model
+from typing import TYPE_CHECKING, Optional
 
 from lineage.context import (
     DatasetRef,
@@ -33,6 +29,10 @@ from lineage.context import (
     LineageError,
     gather_lineage_context,
 )
+
+if TYPE_CHECKING:
+    from azure.ai.ml import MLClient
+    from azure.ai.ml.entities import Model
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def register_model_with_lineage(
     path: str | Path,
     description: str,
     datasets: tuple[DatasetRef, ...] = (),
-    asset_type: str = AssetTypes.CUSTOM_MODEL,
+    asset_type: str | None = None,
     stage: Optional[str] = None,
     extra_tags: Optional[dict[str, str]] = None,
     context: Optional[LineageContext] = None,
@@ -57,6 +57,8 @@ def register_model_with_lineage(
     Refuses to register if the lineage context lacks a git_commit.
     Use ``register_baseline_model`` for pre-pipeline models.
     """
+    from azure.ai.ml.entities import Model
+
     artifact_path = Path(str(path))
     if not _looks_like_azureml_uri(str(path)) and not artifact_path.exists():
         raise FileNotFoundError(f"Model artifact not found: {artifact_path}")
@@ -95,6 +97,11 @@ def register_model_with_lineage(
         tags.get("training_job_id", "local"),
     )
 
+    if asset_type is None:
+        from azure.ai.ml.constants import AssetTypes
+
+        asset_type = AssetTypes.CUSTOM_MODEL
+
     model_kwargs = dict(
         path=str(path),
         name=name,
@@ -115,7 +122,7 @@ def register_baseline_model(
     path: str | Path,
     description: str,
     reason: str,
-    asset_type: str = AssetTypes.CUSTOM_MODEL,
+    asset_type: str | None = None,
     stage: Optional[str] = None,
     extra_tags: Optional[dict[str, str]] = None,
 ) -> Model:
@@ -156,6 +163,8 @@ def register_baseline_model(
     Model
         The newly registered model version.
     """
+    from azure.ai.ml.entities import Model
+
     artifact_path = Path(str(path))
     if not _looks_like_azureml_uri(str(path)) and not artifact_path.exists():
         raise FileNotFoundError(f"Model artifact not found: {artifact_path}")
@@ -183,6 +192,11 @@ def register_baseline_model(
 
     log.info("Registering BASELINE model '%s' (reason=%s)", name, reason)
 
+    if asset_type is None:
+        from azure.ai.ml.constants import AssetTypes
+
+        asset_type = AssetTypes.CUSTOM_MODEL
+
     model_kwargs = dict(
         path=str(path),
         name=name,
@@ -197,7 +211,7 @@ def register_baseline_model(
 
 
 def lineage_from_job(
-    client: MLClient,
+    client,  # MLClient
     job_name: str,
     *,
     datasets: tuple[DatasetRef, ...] = (),
