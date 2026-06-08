@@ -28,8 +28,13 @@ _COLUMNS = (
 
 def upgrade() -> None:
     """Add the nullable resource-metric columns."""
+    # Check if columns already exist (for idempotency during redeploys)
+    inspector = sa.inspect(op.get_bind())
+    existing_columns = {col["name"] for col in inspector.get_columns("inference_audit_log")}
+
     for name, type_ in _COLUMNS:
-        op.add_column("inference_audit_log", sa.Column(name, type_, nullable=True))
+        if name not in existing_columns:
+            op.add_column("inference_audit_log", sa.Column(name, type_, nullable=True))
 
 
 def downgrade() -> None:
