@@ -80,6 +80,21 @@ def _isolate_external_io():
             new_callable=AsyncMock,
             return_value=None,
         ),
+        patch(
+            "api.src.services.inference_queue.reconcile_orphaned_jobs",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "api.src.main.reconcile_orphaned_jobs",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "api.src.main.consume_forever",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
         # Same defensive pair for the inference warmup — also part of lifespan.
         patch(
             "api.src.main.warmup_inference_service",

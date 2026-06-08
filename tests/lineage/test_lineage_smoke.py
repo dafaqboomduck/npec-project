@@ -248,6 +248,7 @@ class TestAsyncLineage(unittest.TestCase):
                 Boolean,
                 Column,
                 DateTime,
+                Float,
                 ForeignKey,
                 Integer,
                 String,
@@ -297,6 +298,14 @@ class TestAsyncLineage(unittest.TestCase):
             error = Column(Text)
             endpoint = Column(String, default="api")
             deployment = Column(String, nullable=False, default="unknown")
+            cpu_pct_system = Column(Float, nullable=True)
+            cpu_pct_process = Column(Float, nullable=True)
+            cpu_count = Column(Integer, nullable=True)
+            ram_used_mb = Column(Integer, nullable=True)
+            ram_available_mb = Column(Integer, nullable=True)
+            gpu_pct = Column(Float, nullable=True)
+            vram_used_mb = Column(Integer, nullable=True)
+            disk_free_mb = Column(Integer, nullable=True)
             logged_at = Column(DateTime(timezone=True), server_default=func.now())
 
         # Inject our test ORM into the api.src.db.orm module path so

@@ -67,6 +67,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     asyncio.create_task(consume_forever(sm, stop), name="inference-consumer")
 
     yield
+    stop.set()
+    try:
+        await asyncio.wait_for(consumer, timeout=2.0)
+    except Exception:
+        pass
     await shutdown_inference_service()
     logger.info("CV5 API shutting down")
 

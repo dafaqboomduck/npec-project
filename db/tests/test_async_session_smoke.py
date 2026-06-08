@@ -96,7 +96,9 @@ async def test_alembic_version_table_exists() -> None:
     one migrations were applied to — not, for example, an empty test database
     that was never bootstrapped.
     """
-    _database_url_or_skip()
+    url = _database_url_or_skip()
+    if "sqlite" in url:
+        pytest.skip("Alembic version check is PostgreSQL-specific")
     SessionLocal = get_sessionmaker()
     try:
         async with SessionLocal() as session:

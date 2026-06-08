@@ -551,19 +551,18 @@ class TestWarmupInferenceService:
 
         monkeypatch.setattr(dep, "_USE_MOCK", False)
         monkeypatch.setattr(dep, "DEPLOYMENT_ENV", "local")
-        svc = MagicMock()
-        svc._get_pipeline = MagicMock(return_value=None)
+        svc = AsyncMock()
         monkeypatch.setattr(dep, "get_inference_service", lambda: svc)
         await dep.warmup_inference_service()
-        svc._get_pipeline.assert_called_once()
+        svc.warmup.assert_awaited_once()
 
     async def test_warmup_swallows_load_failure(self, monkeypatch) -> None:
         from api.src import dependencies as dep
 
         monkeypatch.setattr(dep, "_USE_MOCK", False)
         monkeypatch.setattr(dep, "DEPLOYMENT_ENV", "local")
-        svc = MagicMock()
-        svc._get_pipeline = MagicMock(side_effect=RuntimeError("missing weights"))
+        svc = AsyncMock()
+        svc.warmup.side_effect = RuntimeError("missing weights")
         monkeypatch.setattr(dep, "get_inference_service", lambda: svc)
         # Must not raise — failure is logged and the API still starts.
         await dep.warmup_inference_service()

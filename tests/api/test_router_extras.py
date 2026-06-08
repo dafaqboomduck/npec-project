@@ -257,9 +257,9 @@ class TestRunInferenceRouter:
                 return_value=d,
             ),
             patch(
-                "api.src.repositories.annotations.AnnotationRepository.list_pending_for_dataset",
+                "api.src.services.inference_queue.enqueue_batch",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value=0,
             ),
         ):
             r = client.post(f"/api/v1/datasets/{d.dataset_id}/run-inference")
@@ -268,7 +268,6 @@ class TestRunInferenceRouter:
 
     def test_run_dataset_inference_queues(self, client: TestClient) -> None:
         d = _dataset_detail()
-        pending = [SimpleNamespace(id=uuid.uuid4(), image_uri="s3://x.png")]
         with (
             patch(
                 "api.src.repositories.datasets.DatasetRepository.get",
@@ -276,15 +275,14 @@ class TestRunInferenceRouter:
                 return_value=d,
             ),
             patch(
-                "api.src.repositories.annotations.AnnotationRepository.list_pending_for_dataset",
+                "api.src.services.inference_queue.enqueue_batch",
                 new_callable=AsyncMock,
-                return_value=pending,
+                return_value=1,
             ),
-            patch("api.src.routers.library._run_inference_background", new_callable=AsyncMock),
         ):
             r = client.post(f"/api/v1/datasets/{d.dataset_id}/run-inference")
         assert r.status_code == 200
-        assert "Inference started" in r.json()["message"]
+        assert "Queued 1 image" in r.json()["message"]
 
     def test_run_annotation_inference_404_when_missing(self, client: TestClient) -> None:
         from api.src.db.session import get_session

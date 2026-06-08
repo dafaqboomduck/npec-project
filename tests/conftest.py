@@ -17,7 +17,7 @@ import asyncio
 import os
 import sys
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only")
 
 if sys.platform == "win32":

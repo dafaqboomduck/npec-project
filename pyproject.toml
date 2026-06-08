@@ -20,6 +20,9 @@ testpaths = [
     "tests/postprocessing",
     "tests/e2e",
     "tests/cli",
+    "tests/api",
+    "tests/scripts",
+    "tests/lineage",
 ]
 markers = [
     "slow: real-inference tests that load TF models (run with `pytest -m slow` or include in default discovery)",
