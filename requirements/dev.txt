@@ -1,6 +1,7 @@
 pytest
 pytest-cov
 pytest-asyncio
+aiosqlite
 pytest-timeout
 setuptools
 pre-commit
