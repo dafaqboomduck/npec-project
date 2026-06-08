@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.4
+# Cloud-only image — inference is handled by an external Azure ML endpoint,
+# so npec_cv and model assets are not needed.
+
+# 1. Dependencies
+FROM python:3.11-slim AS deps
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements/api.txt requirements/api.txt
+COPY requirements/cloud.txt requirements/cloud.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements/api.txt -r requirements/cloud.txt
+
+# 2. Runtime
+FROM python:3.11-slim AS runtime
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=deps /usr/local/lib/python3.11/site-packages \
+    /usr/local/lib/python3.11/site-packages
+COPY --from=deps /usr/local/bin /usr/local/bin
+
+COPY api/ ./api/
+COPY lineage/ ./lineage/
+COPY scripts/*.py /app/scripts/
+
+RUN adduser --disabled-password --gecos "" --uid 1001 appuser
+USER appuser
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEPLOYMENT_ENV=cloud \
+    USE_MOCK_INFERENCE=false
+
+COPY config.json /app/config.json
+COPY /environments/ /app/environments/
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
+
+CMD ["uvicorn", "api.src.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -61,7 +61,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: api/Dockerfile
+          file: api/Dockerfile.prod
           target: runtime
           push: true
           build-args: |
