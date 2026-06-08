@@ -6,13 +6,13 @@
 
 ### 1. Code Quality and Structure
 The repository is highly structured and professional, following industry-standard Python project layouts:
-- **`src/` layout**: The core computer vision package `npec_cv` and the `api` are properly separated.
-- **Linting & Formatting**: Enforced via `ruff` and configured in `pyproject.toml`. Pre-commit hooks (`.pre-commit-config.yaml`) ensure that all commits meet formatting standards before they are pushed.
-- **Continuous Integration**: `.github/workflows/` contains pipelines that automatically run linting and tests on every Pull Request, enforcing professional code standards.
+- **`src/` layout**: The core computer vision package [npec_cv](../src/npec_cv) and the [api](../api) are properly separated.
+- **Linting & Formatting**: Enforced via `ruff` and configured in [pyproject.toml](../pyproject.toml). Pre-commit hooks ([.pre-commit-config.yaml](../.pre-commit-config.yaml)) ensure that all commits meet formatting standards before they are pushed.
+- **Continuous Integration**: [.github/workflows/](../.github/workflows) contains pipelines that automatically run linting and tests on every Pull Request, enforcing professional code standards.
 
 ### 2. Documentation
-- The project includes a comprehensive `README.md` that serves as a central index.
-- A dedicated `docs/` folder built with Sphinx provides detailed tutorials, how-to guides, and architecture explanations.
+- The project includes a comprehensive [README.md](../README.md) that serves as a central index.
+- A dedicated [docs/](../docs) folder built with Sphinx provides detailed tutorials, how-to guides, and architecture explanations.
 - API endpoints are documented with OpenAPI specifications and automatically generated interactive docs (FastAPI Swagger UI).
 
 ### 3. Work Logs and Peer Reviews

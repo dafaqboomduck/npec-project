@@ -10,11 +10,11 @@ Data assets are explicitly version-controlled and hosted securely in the Azure M
   - `azureml:cv5_train:1.0.0`
   - `azureml:cv5_val:1.0.0`
   - `azureml:cv5_test:1.0.0`
-- **Data Management**: Scripts like `scripts/upload_data.py`, `scripts/inventory_dataset.py`, and `scripts/dataset_deep_check.py` handle data ingestion, validation, and programmatic registration.
+- **Data Management**: Scripts like [scripts/upload_data.py](../scripts/upload_data.py), [scripts/inventory_dataset.py](../scripts/inventory_dataset.py), and [scripts/dataset_deep_check.py](../scripts/dataset_deep_check.py) handle data ingestion, validation, and programmatic registration.
 
 ### 2. Orchestrated Data Pipelines
 The project moves beyond static scripts by utilizing Azure ML pipelines to construct a complete Directed Acyclic Graph (DAG):
-- The pipeline (`scripts/submit_pipeline.py`) unifies preprocessing, training (with parameter sweeps), evaluation, conditional registration, and deployment into a single automated workflow.
+- The pipeline ([scripts/submit_pipeline.py](../scripts/submit_pipeline.py)) unifies preprocessing, training (with parameter sweeps), evaluation, conditional registration, and deployment into a single automated workflow.
 
 ### 3. Pipeline Scheduling
 - **Automation Trigger**: The retraining pipeline is registered as an Azure ML `JobSchedule`.

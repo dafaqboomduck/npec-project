@@ -6,18 +6,18 @@
 
 ### 1. Multi-Environment Deployment
 The project supports deployment across all three required environments:
-- **Local Dev**: Configured via `docker-compose.dev.yml` to spin up the API and Database for local development.
-- **On-Premise**: Configured via `docker-compose.prod.yaml`, designed to be deployed to a server using Portainer.
+- **Local Dev**: Configured via [docker-compose.dev.yml](../docker-compose.dev.yml) to spin up the API and Database for local development.
+- **On-Premise**: Configured via [docker-compose.prod.yaml](../docker-compose.prod.yaml), designed to be deployed to a server using Portainer.
 - **Cloud**: The backend and frontend can be deployed as Azure Container Apps, while the inference endpoint is deployed as a Kubernetes online endpoint (`root-detection-endpoint`).
 
 ### 2. CI/CD Pipelines
-Automated workflows are defined in `.github/workflows/`:
+Automated workflows are defined in [.github/workflows/](../.github/workflows):
 - **Continuous Integration (PR Checks)**: `.github/workflows/py-tests.yml`, `py-lint.yml`, and `frontend-ci.yml` run formatting checks, linting, and tests. Merges are blocked if these fail.
 - **Continuous Deployment (Release)**: `.github/workflows/build-push-prod.yml` automatically builds Docker images for the API, database migrations, and frontend upon push to `main`, tags them with the Git SHA, and pushes them to GHCR.
 
 ### 3. Model Deployment Strategy
 - The Azure ML deployment packages the models into a single registered serving artifact (`root-detection-serving`).
-- **Rolling Deployment**: `scripts/deploy_endpoint.py` automates the roll-forward process. When a new model version is registered by the training pipeline, this script updates the endpoint to use the new version while seamlessly routing traffic.
+- **Rolling Deployment**: [scripts/deploy_endpoint.py](../scripts/deploy_endpoint.py) automates the roll-forward process. When a new model version is registered by the training pipeline, this script updates the endpoint to use the new version while seamlessly routing traffic.
 
 ### 4. Retraining and Monitoring
 - **Retraining Pipeline**: Triggered via a Cron schedule (every Monday), creating a data flywheel that continuously evaluates and conditionally registers better models.
