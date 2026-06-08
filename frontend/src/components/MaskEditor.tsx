@@ -132,7 +132,7 @@ export default function MaskEditor({
 
         // Draw mask onto canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(mask, 0, 0, canvas.width, canvas.height);  // stretch mask to image size
+        ctx.drawImage(mask, 0, 0, canvas.width, canvas.height); // stretch mask to image size
         setIsLoaded(true);
         historyRef.current = [];
         setCanUndo(false);
