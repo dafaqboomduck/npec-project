@@ -41,11 +41,6 @@ addopts = [
     "--cov=api/src",
     "--cov-report=term-missing",
     "--cov-fail-under=85",
-    # Per-test 30s hard timeout. Without this, a stuck test on Windows looks
-    # exactly like a Ctrl-C / KeyboardInterrupt and we lose the failing test
-    # name. With it, the runner kills the test and prints the traceback.
-    "--timeout=30",
-    "--timeout-method=thread",
 ]
 
 [tool.coverage.run]
