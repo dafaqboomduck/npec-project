@@ -38,3 +38,21 @@ class AbstractInferenceService(ABC):
         Raises:
             ValueError: If the image cannot be decoded or is otherwise invalid.
         """
+
+    async def warmup(self) -> None:
+        """Pre-load any heavy resources before the first request.
+
+        Optional lifecycle hook called once at server startup. The default is a
+        no-op; implementations that load models (e.g. the U-Net pipeline) may
+        override it to move cold-start cost off the first request.
+        """
+        return None
+
+    async def aclose(self) -> None:
+        """Release resources at server shutdown.
+
+        Optional lifecycle hook called once at server shutdown. The default is a
+        no-op; implementations that hold processes or GPU contexts may override
+        it to tear them down cleanly.
+        """
+        return None

@@ -23,8 +23,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.src.config import settings
+from api.src.dependencies import shutdown_inference_service, warmup_inference_service
 from api.src.db.session import get_sessionmaker
-from api.src.dependencies import warmup_inference_service
 from api.src.routers import (
     auth,
     dashboard,
@@ -68,11 +68,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     consumer = asyncio.create_task(consume_forever(sm, stop), name="inference-consumer")
 
     yield
-
-    stop.set()
-    consumer.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await consumer
+    await shutdown_inference_service()
     logger.info("CV5 API shutting down")
 
 

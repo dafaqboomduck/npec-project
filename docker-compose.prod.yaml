@@ -79,6 +79,13 @@ services:
       NPEC_ANNOTATION_MASK_DIR: /tmp/npec_annotation_masks
       BASELINE_MODEL_URI: ${BASELINE_MODEL_URI}
       NPEC_ARTIFACT_DIR: ${NPEC_ARTIFACT_DIR}
+      # Run inference in a warm worker process that keeps the models loaded
+      # across requests. The worker is torn down after IDLE_TIMEOUT_MINUTES with
+      # no inference, releasing its GPU memory back to the driver (TensorFlow
+      # never frees VRAM within a live process); the next request reloads it.
+      # Set IDLE_TIMEOUT_MINUTES to 0 to keep the worker warm indefinitely.
+      NPEC_ISOLATE_INFERENCE: "true"
+      NPEC_INFERENCE_IDLE_TIMEOUT_MINUTES: "5"
       NVIDIA_VISIBLE_DEVICES: "6"
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     ports:

@@ -122,11 +122,12 @@ def get_deployment_service(
 
 
 async def warmup_inference_service() -> None:
-    """Pre-load the inference pipeline at startup.
+    """Pre-load the inference models at startup.
 
-    Calls _get_pipeline() on the singleton so TensorFlow and the .keras
-    weights are loaded before the first request arrives. This moves the
-    ~30s cold-start cost to server startup rather than the first prediction.
+    Loads the .keras weights before the first request arrives, moving the
+    ~30s cold-start cost to server startup. With process isolation on, the
+    models are loaded inside the warm worker process (not this long-lived one),
+    so they can still be released after the idle timeout.
     """
     if DEPLOYMENT_ENV == "cloud":
         logger.info("Inference warmup skipped — AzureMLInferenceService has no local pipeline.")
@@ -137,13 +138,21 @@ async def warmup_inference_service() -> None:
         return
 
     try:
-        import asyncio
-
-        service = get_inference_service()
-        await asyncio.to_thread(service._get_pipeline)
-        logger.info("Inference pipeline warmed up successfully")
+        await get_inference_service().warmup()
     except Exception as exc:
         logger.warning(
             "Inference pipeline warmup failed: %s — " "first prediction will trigger a retry",
             exc,
         )
+
+
+async def shutdown_inference_service() -> None:
+    """Release inference resources at server shutdown.
+
+    Cancels the idle reaper and tears down the inference worker (if any) so
+    worker processes — and their GPU contexts — are not orphaned when the API
+    stops.
+    """
+    if _inference_service is not None:
+        await _inference_service.aclose()
+        logger.info("Inference worker shut down.")
