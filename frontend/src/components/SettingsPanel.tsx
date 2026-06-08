@@ -60,7 +60,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         </div>
 
         <div className="settings-footer">
-          <p>Herbarium AI v1.0.2</p>
+          <p>Herbarium AI v1.0.3</p>
         </div>
       </aside>
     </>

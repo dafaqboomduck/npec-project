@@ -105,7 +105,7 @@ class OverviewRepository:
         return OverviewStatusResponse(
             total_experiments=total_experiments,
             active_model_count=active_model_count,
-            data_collected_tb=round(estimated_mb, 4),
+            data_collected_tb=round(estimated_tb, 6),
             quota_percent=quota_percent,
         )
 
