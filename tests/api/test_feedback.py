@@ -11,7 +11,7 @@ def test_feedback_requires_auth(client: TestClient) -> None:
     app.dependency_overrides.pop(get_current_user, None)
     response = client.post(
         "/api/v1/feedback",
-        json={"prediction_id": str(uuid.uuid4()), "signal": "correct"},
+        json={"prediction_id": str(uuid.uuid4()), "feedback_signal": "correct"},
     )
     assert response.status_code == 401
 
@@ -25,7 +25,7 @@ def test_feedback_returns_404_for_unknown_prediction(client: TestClient) -> None
 
         response = client.post(
             "/api/v1/feedback",
-            json={"prediction_id": str(uuid.uuid4()), "signal": "correct"},
+            json={"prediction_id": str(uuid.uuid4()), "feedback_signal": "correct"},
         )
     assert response.status_code == 404
     assert response.json()["error_code"] == "NOT_FOUND"
@@ -48,7 +48,7 @@ def test_feedback_returns_200_on_success(client: TestClient) -> None:
             "/api/v1/feedback",
             json={
                 "prediction_id": str(uuid.uuid4()),
-                "signal": "correct",
+                "feedback_signal": "correct",
                 "comment": "Looks good.",
             },
         )
@@ -72,7 +72,7 @@ def test_feedback_stores_null_comment_when_absent(client: TestClient) -> None:
 
         client.post(
             "/api/v1/feedback",
-            json={"prediction_id": str(uuid.uuid4()), "signal": "incorrect"},
+            json={"prediction_id": str(uuid.uuid4()), "feedback_signal": "incorrect"},
         )
     # comment kwarg must be None when not provided
     _, kwargs = create_mock.call_args
@@ -96,11 +96,11 @@ def test_feedback_allows_multiple_submissions(client: TestClient) -> None:
 
         r1 = client.post(
             "/api/v1/feedback",
-            json={"prediction_id": prediction_id, "signal": "correct"},
+            json={"prediction_id": prediction_id, "feedback_signal": "correct"},
         )
         r2 = client.post(
             "/api/v1/feedback",
-            json={"prediction_id": prediction_id, "signal": "incorrect"},
+            json={"prediction_id": prediction_id, "feedback_signal": "incorrect"},
         )
     assert r1.status_code == 200
     assert r2.status_code == 200

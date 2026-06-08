@@ -29,5 +29,5 @@ class FeedbackRequest(BaseModel):
     comment: str | None = Field(
         None,
         max_length=500,
-        descripton="Optional free-text note from the user.",
+        description="Optional free-text note from the user.",
     )

@@ -21,13 +21,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
 
-      - name: Install dev requirements
+      - name: Install dev + API requirements
         run: pip install -r requirements/dev.txt
 
       - name: Install npec_cv package
         run: pip install -e src/npec_cv
 
       - name: Run pytest with coverage
+        env:
+          # Required by api.src.config.Settings at import time; the API tests
+          # never actually open this connection (the session is overridden).
+          DATABASE_URL: postgresql+asyncpg://test:test@localhost/test
         run: |
           pytest \
             tests/preprocessing \
@@ -35,7 +39,10 @@ jobs:
             tests/postprocessing \
             tests/e2e \
             tests/cli \
+            tests/api \
+            tests/scripts \
             --cov=src/npec_cv \
+            --cov=api/src \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-fail-under=70
+            --cov-fail-under=85

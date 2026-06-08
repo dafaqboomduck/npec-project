@@ -5,7 +5,7 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import io
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -44,12 +44,90 @@ def _make_mock_db() -> AsyncMock:
     mock_db.execute = AsyncMock(return_value=execute_result)
 
     mock_db.get = AsyncMock(return_value=None)
+    # `Session.add` is sync; default AsyncMock would make it return an
+    # un-awaited coroutine and trigger a RuntimeWarning.
+    mock_db.add = MagicMock()
 
     return mock_db
 
 
 @pytest.fixture()
-def client() -> TestClient:
+def _isolate_external_io():
+    """Stub every external I/O call the API may attempt during a request.
+
+    The API talks to MinIO (artifact storage), an async DB, and an MLflow-backed
+    inference pipeline. None of those are available in unit-test runs, so we
+    replace the boundary functions with no-ops that return the values the
+    routers expect. Individual tests can still `patch(...)` to override any of
+    these for assertion purposes.
+
+    Not autouse — repository/service unit tests that call these targets
+    directly opt out by not requesting this fixture. The `client` /
+    `admin_client` fixtures depend on it so all router tests get it.
+    """
+    patches = [
+        # Lifespan startup: reconcile tries to open a real asyncpg connection
+        # and can hang on Windows even with a bogus DATABASE_URL. No-op it at
+        # both the import site (`api.src.main`) and the source module so any
+        # TestClient starts up instantly regardless of how it's referenced.
+        patch(
+            "api.src.services.training.reconcile_orphaned_training_runs",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "api.src.main.reconcile_orphaned_training_runs",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        # Same defensive pair for the inference warmup — also part of lifespan.
+        patch(
+            "api.src.main.warmup_inference_service",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        # Artifact storage (MinIO) — called by inference router and library router
+        patch("api.src.routers.inference.save_input_image", return_value=None),
+        patch("api.src.routers.inference.save_segmentation_mask", return_value=None),
+        patch("api.src.routers.inference.save_tip_photo", return_value=None),
+        # DB writes for predictions — return the prediction unchanged
+        patch(
+            "api.src.repositories.database.DatabasePredictionRepository.save",
+            new_callable=AsyncMock,
+            side_effect=lambda prediction, **_: prediction,
+        ),
+        # Annotation status updates triggered by feedback/confirm flows
+        patch(
+            "api.src.repositories.annotations.AnnotationRepository.set_status",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        # Fire-and-forget retraining check — the routers call this via
+        # asyncio.create_task. Patching the coroutine function alone is enough:
+        # the resulting task is essentially `await AsyncMock()()` which
+        # resolves immediately. (Patching `asyncio.create_task` itself is
+        # tempting but would clobber the symbol globally and break TestClient.)
+        patch(
+            "api.src.routers.feedback._trigger_retraining_check",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "api.src.routers.inference._trigger_retraining_check",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ]
+    started = [p.start() for p in patches]
+    try:
+        yield started
+    finally:
+        for p in patches:
+            p.stop()
+
+
+@pytest.fixture()
+def client(_isolate_external_io) -> TestClient:
     """Return a `TestClient` with fresh, isolated dependencies.
 
     Each call creates a new in-memory repository and mock inference service,
@@ -70,7 +148,7 @@ def client() -> TestClient:
 
 
 @pytest.fixture()
-def admin_client() -> TestClient:
+def admin_client(_isolate_external_io) -> TestClient:
     """Client authenticated as admin — for endpoints requiring admin role."""
 
     app.dependency_overrides[get_session] = lambda: _make_mock_db()

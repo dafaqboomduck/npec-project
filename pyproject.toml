@@ -20,26 +20,48 @@ testpaths = [
     "tests/postprocessing",
     "tests/e2e",
     "tests/cli",
+    "tests/api",
+    "tests/scripts",
 ]
 markers = [
     "slow: real-inference tests that load TF models (run with `pytest -m slow` or include in default discovery)",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    # Third-party noise we can't fix from here. Matched by message text since
+    # the module field matches where the warning is raised, not the import site.
+    "ignore:The pynvml package is deprecated.*:FutureWarning",
+    "ignore:Using `httpx` with `starlette.testclient`.*",
+    "ignore:.*ChangedInMarshmallow4Warning.*",
 ]
 addopts = [
     "-m",
     "not slow",
     "--cov=src/npec_cv",
+    "--cov=api/src",
     "--cov-report=term-missing",
-    "--cov-fail-under=70",
+    "--cov-fail-under=85",
+    # Per-test 30s hard timeout. Without this, a stuck test on Windows looks
+    # exactly like a Ctrl-C / KeyboardInterrupt and we lose the failing test
+    # name. With it, the runner kills the test and prints the traceback.
+    "--timeout=30",
+    "--timeout-method=thread",
 ]
 
 [tool.coverage.run]
-source = ["src/npec_cv"]
+source = ["src/npec_cv", "api/src"]
 branch = true
 omit = [
     "*/artifacts/*",
     "*/__init__.py",
     "*/_tf_setup.py",
     "*/helpers/dataset_manager.py",
+    # External-system wrappers — cannot be meaningfully unit-tested without
+    # live Azure ML / MLflow / GPU. Integration-tested separately.
+    "api/src/services/azure_inference.py",
+    "api/src/services/azure_training.py",
+    "api/src/services/retraining.py",
+    "api/src/services/unet_inference.py",
 ]
 
 [tool.coverage.report]

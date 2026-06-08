@@ -223,7 +223,7 @@ def test_confirm_annotation_rejects_non_tiff(client: TestClient) -> None:
 def test_confirm_annotation_returns_404_when_not_found(client: TestClient) -> None:
     tiff = _make_tiff()
     with (
-        patch("api.src.routers.library.validate_tiff_mask"),
+        patch("api.src.routers.library.validate_mask"),
         patch(
             "api.src.routers.library.save_annotation_mask",
             return_value="file:///tmp/mask.tiff",
@@ -246,7 +246,7 @@ def test_confirm_annotation_returns_updated_annotation(client: TestClient) -> No
     annotation = _make_annotation()
     tiff = _make_tiff()
     with (
-        patch("api.src.routers.library.validate_tiff_mask"),
+        patch("api.src.routers.library.validate_mask"),
         patch(
             "api.src.routers.library.save_annotation_mask",
             return_value="file:///tmp/mask.tiff",
@@ -434,7 +434,7 @@ def test_deploy_model_returns_200_for_admin(admin_client: TestClient) -> None:
             return_value=True,
         ),
         patch(
-            "api.src.services.deployment.StubDeploymentService.deploy",
+            "api.src.services.deployment.LocalDeploymentService.deploy",
             new_callable=AsyncMock,
         ),
     ):
@@ -468,25 +468,42 @@ def test_confirm_prediction_returns_404_for_unknown(client: TestClient) -> None:
 
 
 def test_confirm_prediction_returns_409_if_already_confirmed(client: TestClient) -> None:
-    prediction = _make_prediction()
+    """A duplicate image upload raises ValueError('identical image ...') → 409."""
     with patch(
         "api.src.repositories.database.DatabasePredictionRepository.confirm",
         new_callable=AsyncMock,
-        return_value=(prediction, True),  # already_confirmed=True
+        side_effect=ValueError("identical image already uploaded"),
     ):
         response = client.post(
-            f"/api/v1/predictions/{prediction.prediction_id}/confirm",
+            f"/api/v1/predictions/{uuid.uuid4()}/confirm",
         )
     assert response.status_code == 409
     assert response.json()["error_code"] == "CONFLICT"
 
 
-def test_confirm_prediction_returns_200_on_success(client: TestClient) -> None:
+def test_confirm_prediction_returns_200_already_confirmed_message(client: TestClient) -> None:
+    """If the prediction is already confirmed, the router returns 200 with a notice."""
     prediction = _make_prediction()
+    annotation_id = uuid.uuid4()
     with patch(
         "api.src.repositories.database.DatabasePredictionRepository.confirm",
         new_callable=AsyncMock,
-        return_value=(prediction, False),  # already_confirmed=False
+        return_value=(prediction, True, annotation_id),
+    ):
+        response = client.post(
+            f"/api/v1/predictions/{prediction.prediction_id}/confirm",
+        )
+    assert response.status_code == 200
+    assert "already confirmed" in response.json()["message"].lower()
+
+
+def test_confirm_prediction_returns_200_on_success(client: TestClient) -> None:
+    prediction = _make_prediction()
+    annotation_id = uuid.uuid4()
+    with patch(
+        "api.src.repositories.database.DatabasePredictionRepository.confirm",
+        new_callable=AsyncMock,
+        return_value=(prediction, False, annotation_id),
     ):
         response = client.post(
             f"/api/v1/predictions/{prediction.prediction_id}/confirm",
@@ -506,10 +523,11 @@ def test_confirm_prediction_returns_200_on_success(client: TestClient) -> None:
 def test_confirm_prediction_works_without_body(client: TestClient) -> None:
     """Body is optional — confirm without any metadata should still succeed."""
     prediction = _make_prediction()
+    annotation_id = uuid.uuid4()
     with patch(
         "api.src.repositories.database.DatabasePredictionRepository.confirm",
         new_callable=AsyncMock,
-        return_value=(prediction, False),
+        return_value=(prediction, False, annotation_id),
     ):
         response = client.post(
             f"/api/v1/predictions/{prediction.prediction_id}/confirm",
