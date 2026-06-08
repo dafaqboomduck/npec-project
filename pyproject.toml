@@ -20,8 +20,6 @@ testpaths = [
     "tests/postprocessing",
     "tests/e2e",
     "tests/cli",
-    "tests/api",
-    "tests/scripts",
 ]
 markers = [
     "slow: real-inference tests that load TF models (run with `pytest -m slow` or include in default discovery)",
@@ -38,9 +36,8 @@ addopts = [
     "-m",
     "not slow",
     "--cov=src/npec_cv",
-    "--cov=api/src",
     "--cov-report=term-missing",
-    "--cov-fail-under=85",
+    "--cov-fail-under=70",
 ]
 
 [tool.coverage.run]

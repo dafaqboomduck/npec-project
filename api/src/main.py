@@ -11,7 +11,6 @@ All routers are registered here.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -23,8 +22,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.src.config import settings
-from api.src.dependencies import shutdown_inference_service, warmup_inference_service
 from api.src.db.session import get_sessionmaker
+from api.src.dependencies import shutdown_inference_service, warmup_inference_service
 from api.src.routers import (
     auth,
     dashboard,
@@ -65,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await reconcile_orphaned_training_runs()
 
     stop = asyncio.Event()
-    consumer = asyncio.create_task(consume_forever(sm, stop), name="inference-consumer")
+    asyncio.create_task(consume_forever(sm, stop), name="inference-consumer")
 
     yield
     await shutdown_inference_service()
