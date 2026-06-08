@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await reconcile_orphaned_training_runs()
 
     stop = asyncio.Event()
-    asyncio.create_task(consume_forever(sm, stop), name="inference-consumer")
+    consumer = asyncio.create_task(consume_forever(sm, stop), name="inference-consumer")
 
     yield
     stop.set()
