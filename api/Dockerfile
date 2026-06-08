@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # 1. Dependencies
 FROM python:3.11-slim AS deps
 WORKDIR /app

@@ -60,6 +60,8 @@ ROOT_MODEL_NAME = "root_det_model_512px.keras"
 ANCHOR_MODEL_NAME = "anchor_det_model_512px.keras"
 PATCH_SIZE = 512
 
+PROMOTION_MARGIN = float(os.environ.get("NPEC_PROMOTION_MARGIN", "0.0"))
+SPLIT_SEED = int(os.environ.get("NPEC_SPLIT_SEED", "42"))
 
 # DB metric writer - synchronous, no FastAPI context
 
@@ -254,6 +256,81 @@ def _compute_f1(model, X: "np.ndarray", y: "np.ndarray") -> float:
     return float(f1)
 
 
+def _compute_prf(model, X, y) -> tuple[float, float, float]:
+    """Pixel-level precision, recall, F1 on (X, y)."""
+    import numpy as np
+
+    preds = (model.predict(X, batch_size=BATCH_SIZE, verbose=0) > 0.5).astype("float32")
+    tp = float(np.sum(y * preds))
+    fp = float(np.sum((1 - y) * preds))
+    fn = float(np.sum(y * (1 - preds)))
+    eps = 1e-8
+    p = tp / (tp + fp + eps)
+    r = tp / (tp + fn + eps)
+    return p, r, (2 * p * r / (p + r + eps))
+
+
+def _get_deployed_f1() -> float:
+    """F1 of the currently deployed model, or 0.0 if none / unavailable."""
+    if not DATABASE_URL:
+        return 0.0
+    try:
+        from sqlalchemy import create_engine, text
+
+        with create_engine(DATABASE_URL).connect() as conn:
+            row = conn.execute(text("SELECT f1_score FROM model_versions WHERE status = 'deployed' LIMIT 1")).fetchone()
+            return float(row[0]) if row and row[0] is not None else 0.0
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not read deployed F1: %s", exc)
+        return 0.0
+
+
+def _register_candidate(f1: float, precision: float, recall: float, better: bool, holdout: bool, n_pairs: int) -> None:
+    """Register the fine-tuned model as a 'registered' candidate. NEVER auto-deploys.
+
+    A worse (or low-confidence) model is still recorded for audit but is not
+    promotable - it stays 'registered' and is only served if a human (or an
+    opt-in auto-promote that re-checks the flag) deploys it.
+    """
+    if not DATABASE_URL:
+        return
+    version = os.environ.get("NPEC_MODEL_VERSION") or f"local-ft-{TRAINING_RUN_ID[:8]}"
+    try:
+        from sqlalchemy import create_engine, text
+
+        with create_engine(DATABASE_URL).begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO model_versions
+                        (version, name, description, status, artifact_uri,
+                         f1_score, precision, recall, baseline, created_at)
+                    VALUES
+                        (:v, :n, :d, 'registered', :a, :f1, :p, :r, false, now())
+                    ON CONFLICT (version) DO UPDATE SET
+                        f1_score = EXCLUDED.f1_score, precision = EXCLUDED.precision,
+                        recall = EXCLUDED.recall, description = EXCLUDED.description
+                """
+                ),
+                {
+                    "v": version,
+                    "n": "Local fine-tune (feedback)",
+                    "d": (
+                        f"Fine-tuned on {n_pairs} confirmed pair(s). "
+                        f"val_f1={f1:.4f}, holdout={holdout}, "
+                        f"better_than_deployed={better}. run={TRAINING_RUN_ID}"
+                    ),
+                    "a": str(OUTPUT_DIR),
+                    "f1": f1,
+                    "p": precision,
+                    "r": recall,
+                },
+            )
+        logger.info("Registered candidate '%s' (better_than_deployed=%s, holdout=%s).", version, better, holdout)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not register candidate model: %s", exc)
+
+
 # No-data path - copy weights, report known F1
 
 
@@ -315,6 +392,7 @@ def _run_fine_tuning(
     output_root_path: Path,
 ) -> float:
     import gc
+    import random
 
     import keras
     import numpy as np
@@ -345,12 +423,18 @@ def _run_fine_tuning(
     X = np.array(X_list, dtype=np.float32)
     y = np.array(y_list, dtype=np.float32)
 
-    split = max(1, int(len(X) * 0.8))
-    X_train, X_val = X[:split], X[split:]
-    y_train, y_val = y[:split], y[split:]
+    idx = list(range(len(X)))
+    random.Random(SPLIT_SEED).shuffle(idx)  # representative val set, deterministic
+    X, y = X[idx], y[idx]
 
-    if len(X_val) == 0:
-        X_val, y_val = X_train, y_train
+    split = int(int(len(X) * 0.8))
+    holdout = split >= 1 and (len(X) - split) >= 1
+    if holdout:
+        X_train, X_val, y_train, y_val = X[:split], X[split:], y[:split], y[split:]
+    else:
+        X_train, y_train = X, y
+        X_val, y_val = X, y
+        logger.warning("Only %d pair(s): no real hold-out.", len(X))
 
     logger.info(
         "Fine-tuning on %d train / %d val patches for %d epoch(s) (lr=%.5f, batch=%d)",
@@ -413,8 +497,22 @@ def _run_fine_tuning(
         # No improvement ever recorded - save whatever weights we ended with
         model.save(str(output_root_path))
 
-    logger.info("Fine-tuned model saved to %s (best_f1=%.4f)", output_root_path, tracking_cb.best_f1)
-    return tracking_cb.best_f1
+    p, r, val_f1 = _compute_prf(model, X_val, y_val)  # honest val metrics on best weights
+    deployed_f1 = _get_deployed_f1()
+    better = holdout and (val_f1 > deployed_f1 + PROMOTION_MARGIN)
+
+    logger.info(
+        "val_f1=%.4f  deployed_f1=%.4f  margin=%.4f  -> better=%s (holdout=%s)",
+        val_f1,
+        deployed_f1,
+        PROMOTION_MARGIN,
+        better,
+        holdout,
+    )
+
+    _register_candidate(val_f1, p, r, better, holdout, n_pairs=len(X))
+    print(f"BETTER_THAN_DEPLOYED={str(better).lower()}")  # consumed by the service (optional)
+    return val_f1
 
 
 # Main

@@ -79,9 +79,9 @@ def main() -> int:
     args = parser.parse_args()
 
     load_dotenv()
-    subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID")
-    resource_group = os.getenv("AZURE_RESOURCE_GROUP")
-    workspace_name = os.getenv("AZURE_ML_WORKSPACE")
+    subscription_id = os.getenv("AZUREML_SUBSCRIPTION_ID")
+    resource_group = os.getenv("AZUREML_RESOURCE_GROUP")
+    workspace_name = os.getenv("AZUREML_WORKSPACE")
     if not all([subscription_id, resource_group, workspace_name]):
         print(
             "error: AZURE_SUBSCRIPTION_ID / AZURE_RESOURCE_GROUP / " "AZURE_ML_WORKSPACE missing from environment",

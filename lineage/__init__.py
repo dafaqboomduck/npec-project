@@ -7,7 +7,7 @@ a traceable identity. The chain it supports:
 
 There is one storage backend: the project's own PostgreSQL database
 (via the existing db/ module). The same code path runs on all three
-deployment targets (local, Portainer, Azure ML on lambda-0); each
+deployment targets (local, Portainer, Azure ML on lambda-4); each
 deployment has its own database, but the schema and code are identical.
 
 Public API

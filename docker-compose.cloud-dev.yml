@@ -1,5 +1,4 @@
 # docker-compose.cloud-dev.yml — tests the cloud code path locally using Azure emulators.
-# Uses Azurite instead of MinIO to emulate Azure Blob Storage.
 #
 # Usage:
 #   docker compose -f docker-compose.cloud-dev.yml up -d
@@ -20,21 +19,6 @@ services:
       - ./db/seeds:/seeds:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5db}" ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
-  azurite:
-    image: mcr.microsoft.com/azure-storage/azurite
-    restart: unless-stopped
-    ports:
-      - "10000:10000"
-    volumes:
-      - azurite_data:/data
-    command: azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --location /data
-    healthcheck:
-      test: [ "CMD", "nc", "-z", "127.0.0.1", "10000" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -63,25 +47,20 @@ services:
       SECRET_KEY: ${SECRET_KEY:-devsecret}
       USE_MOCK_INFERENCE: ${USE_MOCK_INFERENCE:-true}
       DEPLOYMENT_ENV: "cloud"
-      AZURE_STORAGE_PUBLIC_URL: "http://localhost:10000/devstoreaccount1"
-      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
+      AZURE_STORAGE_PUBLIC_URL: https://npeccv5storage.blob.core.windows.net
       AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-npec-artifacts}
       AZUREML_ENDPOINT_URI: ${AZUREML_ENDPOINT_URI}
       AZUREML_ENDPOINT_KEY: ${AZUREML_ENDPOINT_KEY}
       AZUREML_SUBSCRIPTION_ID: ${AZUREML_SUBSCRIPTION_ID}
       AZUREML_RESOURCE_GROUP: ${AZUREML_RESOURCE_GROUP}
       AZUREML_REQUEST_TIMEOUT: ${AZUREML_REQUEST_TIMEOUT:-180}
-      AZURE_TENANT_ID: ${AZURE_TENANT_ID}
-      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
-      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
     ports:
       - "8000:8000"
     volumes:
       - ./artifacts:/app/artifacts
     depends_on:
       db:
-        condition: service_healthy
-      azurite:
         condition: service_healthy
       migrations:
         condition: service_completed_successfully
@@ -118,4 +97,3 @@ services:
 
 volumes:
   cv5_pgdata:
-  azurite_data:

@@ -89,7 +89,10 @@ class ImageRecord:
 # --------------------------------------------------------------------------- #
 
 
-def discover_records(raw_root: Path) -> list[ImageRecord]:
+def discover_records(
+    raw_root: Path,
+    cohorts: tuple[str, ...] = COHORTS_IN_SCOPE,
+) -> list[ImageRecord]:
     """Walk every in-scope cohort and pair images with masks.
 
     Returns a list sorted by stem for stable ordering across machines.
@@ -99,7 +102,7 @@ def discover_records(raw_root: Path) -> list[ImageRecord]:
     seen_image_filenames: dict[str, Path] = {}
     seen_mask_filenames: dict[str, Path] = {}
 
-    for cohort in COHORTS_IN_SCOPE:
+    for cohort in cohorts:
         cohort_root = raw_root / cohort
         if not cohort_root.is_dir():
             print(f"  warn: cohort folder missing: {cohort_root}", file=sys.stderr)
@@ -272,6 +275,107 @@ def upload_asset(
 
 
 # --------------------------------------------------------------------------- #
+# Register raw and splits
+# --------------------------------------------------------------------------- #
+
+
+def register_raw_and_splits(
+    ml_client: MLClient,
+    raw_root: Path,
+    version: str,
+    *,
+    cohorts: tuple[str, ...] = COHORTS_IN_SCOPE,
+    seed: int = 42,
+    subset: int | None = None,
+    dry_run: bool = False,
+    created_by: str = "unknown",
+    source_note: str = "",
+    extra_tags: dict[str, str] | None = None,
+) -> dict[str, tuple[int, int]]:
+    """Discover, split, stage, and register cv5_raw + cv5_train/val/test at `version`.
+
+    Returns {asset_role: (n_images, n_masks)}. Reused by main() and by
+    export_feedback_to_raw.py (which passes cohorts including 'feedback').
+    """
+    sha = git_short_sha()
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    is_subset = subset is not None
+
+    all_records = discover_records(raw_root, cohorts=cohorts)
+    if not all_records:
+        raise RuntimeError("no records discovered; aborting")
+
+    splittable = [r for r in all_records if r.has_root_mask]
+    print(f"splittable subset (root mask present): {len(splittable)} images")
+
+    if is_subset:
+        rng = random.Random(seed)
+        splittable = sorted(rng.sample(splittable, min(subset, len(splittable))), key=lambda r: r.stem)
+        print(f"subset of {len(splittable)} images selected")
+
+    splits = split_for_training(splittable, seed=seed)
+    counts: dict[str, tuple[int, int]] = {}
+
+    with tempfile.TemporaryDirectory(prefix="cv5_staging_") as tmp:
+        staging = Path(tmp)
+        raw_n_img, raw_n_mask = stage_flat(splittable, staging / "raw", write_manifest=False)
+        counts["raw"] = (raw_n_img, raw_n_mask)
+        print(f"  staged raw: {raw_n_img} images, {raw_n_mask} masks")
+
+        for split in ("train", "val", "test"):
+            counts[split] = stage_flat(splits[split], staging / split, write_manifest=True)
+            print(f"  staged {split}: {counts[split][0]} images, {counts[split][1]} masks")
+
+        if dry_run:
+            print("dry run, skipping upload")
+            return counts
+
+        base_tags = {
+            "source": "hades",
+            "role": "raw",
+            "mask_classes": "root,shoot,seed",
+            "num_images": str(raw_n_img),
+            "num_masks": str(raw_n_mask),
+            "is_subset": str(is_subset).lower(),
+            "created_by": created_by,
+            "created_date": created,
+            "git_commit": sha,
+            "cohorts": ",".join(cohorts),
+        }
+        if extra_tags:
+            base_tags.update(extra_tags)
+
+        upload_asset(
+            ml_client,
+            name=ASSET_NAMES["raw"],
+            path=staging / "raw",
+            version=version,
+            description=(
+                f"HADES root-segmentation working set, pooled and flattened.\n"
+                f"Cohorts {','.join(cohorts)} merged into one images/ + masks/ layout.\n"
+                f"{source_note}\n"
+                f"Git commit: {sha}. Subset: {str(is_subset).lower()}."
+            ),
+            tags=base_tags,
+        )
+        for split in ("train", "val", "test"):
+            n_img, n_mask = counts[split]
+            upload_asset(
+                ml_client,
+                name=ASSET_NAMES[split],
+                path=staging / split,
+                version=version,
+                description=(
+                    f"HADES root-segmentation {split} split.\n"
+                    f"Derived from cv5_raw v{version} by 80/10/10 split, seed={seed}.\n"
+                    f"{source_note} Git commit: {sha}."
+                ),
+                tags={**base_tags, "role": split, "num_images": str(n_img), "num_masks": str(n_mask)},
+            )
+    return counts
+
+
+# --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
 
@@ -310,126 +414,23 @@ def main() -> int:
         )
         return 1
 
-    is_subset = args.subset is not None
-    sha = git_short_sha()
-    created = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    ml_client = MLClient(
+        credential=InteractiveBrowserCredential(),
+        subscription_id=subscription_id,
+        resource_group_name=resource_group,
+        workspace_name=workspace_name,
+    )
     created_by = os.getenv("USER") or os.getenv("USERNAME") or "unknown"
 
-    print(
-        f"raw root: {args.raw_root}  seed: {args.seed}  "
-        f"version: {args.version}  subset: {args.subset}  "
-        f"dry-run: {args.dry_run}"
+    register_raw_and_splits(
+        ml_client,
+        args.raw_root,
+        args.version,
+        seed=args.seed,
+        subset=args.subset,
+        dry_run=args.dry_run,
+        created_by=created_by,
     )
-
-    all_records = discover_records(args.raw_root)
-    if not all_records:
-        print("no records discovered; aborting", file=sys.stderr)
-        return 1
-
-    # Restrict to records with a root mask. This is the working set that
-    # populates cv5_raw and gets split into cv5_train/val/test.
-    splittable = [r for r in all_records if r.has_root_mask]
-    print(f"splittable subset (root mask present): {len(splittable)} images")
-
-    if is_subset:
-        rng = random.Random(args.seed)
-        splittable = sorted(
-            rng.sample(splittable, min(args.subset, len(splittable))),
-            key=lambda r: r.stem,
-        )
-        print(f"subset of {len(splittable)} images selected")
-
-    splits = split_for_training(splittable, seed=args.seed)
-
-    with tempfile.TemporaryDirectory(prefix="cv5_staging_") as tmp:
-        staging = Path(tmp)
-        print(f"staging in {staging}")
-
-        raw_n_img, raw_n_mask = stage_flat(splittable, staging / "raw", write_manifest=False)
-        print(f"  staged raw: {raw_n_img} images, {raw_n_mask} masks")
-
-        split_counts: dict[str, tuple[int, int]] = {}
-        for split in ("train", "val", "test"):
-            n_img, n_mask = stage_flat(splits[split], staging / split, write_manifest=True)
-            split_counts[split] = (n_img, n_mask)
-            print(f"  staged {split}: {n_img} images, {n_mask} masks")
-
-        if args.dry_run:
-            print("dry run, skipping upload")
-            return 0
-
-        ml_client = MLClient(
-            credential=InteractiveBrowserCredential(),
-            subscription_id=subscription_id,
-            resource_group_name=resource_group,
-            workspace_name=workspace_name,
-        )
-
-        upload_asset(
-            ml_client,
-            name=ASSET_NAMES["raw"],
-            path=staging / "raw",
-            version=args.version,
-            description=(
-                f"HADES root-segmentation working set, pooled and flattened.\n"
-                f"Cohorts {','.join(COHORTS_IN_SCOPE)} merged into one "
-                f"images/ + masks/ layout. Restricted to images that have a "
-                f"_root_mask.tif. No splitting applied -- the union of "
-                f"cv5_train, cv5_val, cv5_test at the same version "
-                f"reconstitutes this asset exactly.\n"
-                f"Excludes: Kaggle/, *.txt, *_occluded_root_mask.tif, and "
-                f"images with no root mask.\n"
-                f"Git commit: {sha}. Subset upload: {str(is_subset).lower()}.\n"
-                f"See docs/data/preprocessing_spec.md and "
-                f"docs/data/versioning_strategy.md."
-            ),
-            tags={
-                "source": "hades",
-                "cohorts": ",".join(COHORTS_IN_SCOPE),
-                "role": "raw",
-                "mask_classes": "root,shoot,seed",
-                "num_images": str(raw_n_img),
-                "num_masks": str(raw_n_mask),
-                "is_subset": str(is_subset).lower(),
-                "created_by": created_by,
-                "created_date": created,
-                "git_commit": sha,
-                "excluded_paths": ("Kaggle/,*.txt,*_occluded_root_mask.tif," "images_without_root_mask"),
-            },
-        )
-
-        for split in ("train", "val", "test"):
-            n_img, n_mask = split_counts[split]
-            upload_asset(
-                ml_client,
-                name=ASSET_NAMES[split],
-                path=staging / split,
-                version=args.version,
-                description=(
-                    f"HADES root-segmentation {split} split.\n"
-                    f"Derived from cv5_raw v{args.version} by 80/10/10 split "
-                    f"with seed={args.seed}, partitioned by image stem.\n"
-                    f"Git commit: {sha}. "
-                    f"Subset upload: {str(is_subset).lower()}."
-                ),
-                tags={
-                    "source": "hades",
-                    "cohorts": ",".join(COHORTS_IN_SCOPE),
-                    "role": split,
-                    "split_ratio": "80_10_10",
-                    "split_seed": str(args.seed),
-                    "mask_classes": "root,shoot,seed",
-                    "num_images": str(n_img),
-                    "num_masks": str(n_mask),
-                    "is_subset": str(is_subset).lower(),
-                    "created_by": created_by,
-                    "created_date": created,
-                    "git_commit": sha,
-                    "derived_from": f"{ASSET_NAMES['raw']}:{args.version}",
-                },
-            )
-
-    print("done")
     return 0
 
 

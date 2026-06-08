@@ -139,6 +139,11 @@ class LocalTrainingService(AbstractTrainingService):
         Raises:
             RuntimeError: If a training run is already in progress.
         """
+        # Assemble latest confirmed corrections
+        data_dir, n_pairs = await self._materialize_feedback_dataset()
+        logger.info("Local training will use %d corrected pair(s).", n_pairs)
+        self._data_dir = data_dir
+
         # Prevent concurrent training runs
         existing = await self._get_running_id()
         if existing is not None:
@@ -298,6 +303,7 @@ class LocalTrainingService(AbstractTrainingService):
             hyperparameters=hyperparameters,
             output_dir=output_dir,
             artifact_dir=deployed_artifact_dir,
+            data_dir=self._data_dir,
         )
 
         try:
@@ -406,6 +412,61 @@ class LocalTrainingService(AbstractTrainingService):
                 session_factory=session_factory,
             )
 
+    async def _materialize_feedback_dataset(self) -> tuple[Path]:
+        """Write all human-confirmed (image, corrected-mask) pairs into NPEC_DATA_DIR.
+
+        The local trainer pairs by identical stem and treats any non-zero mask
+        pixel as foreground, so write images/<stem>.png + masks/<stem>.png.
+        The feedback set is rebuilt each run so the trainer always fine-tunes
+        on the current confirmed set.
+        """
+        import asyncio
+        import uuid as _uuid
+
+        from sqlalchemy import select
+
+        from api.src.db.orm import Annotation, Prediction
+        from api.src.schemas.library import AnnotationStatus
+        from api.src.services.storage import get_storage_backend
+
+        data_dir = Path(os.getenv("NPEC_DATA_DIR", "/app/artifacts/training"))
+        img_dir, msk_dir = data_dir / "images", data_dir / "masks"
+        img_dir.mkdir(parents=True, exist_ok=True)
+        msk_dir.mkdir(parents=True, exist_ok=True)
+
+        for d in (img_dir, msk_dir):
+            for p in d.glob("ann_*"):
+                p.unlink(missing_ok=True)
+
+        rows = (
+            await self._db.execute(
+                select(Annotation.id, Annotation.image_uri, Annotation.mask_uri)
+                .join(Prediction, Prediction.id == Annotation.prediction_id)
+                .where(
+                    Annotation.status == AnnotationStatus.ANNOTATED.value,
+                    Annotation.image_uri.is_not(None),
+                    Annotation.mask_uri.is_not(None),
+                    Prediction.confirmed_at.is_not(None),
+                )
+            )
+        ).all()
+
+        storage = get_storage_backend()
+        written = 0
+        for ann_id, image_uri, mask_uri in rows:
+            stem = f"ann_{_uuid.UUID(str(ann_id)).hex}"
+            try:
+                img = await asyncio.to_thread(storage.download, image_uri)
+                mask = await asyncio.to_thread(storage.download, mask_uri)
+                await asyncio.to_thread(_write_png, img, img_dir / f"{stem}.png", "RGB")
+                await asyncio.to_thread(_write_png, mask, msk_dir / f"{stem}.png", "L")
+                written += 1
+            except Exception as exc:
+                logger.warning("Skipping annotation %s for local training: %s", ann_id, exc)
+
+        logger.info("Materialised %d confirmed pair(s) into %s", written, data_dir)
+        return data_dir, written
+
 
 # Module-level helpers
 def _build_subprocess_env(
@@ -413,6 +474,7 @@ def _build_subprocess_env(
     hyperparameters: dict[str, Any],
     output_dir: Path,
     artifact_dir: Path,
+    data_dir: Path | None = None,
 ) -> dict[str, str]:
     """Build the environment for the training subprcess.
 
@@ -425,6 +487,7 @@ def _build_subprocess_env(
         hyperparameters: Hyperparameter overrides dict.
         output_dir: Path to the output directory for models.
         artifact_dir: Path to the artifact directory.
+        data_dir: Path to the data directory.
 
     Returns:
         Dict of environment variables for the subprocess.
@@ -433,6 +496,8 @@ def _build_subprocess_env(
     env["TRAINING_RUN_ID"] = str(run_id)
     env["NPEC_OUTPUT_DIR"] = str(output_dir)
     env["NPEC_ARTIFACT_DIR"] = str(artifact_dir)
+    if data_dir is not None:
+        env["NPEC_DATA_DIR"] = str(data_dir)
     if "learning_rate" in hyperparameters:
         env["NPEC_LEARNING_RATE"] = str(hyperparameters["learning_rate"])
     if "batch_size" in hyperparameters:
@@ -806,3 +871,14 @@ async def reconcile_orphaned_training_runs() -> None:
                 logger.warning("Reconciled %d orphaned training run(s) to 'failed'.", reconciled)
     except Exception as exc:
         logger.warning("Training-run reconciliation failed: %s", exc)
+
+
+def _write_png(raw: bytes, dest: Path, mode: str) -> None:
+    """Decode blob bytes and write a single-frame PNG in the given mode ('RGB'|'L')."""
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(raw)) as im:
+        im.seek(0)
+        im.convert(mode).save(dest, format="PNG")

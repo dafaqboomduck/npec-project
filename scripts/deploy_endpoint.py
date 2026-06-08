@@ -1,4 +1,4 @@
-"""Create or update the root-detection Kubernetes online endpoint on lambda-0.
+"""Create or update the root-detection Kubernetes online endpoint on lambda-4.
 
 This script is idempotent — run it whenever a new root-detection model
 version is registered to roll the endpoint forward to that version:
@@ -7,7 +7,7 @@ version is registered to roll the endpoint forward to that version:
 
 What it does
 ------------
-1. Create a Kubernetes online endpoint backed by the `lambda-0` compute
+1. Create a Kubernetes online endpoint backed by the `lambda-4` compute
    (the lab's local server) if it doesn't exist. If a Managed (Azure VM)
    endpoint with the same name already exists from a previous deployment,
    it's deleted and recreated as a Kubernetes endpoint — the migration
@@ -22,12 +22,12 @@ What it does
    the combined serving model. AZUREML_MODEL_DIR will contain BOTH .keras files.
 6. Route 100% of traffic to the new deployment.
 
-Why Kubernetes / lambda-0 instead of a managed Azure VM
+Why Kubernetes / lambda-4 instead of a managed Azure VM
 -------------------------------------------------------
 A `ManagedOnlineEndpoint` runs on an Azure-provided VM (e.g. Standard_DS3_v2)
 billed 24/7 (~€150/month). `KubernetesOnlineEndpoint` runs the same scoring
 container on whatever Kubernetes compute is attached to the workspace —
-in our case the lab's `lambda-0` server, at zero incremental Azure cost.
+in our case the lab's `lambda-4` server, at zero incremental Azure cost.
 The contract for `score.py` is identical between the two endpoint kinds.
 
 Why bake root + anchor into one combined artifact
@@ -74,17 +74,17 @@ ANCHOR_MODEL_VERSION = "2"  # fixed — never changes
 SERVING_MODEL_NAME = "root-detection-serving"
 ENV_NAME = "root-detection-endpoint"
 
-# Kubernetes compute attached to the workspace. Same `lambda-0` cluster
+# Kubernetes compute attached to the workspace. Same `lambda-4` cluster
 # used by the training pipeline and the combine job.
-COMPUTE_NAME = "lambda-0"
+COMPUTE_NAME = "lambda-4"
 
 # Kubernetes "instance type" — a named CPU/memory/GPU profile defined on the
 # K8s cluster's azureml extension (NOT an Azure VM SKU). The cluster admin
 # defines these. "defaultinstancetype" exists on every Azure ML K8s extension
-# install. If lambda-0 has a custom instance type with more RAM/CPU set up
+# install. If lambda-4 has a custom instance type with more RAM/CPU set up
 # (e.g. "cpu-4", "gpu"), change this constant.
 #   List available types:
-#     az ml compute show -n lambda-0 --resource-group buas-y2 \
+#     az ml compute show -n lambda-4 --resource-group buas-y2 \
 #       --workspace-name team-CV5-2026 --query "properties" -o json
 INSTANCE_TYPE = "defaultinstancetype"
 INSTANCE_COUNT = 1
@@ -128,7 +128,7 @@ def get_client() -> MLClient:
 
 
 def get_or_create_endpoint(client: MLClient) -> None:
-    """Ensure a Kubernetes online endpoint backed by lambda-0 exists.
+    """Ensure a Kubernetes online endpoint backed by lambda-4 exists.
 
     If an endpoint with this name already exists but is a Managed (Azure VM)
     endpoint left over from an earlier deployment, it's deleted and recreated
@@ -161,7 +161,7 @@ def get_or_create_endpoint(client: MLClient) -> None:
         name=ENDPOINT_NAME,
         compute=COMPUTE_NAME,
         description=(
-            "Root detection inference endpoint running on the lambda-0 Kubernetes "
+            "Root detection inference endpoint running on the lambda-4 Kubernetes "
             "compute. Re-run deploy_endpoint.py to roll forward to the latest model."
         ),
         auth_mode="key",

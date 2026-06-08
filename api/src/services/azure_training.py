@@ -102,6 +102,15 @@ class AzureMLTrainingService(AbstractTrainingService):
         Returns:
             TrainingStartResponse with run_id and confirmation message.
         """
+        # Fold confirmed corrections into cv5_corrections so the pipeline trains on them.
+        try:
+            from api.src.services.feedback_export import export_confirmed_feedback
+
+            added = await export_confirmed_feedback(self._db)
+            logger.info("AzureMLTrainingService: exported %d correction(s) into cv5_corrections.", added)
+        except Exception as exc:
+            logger.warning("AzureMLTrainingService: feedback export failed: %s", exc)
+
         row = await self._repo.create(hyperparameters=None)
         run_id = row.id
         await self._db.commit()
@@ -171,6 +180,8 @@ class AzureMLTrainingService(AbstractTrainingService):
                     run_id,
                     reason=f"Pipeline job ended with status: {status}",
                 )
+
+            await self._sync_registered_models()
         except Exception as exc:
             logger.exception("AzureMLTrainingService: polling failed for run %s", run_id)
             await self._repo.mark_failed(run_id, reason=str(exc))
@@ -195,6 +206,46 @@ class AzureMLTrainingService(AbstractTrainingService):
                 return job.status
             logger.debug("AzureMLTrainingService: job '%s' status: %s", job_name, job.status)
             time.sleep(_POLL_INTERVAL)
+
+    async def _sync_registered_models(self) -> None:
+        """Mirror Azure ML registry models into the app's model_versions table."""
+        from sqlalchemy import select
+
+        from api.src.db.orm import ModelVersion
+
+        ml = _get_ml_client()
+        models = await asyncio.to_thread(lambda: list(ml.models.list(name="root-detection")))
+        for m in models:
+            version = f"azureml-{m.name}-{m.version}"
+            exists = (
+                await self._db.execute(select(ModelVersion.id).where(ModelVersion.version == version))
+            ).scalar_one_or_none()
+            if exists:
+                continue
+            self._db.add(
+                ModelVersion(
+                    version=version,
+                    name=m.name,
+                    description=(m.description or "Azure ML pipeline-trained model"),
+                    status="registered",
+                    artifact_uri=getattr(m, "id", None) or "",  # azureml model id
+                    f1_score=self._parse_mean_f1(m.description),
+                    baseline=False,
+                    pipeline_run_id=getattr(self, "_azureml_job_name", None),
+                    mlflow_run_id=(m.tags or {}).get("mlflow_run_id"),
+                )
+            )
+        await self._db.commit()
+
+    @staticmethod
+    def _parse_mean_f1(description: str | None) -> float | None:
+        for part in (description or "").split():
+            if part.startswith("mean_f1="):
+                try:
+                    return float(part.split("=")[1])
+                except ValueError:
+                    return None
+        return None
 
     async def get_runs(self) -> list[TrainingRunSummary]:
         """Return all training runs ordered by started_at descending.

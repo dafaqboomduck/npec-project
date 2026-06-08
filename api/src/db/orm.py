@@ -401,6 +401,10 @@ class Annotation(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    exported_to_raw_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     dataset: Mapped[Optional["Dataset"]] = relationship(back_populates="annotations")
     creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])

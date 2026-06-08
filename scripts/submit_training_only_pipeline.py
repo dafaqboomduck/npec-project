@@ -11,7 +11,7 @@ This is a stripped-down sibling of `submit_pipeline.py`:
     without burning compute).
 
 Run once to register the schedule (Mondays at 09:00 UTC — one hour after
-the full pipeline so the two never collide on lambda-0):
+the full pipeline so the two never collide on lambda-4):
     python scripts/submit_training_only_pipeline.py --schedule
 
 Run immediately without scheduling (typical use):
@@ -48,7 +48,7 @@ from azure.identity import AzureCliCredential
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config.json"
 ENV_YAML = REPO_ROOT / "environments" / "azure-train-env.yml"
-COMPUTE_NAME = "lambda-0"
+COMPUTE_NAME = "lambda-4"
 INSTANCE_TYPE = "gpu"
 ENV_NAME = "root-detection-train"
 SCHEDULE_NAME = "root-detection-training-only-weekly"

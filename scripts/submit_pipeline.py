@@ -38,7 +38,7 @@ from azure.identity import DefaultAzureCredential
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config.json"
 ENV_YAML = REPO_ROOT / "environments" / "azure-train-env.yml"
-COMPUTE_NAME = "lambda-0"
+COMPUTE_NAME = "lambda-4"
 INSTANCE_TYPE = "gpu"
 ENV_NAME = "root-detection-train"
 SCHEDULE_NAME = "root-detection-weekly"
@@ -97,6 +97,7 @@ def build_components(
         inputs={
             "train_data": Input(type="uri_folder"),
             "val_data": Input(type="uri_folder"),
+            "corrections_data": Input(type="uri_folder", optional=True),
             "patch_size": Input(type="integer", default=512),
             "epochs": Input(type="integer", default=30),
             "batch_size": Input(type="integer", default=16),
@@ -109,6 +110,7 @@ def build_components(
             "python scripts/train_root_detection.py "
             "--data_dir ${{inputs.train_data}} "
             "--val_dir  ${{inputs.val_data}} "
+            "--corrections_dir ${{inputs.corrections_data}} "
             "--output_dir ${{outputs.model_output}} "
             "--patch_size ${{inputs.patch_size}} "
             "--epochs ${{inputs.epochs}} "
@@ -164,9 +166,9 @@ def build_components(
             "--eval_dir    ${{inputs.eval_dir}} "
             "--output_dir  ${{outputs.register_output}} "
             "--f1_threshold ${{inputs.f1_threshold}} "
-            "--train_dataset cv5_train:1.0.0 "  # NEW
-            "--val_dataset   cv5_val:1.0.0 "  # NEW
-            "--test_dataset  cv5_test:1.0.0"  # NEW
+            "--train_dataset cv5_train:latest "  # NEW
+            "--val_dataset   cv5_val:latest "  # NEW
+            "--test_dataset  cv5_test:latest"  # NEW
         ),
         environment=env_label,
         resources=resources,
@@ -207,9 +209,10 @@ def build_pipeline(
         train_data: Input(type="uri_folder"),
         val_data: Input(type="uri_folder"),
         test_data: Input(type="uri_folder"),
+        corrections_data: Input(type="uri_folder"),
     ):
         # -- Sweep: try each batch size, keep the best val_f1 --------------------
-        train_step = train_comp(train_data=train_data, val_data=val_data)
+        train_step = train_comp(train_data=train_data, val_data=val_data, corrections_data=corrections_data)
         sweep_step = train_step.sweep(
             primary_metric="best_val_f1",
             goal="maximize",
@@ -265,9 +268,14 @@ def main() -> None:
 
     # Bind the fixed data assets
     pipeline_job = pipeline_func(
-        train_data=Input(type=AssetTypes.URI_FOLDER, path="azureml:cv5_train:1.0.0", mode=InputOutputModes.RO_MOUNT),
-        val_data=Input(type=AssetTypes.URI_FOLDER, path="azureml:cv5_val:1.0.0", mode=InputOutputModes.RO_MOUNT),
-        test_data=Input(type=AssetTypes.URI_FOLDER, path="azureml:cv5_test:1.0.0", mode=InputOutputModes.RO_MOUNT),
+        train_data=Input(type=AssetTypes.URI_FOLDER, path="azureml:cv5_train:latest", mode=InputOutputModes.RO_MOUNT),
+        val_data=Input(type=AssetTypes.URI_FOLDER, path="azureml:cv5_val:latest", mode=InputOutputModes.RO_MOUNT),
+        test_data=Input(type=AssetTypes.URI_FOLDER, path="azureml:cv5_test:latest", mode=InputOutputModes.RO_MOUNT),
+        corrections_data=Input(
+            type=AssetTypes.URI_FOLDER,
+            path="azureml:cv5_corrections:latest",
+            mode=InputOutputModes.RO_MOUNT,
+        ),
     )
 
     if args.run_now:

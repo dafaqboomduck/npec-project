@@ -36,6 +36,7 @@ async def bootstrap() -> None:
 
     async with factory() as db:
         await _ensure_admin_user(db)
+        await _ensure_normal_user(db)
         deployed = await _ensure_baseline_model(db)
 
     if not deployed:
@@ -78,6 +79,38 @@ async def _ensure_admin_user(db) -> None:
     logger.info("Created admin user: %s", admin_email)
 
 
+async def _ensure_normal_user(db) -> None:
+    import bcrypt
+
+    from api.src.db.orm import User
+
+    user_email = os.environ.get("USER_EMAIL", "intern@cv5.nl")
+    user_password = os.environ.get("USER_PASSWORD")
+
+    if not user_password:
+        logger.warning(
+            "USER_PASSWORD not set — skipping user creation. " "Set USER_PASSWORD in your environment or .env file."
+        )
+        return
+
+    result = await db.execute(select(User).where(User.email == user_email))
+    if result.scalar_one_or_none() is not None:
+        logger.info("User %s already exists, skipping.", user_email)
+        return
+
+    hashed = bcrypt.hashpw(user_password.encode(), bcrypt.gensalt(rounds=12)).decode()
+    db.add(
+        User(
+            email=user_email,
+            password_hash=hashed,
+            role="admin",
+            is_active=True,
+        )
+    )
+    await db.commit()
+    logger.info("Created admin user: %s", user_email)
+
+
 async def _ensure_baseline_model(db) -> None:
     from api.src.db.orm import ModelVersion
 
@@ -93,7 +126,7 @@ async def _ensure_baseline_model(db) -> None:
             "Register a model manually via POST /models or place artifacts at that path.",
             artifact_uri,
         )
-        return False
+        # return False
 
     # Lineage: this model genuinely has no upstream training run. Mark
     # it as a baseline so traces report it honestly. See migration 0010

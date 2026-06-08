@@ -51,6 +51,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("train_root_detection")
     parser.add_argument("--data_dir", required=True, help="Mounted path to cv5_train")
     parser.add_argument("--val_dir", default=None, help="Mounted path to cv5_val (optional pre-split validation set)")
+    parser.add_argument(
+        "--corrections_dir",
+        default=None,
+        help="Mounted path to cv5_corrections (optional set of corrected annotations)",
+    )
     parser.add_argument("--output_dir", default="outputs", help="Directory to write the trained model")
     parser.add_argument("--patch_size", type=int, default=512)
     parser.add_argument("--epochs", type=int, default=30)
@@ -435,6 +440,13 @@ def main() -> None:
         tr_img, tr_msk, vl_img, vl_msk = patchify_and_split(
             args.data_dir, patch_dir, args.patch_size, max_images=args.max_images
         )
+
+    if args.corrections_dir and os.path.isdir(args.corrections_dir):
+        try:
+            added = patchify_dir(args.corrections_dir, tr_img, tr_msk, args.patch_size)
+            print(f"Merged {added} correction patch(es) into the training set.")
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"No corrections merged ({exc}).")  # empty/seed asset -> train on base only
 
     # 2. Data generators
     print("Creating data generators...")
