@@ -1109,7 +1109,14 @@ export default function Library() {
         .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
-  const { jobs, addJob, removeJob, isDatasetRunning } = useInferenceJobs();
+  const {
+    jobs,
+    addJob,
+    removeJob,
+    isDatasetRunning,
+    queueStatus,
+    refreshQueue,
+  } = useInferenceJobs();
 
   // ── State ──
   const [activeTab, setActiveTab] = useState<LibraryTab>(() => {
@@ -1156,7 +1163,6 @@ export default function Library() {
 
   const [inferenceRunning, setInferenceRunning] = useState(false);
   const [inferenceMessage, setInferenceMessage] = useState<string | null>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createData, setCreateData] = useState({
@@ -1257,7 +1263,7 @@ export default function Library() {
     fetchDatasets();
   }, [speciesFilter, growthStages]);
 
-  // Fetch unconfirmed count for badge with a periodic 5-second poll so it updates dynamically as inference jobs complete
+  // Fetch unconfirmed count for badge and update on queue status change events
   useEffect(() => {
     const fetchCount = () => {
       void getUnconfirmedPredictions(100)
@@ -1265,8 +1271,11 @@ export default function Library() {
         .catch(() => undefined);
     };
     fetchCount();
-    const interval = setInterval(fetchCount, 5000);
-    return () => clearInterval(interval);
+
+    window.addEventListener('inference_queue_updated', fetchCount);
+    return () => {
+      window.removeEventListener('inference_queue_updated', fetchCount);
+    };
   }, []);
 
   useEffect(() => {
@@ -1301,77 +1310,90 @@ export default function Library() {
   }, [selectedDatasetId]);
 
   useEffect(() => {
-    Promise.resolve().then(() => {
-      setScanPage(1);
-      setInferenceMessage(null);
-      setInferenceRunning(false);
+    if (!selectedDatasetId) {
+      setTimeout(() => {
+        setInferenceRunning(false);
+        setInferenceMessage(null);
+      }, 0);
+      return;
+    }
 
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+    const isRunning =
+      _inferenceRunningDatasets.has(selectedDatasetId) ||
+      jobs.some(
+        (j) => j.type === 'dataset' && j.datasetId === selectedDatasetId,
+      );
 
-      if (!selectedDatasetId) return;
-
-      const isRunning =
-        _inferenceRunningDatasets.has(selectedDatasetId) ||
-        isDatasetRunning(selectedDatasetId);
-
+    setTimeout(() => {
+      setInferenceRunning(isRunning);
       if (isRunning) {
-        setInferenceRunning(true);
         setInferenceMessage(
           'Processing images in the background. The grid will update automatically.',
         );
+      } else {
+        setInferenceMessage(null);
+      }
+    }, 0);
+  }, [selectedDatasetId, jobs]);
 
-        // Find the active jobId from the global context to allow removal when finished
-        const globalJob = jobs.find(
-          (j) => j.type === 'dataset' && j.datasetId === selectedDatasetId,
-        );
-        const jobId = globalJob?.id;
+  useEffect(() => {
+    if (!selectedDatasetId) return;
 
-        // Poll every 5s
-        const interval = setInterval(async () => {
-          try {
-            const scans = await getAnnotations({
-              dataset_id: selectedDatasetId,
-              page: 1, // check first page for pending scans
-              page_size: SCANS_PER_PAGE,
-            });
-            setDetailScans(scans);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-            const stillPending = scans.some((s) => s.status === 'pending');
-            if (!stillPending) {
-              clearInterval(interval);
-              pollingRef.current = null;
-              _inferenceRunningDatasets.delete(selectedDatasetId);
-              setInferenceRunning(false);
-              setInferenceMessage('All images processed successfully.');
-              if (jobId) removeJob(jobId);
-              // Refresh dataset details to update overall stats
-              const detail = await getDatasetDetail(selectedDatasetId);
-              setDatasetDetail(detail);
-            }
-          } catch {
-            clearInterval(interval);
-            pollingRef.current = null;
+    const handleQueueUpdate = () => {
+      if (timeoutId) return;
+
+      timeoutId = setTimeout(async () => {
+        timeoutId = null;
+        try {
+          const scans = await getAnnotations({
+            dataset_id: selectedDatasetId,
+            page: scanPage,
+            page_size: SCANS_PER_PAGE,
+          });
+          setDetailScans(scans);
+
+          // Check if there are any pending scans on the first page to confirm batch completion
+          const firstPageScans =
+            scanPage === 1
+              ? scans
+              : await getAnnotations({
+                  dataset_id: selectedDatasetId,
+                  page: 1,
+                  page_size: SCANS_PER_PAGE,
+                });
+
+          const stillPending = firstPageScans.some(
+            (s) => s.status === 'pending',
+          );
+          if (!stillPending) {
             _inferenceRunningDatasets.delete(selectedDatasetId);
             setInferenceRunning(false);
-            if (jobId) removeJob(jobId);
+            setInferenceMessage('All images processed successfully.');
+
+            // Remove the job from the global list
+            const globalJob = jobs.find(
+              (j) => j.type === 'dataset' && j.datasetId === selectedDatasetId,
+            );
+            if (globalJob) removeJob(globalJob.id);
+
+            // Refresh dataset details to update stats
+            const detail = await getDatasetDetail(selectedDatasetId);
+            setDatasetDetail(detail);
           }
-        }, 5000);
-
-        pollingRef.current = interval;
-      }
-    });
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+        } catch (err) {
+          console.warn('Failed to update scans on queue event:', err);
+        }
+      }, 1500); // 1.5s throttle window
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDatasetId, isDatasetRunning]);
+
+    window.addEventListener('inference_queue_updated', handleQueueUpdate);
+    return () => {
+      window.removeEventListener('inference_queue_updated', handleQueueUpdate);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [selectedDatasetId, scanPage, jobs, removeJob]);
 
   useEffect(() => {
     Promise.resolve().then(() => {
@@ -1437,12 +1459,6 @@ export default function Library() {
     };
     void fetchScans();
   }, [scanPage, selectedDatasetId]);
-
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, []);
 
   function switchTab(tab: LibraryTab) {
     setActiveTab(tab);
@@ -1591,6 +1607,7 @@ export default function Library() {
 
     try {
       const res = await runAnnotationInference(annotationId);
+      void refreshQueue();
 
       if (res.message.toLowerCase().includes('already running')) {
         removeRunningAnnotation(annotationId);
@@ -2596,7 +2613,10 @@ export default function Library() {
                                   className="spinner"
                                   style={{ width: '12px', height: '12px' }}
                                 />
-                                Running...
+                                {queueStatus.running > 0 ||
+                                queueStatus.queued > 0
+                                  ? `${queueStatus.running} running, ${queueStatus.queued} queued`
+                                  : 'Running...'}
                               </>
                             ) : (
                               <>

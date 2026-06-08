@@ -1,9 +1,8 @@
-"""Shared pytest fixtures.
+import asyncio
+import sys
 
-Provides a TestClient with dependency overrides so tests are fully
-isolated from any real storage or inference backend. Each test gets
-a fresh in-memory repository, preventing state leakage.
-"""
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import io
 from unittest.mock import AsyncMock, MagicMock

@@ -31,15 +31,14 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.core.security import get_current_user, require_admin
 from api.src.db.orm import Annotation
 from api.src.db.session import get_session
-from api.src.dependencies import get_deployment_service, get_inference_service, get_storage
+from api.src.dependencies import get_deployment_service, get_storage
 from api.src.repositories.annotations import AnnotationRepository
-from api.src.repositories.database import DatabasePredictionRepository
 from api.src.repositories.datasets import DatasetRepository
 from api.src.repositories.models import ModelRepository
 from api.src.schemas.auth import TokenData, UserRole
@@ -57,23 +56,14 @@ from api.src.schemas.library import (
     ModelDetail,
     ModelSummary,
 )
-from api.src.services.artifact_storage import (
-    save_segmentation_mask,
-    save_tip_photo,
-)
-from api.src.services.base import AbstractInferenceService
 from api.src.services.deployment import AbstractDeploymentService
 from api.src.services.image_validation import validate_image
 from api.src.services.mask_storage import save_annotation_mask, validate_mask
-from api.src.services.monitoring import MonitoringService
 from api.src.services.storage import AbstractStorageBackend
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Library"])
-
-# In-memory set to track datasets currently being processed
-_inference_running: set[str] = set()
 
 # Helpers
 
@@ -94,150 +84,6 @@ def _ext(filename: str) -> str:
     import os
 
     return os.path.splitext(filename)[1].lower()
-
-
-async def _run_inference_background(
-    dataset_id: uuid.UUID,
-    annotations: list[dict],
-    inference_service: AbstractInferenceService,
-    storage: AbstractStorageBackend,
-    db_session_factory: async_sessionmaker[AsyncSession],
-    user_id: uuid.UUID,
-    running_set: set[str],
-) -> None:
-    """Background task: run inference on all pending annotations in a dataset.
-
-    Iterates over pending annotations, fetches each image from storage, runs
-    inference, saves the mask, records the prediction in the DB so it shows in history,
-    and updates the annotation row.
-
-    Partial failures are isolated - a single bad image sets that annotation
-    to 'review_required' and logs the error, then processing continues with
-    the remaining images.
-
-    Args:
-        dataset_id: UUID of the dataset being processed (for logging).
-        annotations: List of pending Annotation rows to process as a dictionary.
-        inference_service: The active inference service singleton.
-        storage: The active storage backend.
-        db_session_factory: Callable that returns a new AsyncSession.
-        user_id: UUID of the user triggering the batch inference.
-        running_set: Set of all the currently running tasks.
-    """
-    succeeded = 0
-    failed = 0
-
-    logger.info(
-        "run-inference background task started for dataset %s - %d image(s)",
-        dataset_id,
-        len(annotations),
-    )
-
-    dataset_key = str(dataset_id)
-    for annotation in annotations:
-        async with db_session_factory() as db:
-            try:
-                # Fetch image bytes from storage
-                image_bytes = await asyncio.to_thread(storage.download, annotation["image_uri"])
-                filename = annotation["image_uri"].split("/")[-1]
-
-                # Run inference
-                prediction_response, image_result = await inference_service.run(
-                    image_bytes=image_bytes,
-                    filename=filename,
-                    db=db,
-                )
-
-                prediction_id = prediction_response.prediction_id
-
-                # Save mask and tip photo
-                mask_uri: str | None = None
-                tip_photo_uri: str | None = None
-
-                if image_result is not None:
-                    mask_uri = save_segmentation_mask(
-                        prediction_id=prediction_id,
-                        image_result=image_result,
-                        backend=storage,
-                    )
-                    tip_photo_uri = save_tip_photo(
-                        prediction_id=prediction_id,
-                        image_result=image_result,
-                        original_image_bytes=image_bytes,
-                        backend=storage,
-                    )
-
-                # Patch prediction with mask URI
-                prediction_response = prediction_response.model_copy(update={"segmentation_mask_url": mask_uri})
-
-                # Persist to repository so it appears in history!
-                repo = DatabasePredictionRepository(db=db, user_id=user_id, storage=storage)
-                await repo.save(
-                    prediction_response,
-                    filename=filename,
-                    input_uri=annotation["image_uri"],
-                    tip_photo_uri=tip_photo_uri,
-                )
-
-                # Record monitoring metrics
-                try:
-                    monitoring = MonitoringService(db)
-                    await monitoring.record_prediction_metrics(
-                        prediction_id=prediction_id,
-                        processing_time_ms=prediction_response.metadata.processing_time_ms,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to record monitoring metrics for prediction %s: %s",
-                        prediction_id,
-                        exc,
-                    )
-
-                # Update annotation in DB - link to prediction and set status
-                row = await db.get(Annotation, annotation["id"])
-                if row is not None:
-                    row.prediction_id = prediction_id
-                    row.mask_uri = mask_uri
-                    row.tip_photo_uri = tip_photo_uri
-                    row.status = AnnotationStatus.ANNOTATED
-                    row.updated_at = datetime.now(timezone.utc)
-                    await db.commit()
-
-                succeeded += 1
-                logger.info(
-                    "run-inference: processed annotation %s successfully",
-                    annotation["id"],
-                )
-            except Exception as exc:
-                failed += 1
-                logger.error(
-                    "run-inference: failed for annotation %s - %s: %s",
-                    annotation["id"],
-                    type(exc).__name__,
-                    exc,
-                )
-                # Mark as review_required so it's visible in the UI
-                try:
-                    async with db_session_factory() as err_db:
-                        row = await err_db.get(Annotation, annotation["id"])
-                        if row is not None:
-                            row.status = AnnotationStatus.REVIEW_REQUIRED
-                            row.updated_at = datetime.now(timezone.utc)
-                            await err_db.commit()
-                except Exception as db_exc:
-                    logger.error(
-                        "run-inference: could not mark annotation %s as review_required - %s",
-                        annotation["id"],
-                        db_exc,
-                    )
-
-    running_set.discard(dataset_key)
-    logger.info(
-        "run-inference background task completed for dataset %s - %d succeeded, %d failed",
-        dataset_id,
-        succeeded,
-        failed,
-    )
 
 
 # Datasets
@@ -438,7 +284,7 @@ async def import_dataset(
         HTTPException: 415 if the file is not a ZIP file.
     """
     import hashlib
-    import io
+    import tempfile
     import zipfile
 
     from sqlalchemy import select
@@ -446,6 +292,7 @@ async def import_dataset(
     from api.src.services.image_validation import validate_file_size
 
     _IMAGE_EXT = {".png", ".tif", ".tiff", ".jpg", ".jpeg"}
+    _CHUNK_SIZE = 1024 * 1024  # 1 MB streaming chunks
 
     dataset_repo = DatasetRepository(db)
     annotation_repo = AnnotationRepository(db, storage)
@@ -474,59 +321,87 @@ async def import_dataset(
         await db.commit()
         dataset_id = dataset.dataset_id
 
-    # 2. Read the ZIP
-    raw = await file.read()
+    # 2. Stream the ZIP to a temporary file instead of loading it all into RAM.
+    #    This keeps memory usage constant regardless of archive size.
     try:
-        archive = zipfile.ZipFile(io.BytesIO(raw))
-    except zipfile.BadZipFile:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=ErrorResponse(
-                error_code=ErrorCode.NOT_FOUND,
-                message="Uploaded file is not a valid ZIP.",
-            ).model_dump(),
-        )
+        tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        tmp_path = tmp.name
+        while True:
+            chunk = await file.read(_CHUNK_SIZE)
+            if not chunk:
+                break
+            tmp.write(chunk)
+        tmp.close()
+
+        try:
+            archive = zipfile.ZipFile(tmp_path)
+        except zipfile.BadZipFile:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=ErrorResponse(
+                    error_code=ErrorCode.NOT_FOUND,
+                    message="Uploaded file is not a valid ZIP.",
+                ).model_dump(),
+            )
+    except HTTPException:
+        # Re-raise HTTP exceptions (like BadZipFile above)
+        import os
+
+        os.unlink(tmp_path)
+        raise
+    except Exception:
+        import os
+
+        os.unlink(tmp_path)
+        raise
 
     imported = 0
     warnings: list[str] = []
     errors: list[str] = []
 
     # 3. One pending annotation per image, deduped within the dataset
-    for entry in archive.infolist():
-        if entry.is_dir():
-            continue
-        ext = ("." + entry.filename.rsplit(".", 1)[-1].lower()) if "." in entry.filename else ""
-        if ext not in _IMAGE_EXT:
-            warnings.append(f"Skipped non-image entry: {entry.filename}")
-            continue
-        try:
-            data = archive.read(entry)
-            validate_file_size(data)
-            validate_image(data, entry.filename)
-
-            image_hash = hashlib.sha256(data).hexdigest()
-            existing = await db.execute(
-                select(Annotation).where(
-                    Annotation.dataset_id == dataset_id,
-                    Annotation.image_hash == image_hash,
-                )
-            )
-            if existing.scalar_one_or_none() is not None:
-                warnings.append(f"Duplicate skipped: {entry.filename}")
+    try:
+        for entry in archive.infolist():
+            if entry.is_dir():
                 continue
+            ext = ("." + entry.filename.rsplit(".", 1)[-1].lower()) if "." in entry.filename else ""
+            if ext not in _IMAGE_EXT:
+                warnings.append(f"Skipped non-image entry: {entry.filename}")
+                continue
+            try:
+                data = archive.read(entry)
+                validate_file_size(data)
+                validate_image(data, entry.filename)
 
-            key = f"datasets/{dataset_id}/{uuid.uuid4()}/{ext}"
-            image_uri = await asyncio.to_thread(storage.upload, key, data)
-            await annotation_repo.create_pending(
-                dataset_id=dataset_id,
-                image_uri=image_uri,
-                image_hash=image_hash,
-                created_by=UUID(user.sub),
-            )
-            await dataset_repo.increment_count(dataset_id)
-            imported += 1
-        except Exception as exc:
-            errors.append(f"{entry.filename}: {type(exc).__name__}: {exc}")
+                image_hash = hashlib.sha256(data).hexdigest()
+                existing = await db.execute(
+                    select(Annotation).where(
+                        Annotation.dataset_id == dataset_id,
+                        Annotation.image_hash == image_hash,
+                    )
+                )
+                if existing.scalar_one_or_none() is not None:
+                    warnings.append(f"Duplicate skipped: {entry.filename}")
+                    continue
+
+                key = f"datasets/{dataset_id}/{uuid.uuid4()}/{ext}"
+                image_uri = await asyncio.to_thread(storage.upload, key, data)
+                await annotation_repo.create_pending(
+                    dataset_id=dataset_id,
+                    image_uri=image_uri,
+                    image_hash=image_hash,
+                    created_by=UUID(user.sub),
+                )
+                await dataset_repo.increment_count(dataset_id)
+                imported += 1
+            except Exception as exc:
+                errors.append(f"{entry.filename}: {type(exc).__name__}: {exc}")
+    finally:
+        # Always clean up the temporary ZIP file
+        archive.close()
+        import os
+
+        os.unlink(tmp_path)
 
     await db.commit()
     logger.info("User %s import %d image(s) into dataset %s", user.sub, imported, dataset_id)
@@ -730,26 +605,20 @@ async def add_annotation_to_dataset(
 @router.post(
     "/datasets/{dataset_id}/run-inference",
     response_model=MessageResponse,
-    summary="Run inference on all pending images in a dataset",
-    responses={
-        401: {"model": ErrorResponse},
-        404: {"model": ErrorResponse},
-    },
+    summary="Queue inference for all pending images in a dataset",
+    responses={401: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
 )
 async def run_dataset_inference(
     dataset_id: UUID,
-    background_tasks: BackgroundTasks,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
-    inference_service: AbstractInferenceService = Depends(get_inference_service),
     storage: AbstractStorageBackend = Depends(get_storage),
     db: AsyncSession = Depends(get_session),
 ) -> MessageResponse:
-    """Trigger background inference on all pending annotations in a dataset.
+    """Durably queue inference for every pending annotation in a dataset.
 
-    Returns immediately with a count of queued images. Inference runs in
-    the background - poll GET /annotations?dataset_id={id} to watch
-    individual annotations flip from 'pending' to 'annotated' or
-    'review_required'.
+    Cross-worker safe: a transaction-scoped advisory lock guards the
+    check-then-enqueue, so two concurrent requests (or two replicas) cannot
+    double-queue the same dataset. The consumer loop processes the queue.
 
     A single image failure never aborts the batch - failed annotations are
     marked 'review_required' and the rest continue processing.
@@ -768,47 +637,20 @@ async def run_dataset_inference(
     Raises:
         HTTPException: 404 if the dataset does not exist.
     """
-    from api.src.db.session import get_sessionmaker
+    from api.src.services.inference_queue import enqueue_batch
+    from api.src.services.locks import advisory_xact_lock, dataset_lock_key
 
-    dataset = await DatasetRepository(db).get(dataset_id)
-    if dataset is None:
+    if await DatasetRepository(db).get(dataset_id) is None:
         raise _404("Dataset not found.")
 
-    pending = await AnnotationRepository(db, storage).list_pending_for_dataset(dataset_id)
+    async with advisory_xact_lock(db, dataset_lock_key(dataset_id)) as got_lock:
+        if not got_lock:
+            return MessageResponse(message="Inference is already being queued for this dataset.")
+        queued = await enqueue_batch(db, dataset_id=dataset_id, requested_by=UUID(user.sub))
 
-    if not pending:
-        return MessageResponse(message="No pending annotations found for this dataset.")
-
-    pending_data = [{"id": ann.id, "image_uri": ann.image_uri} for ann in pending]
-
-    dataset_key = str(dataset_id)
-    if dataset_key in _inference_running:
-        return MessageResponse(message="Inference is already running for this dataset.")
-
-    _inference_running.add(dataset_key)
-
-    background_tasks.add_task(
-        _run_inference_background,
-        dataset_id=dataset_id,
-        annotations=pending_data,
-        inference_service=inference_service,
-        storage=storage,
-        db_session_factory=get_sessionmaker(),
-        user_id=UUID(user.sub),
-        running_set=_inference_running,
-    )
-
-    logger.info(
-        "User %s queued inference for %d image(s) in dataset %s",
-        user.sub,
-        len(pending),
-        dataset_id,
-    )
-
-    return MessageResponse(
-        message=f"Inference started for {len(pending)} image(s). "
-        f"Poll GET /annotations?dataset_id={dataset_id} for progress."
-    )
+    if queued == 0:
+        return MessageResponse(message="No pending annotations to queue.")
+    return MessageResponse(message=f"Queued {queued} image(s). Poll GET /inference/queue for progress.")
 
 
 # Annotations
@@ -961,33 +803,15 @@ async def update_annotation(
 )
 async def run_annotation_inference(
     annotation_id: UUID,
-    background_tasks: BackgroundTasks,
     user: Annotated[TokenData, Depends(get_current_user)] = None,
-    inference_service: AbstractInferenceService = Depends(get_inference_service),
-    storage: AbstractStorageBackend = Depends(get_storage),
     db: AsyncSession = Depends(get_session),
 ) -> MessageResponse:
-    """Run inference on a single annotation.
+    """Run inference on a single annotation durably via the DB queue.
 
-    Queues a background task for an annotation. Poll
-    GET /annotations/{annotation_id} to watch the status transition
-    from 'pending' to 'annotated' (or 'review_required' on failure).
-
-    Args:
-        annotation_id: UUID of the annotation to process.
-        background_tasks: FastAPI background task manager.
-        user: Authenticated user from Bearer token.
-        inference_service: Injected inference service singleton.
-        storage: Injected storage backend.
-        db: Injected database session.
-
-    Returns:
-        MessageResponse confirming the task was queued.
-
-    Raises:
-        HTTPException: 404 if the annotation does not exist or has no image.
+    Queues an inference job. Poll GET /annotations/{annotation_id} to watch the
+    status transition from 'pending' to 'annotated'.
     """
-    from api.src.db.session import get_sessionmaker
+    from api.src.db.orm import InferenceJob
 
     row = await db.get(Annotation, annotation_id)
     if row is None:
@@ -996,18 +820,35 @@ async def run_annotation_inference(
     if row.image_uri is None:
         raise _404("Annotation has no source image.")
 
-    annotation_data = [{"id": annotation_id, "image_uri": row.image_uri}]
+    # Idempotence check: is there already an active job for this annotation?
+    from sqlalchemy import select
 
-    background_tasks.add_task(
-        _run_inference_background,
-        dataset_id=annotation_id,  # used for logging only
-        annotations=annotation_data,
-        inference_service=inference_service,
-        storage=storage,
-        db_session_factory=get_sessionmaker(),
-        user_id=UUID(user.sub),
-        running_set=set(),  # single annotation
+    existing = (
+        await db.execute(
+            select(InferenceJob).where(
+                InferenceJob.annotation_id == annotation_id,
+                InferenceJob.status.in_(["queued", "running"]),
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        return MessageResponse(message="Inference is already queued or running for this annotation.")
+
+    db.add(
+        InferenceJob(
+            kind="single",
+            annotation_id=annotation_id,
+            image_uri=row.image_uri,
+            status="queued",
+            requested_by=UUID(user.sub),
+        )
     )
+    await db.commit()
+
+    from api.src.services.broadcaster import inference_broadcaster
+
+    await inference_broadcaster.broadcast("queue_updated")
 
     logger.info(
         "User %s queued inference for annotation %s",
@@ -1015,7 +856,9 @@ async def run_annotation_inference(
         annotation_id,
     )
 
-    return MessageResponse(message=f"Inference queued for annotation {annotation_id}.")
+    return MessageResponse(
+        message=f"Inference queued for annotation {annotation_id}. Poll GET /inference/queue for progress."
+    )
 
 
 @router.delete(

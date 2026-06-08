@@ -25,6 +25,8 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import StreamingResponse
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.src.core.security import get_current_user
@@ -116,6 +118,8 @@ async def predict(
     """
     import hashlib
 
+    from api.src.services.inference_gate import get_inference_gate
+
     repo = DatabasePredictionRepository(db=db, user_id=UUID(user.sub), storage=storage)
 
     image_bytes = await file.read()
@@ -134,11 +138,12 @@ async def predict(
     )
 
     try:
-        prediction, image_result = await inference_service.run(
-            image_bytes=image_bytes,
-            filename=original_filename,
-            db=db,
-        )
+        async with get_inference_gate().slot():
+            prediction, image_result = await inference_service.run(
+                image_bytes=image_bytes,
+                filename=original_filename,
+                db=db,
+            )
 
         prediction_id = prediction.prediction_id
         logger.info(
@@ -424,6 +429,69 @@ async def confirm_prediction(
         prediction_id=prediction_id,
         annotation_id=annotation_id,
     )
+
+
+@router.get(
+    "/inference/queue",
+    summary="Inference queue snapshot (running / queued / done / failed)",
+    responses={401: {"model": ErrorResponse}},
+)
+async def inference_queue(
+    user: Annotated[TokenData, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Return current queue counts so the UI can show progress."""
+    from api.src.services.inference_queue import queue_counts
+
+    return await queue_counts(db)
+
+
+_oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
+
+
+async def get_user_from_sse(
+    token_query: Annotated[str | None, Query(alias="token")] = None,
+    token_header: Annotated[str | None, Depends(_oauth2_scheme_optional)] = None,
+    db: AsyncSession = Depends(get_session),
+) -> TokenData:
+    """Retrieve the current user from query params or header for SSE connections."""
+    token = token_header or token_query
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ErrorResponse(
+                error_code=ErrorCode.UNAUTHORIZED,
+                message="Could not validate credentials.",
+            ).model_dump(),
+        )
+    return await get_current_user(token=token, db=db)
+
+
+@router.get(
+    "/inference/events",
+    summary="Stream real-time updates for inference jobs and queue changes",
+    responses={401: {"model": ErrorResponse}},
+)
+async def stream_inference_events(
+    user: Annotated[TokenData, Depends(get_user_from_sse)],
+) -> StreamingResponse:
+    """Stream real-time updates for inference jobs and queue changes using SSE."""
+    from api.src.services.broadcaster import inference_broadcaster
+
+    async def event_generator():
+        q = inference_broadcaster.subscribe()
+        try:
+            yield 'data: {"type": "connected"}\n\n'
+            while True:
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=30.0)
+                    yield f'data: {{"type": "{event}"}}\n\n'
+                except asyncio.TimeoutError:
+                    yield 'data: {"type": "ping"}\n\n'
+        finally:
+            inference_broadcaster.unsubscribe(q)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 async def _trigger_retraining_check() -> None:

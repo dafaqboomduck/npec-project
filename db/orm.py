@@ -267,6 +267,49 @@ class Prediction(Base):
 
 
 # ---------------------------------------------------------------------------
+# Inference Jobs
+# ---------------------------------------------------------------------------
+
+
+class InferenceJob(Base):
+    """One queued/running/finished inference unit.
+
+    Durable replacement for the in-process _inference_running set
+    and BackgroundTasks state.
+    """
+
+    __tablename__ = "inference_jobs"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # 'single' | 'batch'
+    dataset_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=True
+    )
+    annotation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("annotations.id", ondelete="CASCADE"), nullable=True
+    )
+    image_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="queued")
+    worker_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    requested_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('queued','running','done','failed')", name="ck_inference_jobs_status_valid"),
+        CheckConstraint("kind IN ('single','batch')", name="ck_inference_jobs_kind_valid"),
+        Index("ix_inference_jobs_status", "status"),
+        Index("ix_inference_jobs_dataset_id", "dataset_id"),
+        Index("ix_inference_jobs_queued_at", "queued_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Feedback
 # ---------------------------------------------------------------------------
 
@@ -598,6 +641,7 @@ __all__ = [
     "RefreshToken",
     "ModelVersion",
     "Prediction",
+    "InferenceJob",
     "Feedback",
     "MonitoringMetric",
     "Dataset",

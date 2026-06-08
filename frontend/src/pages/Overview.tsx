@@ -140,7 +140,7 @@ export default function Overview() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void Promise.allSettled([
+    const fetches: Promise<unknown>[] = [
       getOverviewStatus()
         .then(setStatus)
         .catch(() => undefined),
@@ -150,13 +150,21 @@ export default function Overview() {
       getModelHealth()
         .then(setHealth)
         .catch(() => undefined),
-      getEnvironment()
-        .then(setEnv)
-        .catch(() => undefined),
       getModels()
         .then(setModels)
         .catch(() => undefined),
-    ]).finally(() => setLoading(false));
+    ];
+    // Only admins can access the environment endpoint — skip for other roles
+    // to avoid a wasted 403 request.
+    if (role === 'admin') {
+      fetches.push(
+        getEnvironment()
+          .then(setEnv)
+          .catch(() => undefined),
+      );
+    }
+    void Promise.allSettled(fetches).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const deployedModels = models.filter(

@@ -9,7 +9,14 @@
  * Route: /inference (protected)
  */
 
-import { ChangeEvent, DragEvent, useEffect, useRef, useState } from 'react';
+import {
+  ChangeEvent,
+  DragEvent,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import {
@@ -52,7 +59,7 @@ export default function Inference() {
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { jobs, addJob, removeJob, cancelJob, isDatasetRunning } =
+  const { jobs, addJob, removeJob, cancelJob, isDatasetRunning, queueStatus } =
     useInferenceJobs();
 
   // ── Modals ──
@@ -107,85 +114,101 @@ export default function Inference() {
         .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
-  async function runBatchInference(
-    dsId: string,
-    dsName: string,
-    count: number,
-    jobIdToUse?: string,
-  ) {
-    const isResume = !!jobIdToUse;
-    // Guard: prevent duplicate runs on the same dataset unless resuming
-    if (!isResume && isDatasetRunning(dsId)) return;
+  const runBatchInference = useCallback(
+    async (
+      dsId: string,
+      dsName: string,
+      count: number,
+      jobIdToUse?: string,
+    ) => {
+      const isResume = !!jobIdToUse;
+      // Guard: prevent duplicate runs on the same dataset unless resuming
+      if (!isResume && isDatasetRunning(dsId)) return;
 
-    const jobId = jobIdToUse || `ds-${dsId}-${Date.now()}`;
-    if (!isResume) {
-      addJob({
-        id: jobId,
-        filename: dsName,
-        startedAt: Date.now(),
-        controller: new AbortController(), // not used for cancellation yet
-        type: 'dataset',
-        datasetId: dsId,
-        datasetName: dsName,
-      });
-    }
+      const jobId = jobIdToUse || `ds-${dsId}-${Date.now()}`;
 
-    setShowSelectDatasetModal(false);
-    setShowBatchProgress(true);
-    setBatchDatasetName(dsName);
-    setBatchTotalCount(count);
-    setBatchCurrentIndex(0);
-    setBatchPercent(0);
-    setBatchCompleted(false);
+      setShowSelectDatasetModal(false);
+      setShowBatchProgress(true);
+      setBatchDatasetName(dsName);
+      setBatchTotalCount(count);
+      setBatchCurrentIndex(0);
+      setBatchPercent(0);
+      setBatchCompleted(false);
 
-    let interval: ReturnType<typeof setInterval> | undefined;
-
-    try {
       if (!isResume) {
-        // Trigger background inference
-        const res = await runDatasetInference(dsId);
+        addJob({
+          id: jobId,
+          filename: dsName,
+          startedAt: Date.now(),
+          controller: new AbortController(), // not used for cancellation yet
+          type: 'dataset',
+          datasetId: dsId,
+          datasetName: dsName,
+        });
 
-        // If no pending images
-        if (res.message.toLowerCase().includes('no pending')) {
-          setBatchCompleted(true);
-          setBatchPercent(100);
-          setBatchCurrentIndex(count);
+        try {
+          // Trigger background inference
+          const res = await runDatasetInference(dsId);
+
+          // If no pending images
+          if (res.message.toLowerCase().includes('no pending')) {
+            setBatchCompleted(true);
+            setBatchPercent(100);
+            setBatchCurrentIndex(count);
+            removeJob(jobId);
+          }
+        } catch (err) {
+          setBatchDatasetName(`Error: ${(err as Error).message}`);
           removeJob(jobId);
-          return;
         }
       }
+    },
+    [isDatasetRunning, addJob, removeJob],
+  );
 
-      const initialAnnotations = await getAnnotations({
-        dataset_id: dsId,
-        page_size: 100,
-      });
-      const realTotal = initialAnnotations.length;
-      setBatchTotalCount(realTotal);
+  // Monitor models and recent runs on page mount
+  useEffect(() => {
+    void getModelsForInference()
+      .then((ms) => setModels(ms))
+      .catch(() => undefined);
+    refreshRecentRuns();
 
-      const initialPending = initialAnnotations.filter(
-        (a) => a.status === 'pending',
-      ).length;
-      const initialDone = realTotal - initialPending;
-      setBatchCurrentIndex(initialDone);
-      setBatchPercent(
-        realTotal > 0 ? Math.round((initialDone / realTotal) * 100) : 0,
-      );
+    // Refresh recent runs on queue status updates
+    window.addEventListener('inference_queue_updated', refreshRecentRuns);
 
-      // If already done before resume polled
-      if (initialPending === 0) {
-        setBatchCompleted(true);
-        setBatchPercent(100);
-        setBatchCurrentIndex(realTotal);
-        removeJob(jobId);
-        return;
-      }
+    return () => {
+      window.removeEventListener('inference_queue_updated', refreshRecentRuns);
+    };
+  }, []);
 
-      // Poll annotations until none are pending
-      const MAX_POLLS = 120; // 10 minutes at 5s intervals
-      let polls = 0;
+  // Event-driven progress bar and auto-resume handler for active dataset jobs
+  useEffect(() => {
+    const activeDatasetJob = jobs.find((j) => j.type === 'dataset');
+    if (!activeDatasetJob || !activeDatasetJob.datasetId) {
+      if (batchCompleted) return;
+      setTimeout(() => {
+        setShowBatchProgress(false);
+      }, 0);
+      return;
+    }
 
-      interval = setInterval(async () => {
-        polls++;
+    const dsId = activeDatasetJob.datasetId;
+    const dsName =
+      activeDatasetJob.datasetName || activeDatasetJob.filename || '';
+    const jobId = activeDatasetJob.id;
+
+    setTimeout(() => {
+      setBatchDatasetName(dsName);
+      setShowBatchProgress(true);
+    }, 0);
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const updateProgress = () => {
+      if (timeoutId) return;
+
+      timeoutId = setTimeout(async () => {
+        timeoutId = null;
         try {
           const annotations = await getAnnotations({
             dataset_id: dsId,
@@ -200,58 +223,51 @@ export default function Inference() {
 
           setBatchTotalCount(total);
           setBatchCurrentIndex(done);
-          setBatchPercent(Math.round((done / total) * 100));
+          setBatchPercent(total > 0 ? Math.round((done / total) * 100) : 0);
 
-          if (pending === 0 || polls >= MAX_POLLS) {
-            clearInterval(interval);
-            setBatchCurrentIndex(total);
-            setBatchPercent(100);
+          if (pending === 0) {
             setBatchCompleted(true);
+            setBatchPercent(100);
             removeJob(jobId);
           }
-        } catch {
-          clearInterval(interval);
+        } catch (err) {
+          console.error('Failed to update batch progress on event:', err);
+        }
+      }, 1500); // 1.5s throttle window
+    };
+
+    const fetchInitial = async () => {
+      try {
+        const annotations = await getAnnotations({
+          dataset_id: dsId,
+          page_size: 100,
+        });
+        const total = annotations.length;
+        const pending = annotations.filter(
+          (a) => a.status === 'pending',
+        ).length;
+        const done = total - pending;
+        setBatchTotalCount(total);
+        setBatchCurrentIndex(done);
+        setBatchPercent(total > 0 ? Math.round((done / total) * 100) : 0);
+        if (pending === 0) {
           setBatchCompleted(true);
+          setBatchPercent(100);
           removeJob(jobId);
         }
-      }, 5000);
-    } catch (err) {
-      setBatchCompleted(true);
-      if (interval) clearInterval(interval);
-      setBatchDatasetName(`Error: ${(err as Error).message}`);
-      removeJob(jobId);
-    }
-  }
+      } catch (err) {
+        console.error('Failed to load initial batch progress:', err);
+      }
+    };
 
-  useEffect(() => {
-    void getModelsForInference()
-      .then((ms) => setModels(ms))
-      .catch(() => undefined);
-    refreshRecentRuns();
+    void fetchInitial();
 
-    // Periodically poll recent runs every 5 seconds so they update dynamically on this page
-    const interval = setInterval(refreshRecentRuns, 5000);
-
-    // Auto-resume active dataset batch jobs from persistent state
-    const activeDatasetJob = jobs.find((j) => j.type === 'dataset');
-    if (activeDatasetJob && activeDatasetJob.datasetId) {
-      const dId = activeDatasetJob.datasetId;
-      const dName =
-        activeDatasetJob.datasetName || activeDatasetJob.filename || '';
-      const jobId = activeDatasetJob.id;
-      Promise.resolve().then(() => {
-        void runBatchInference(
-          dId,
-          dName,
-          0, // count will be fetched via initialAnnotations
-          jobId,
-        );
-      });
-    }
-
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    window.addEventListener('inference_queue_updated', updateProgress);
+    return () => {
+      window.removeEventListener('inference_queue_updated', updateProgress);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [jobs, removeJob, batchCompleted]);
 
   // Monitor recentRuns to automatically clean up active single-image jobs when they complete
   useEffect(() => {
@@ -278,7 +294,15 @@ export default function Inference() {
   const deployedModel = models.find((m) => m.status === 'deployed') ?? null;
 
   // ── File handling ──
+  const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB — must match backend validate_file_size
+
   function acceptFile(f: File) {
+    if (f.size > MAX_FILE_SIZE_BYTES) {
+      setError(
+        `File "${f.name}" is ${(f.size / 1024 / 1024).toFixed(1)} MB — exceeds the 50 MB limit.`,
+      );
+      return;
+    }
     setFile(f);
     setResult(null);
     setError(null);
@@ -984,7 +1008,9 @@ export default function Inference() {
                             />
                           )}
                           {isRunning
-                            ? 'Inference running…'
+                            ? queueStatus.running > 0 || queueStatus.queued > 0
+                              ? `Inference running (${queueStatus.running} active, ${queueStatus.queued} queued)…`
+                              : 'Inference running…'
                             : (ds.species ?? `Owner: ${ds.owner_email}`)}
                         </div>
                       </div>

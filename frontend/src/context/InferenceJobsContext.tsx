@@ -4,9 +4,14 @@
  *
  * Global context for tracking active inference jobs.
  * Lives at the app root so jobs persist across page navigation.
+ * Also polls GET /inference/queue for real-time queue status.
  */
 
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { getInferenceQueue } from '../api/inferenceApi';
+import { isAuthenticated } from '../api/auth';
+import { BASE_URL } from '../api/client';
+import type { InferenceQueueStatus } from '../types/api';
 
 export type RunningJob = {
   id: string;
@@ -27,6 +32,8 @@ type InferenceJobsContextType = {
   cancelJob: (id: string) => void;
   /** Returns true if a batch dataset job is currently active for the given dataset ID */
   isDatasetRunning: (datasetId: string) => boolean;
+  queueStatus: InferenceQueueStatus;
+  refreshQueue: () => Promise<void>;
 };
 
 const InferenceJobsContext = createContext<InferenceJobsContextType | null>(
@@ -54,6 +61,13 @@ export function InferenceJobsProvider({
     return [];
   });
 
+  const [queueStatus, setQueueStatus] = useState<InferenceQueueStatus>({
+    queued: 0,
+    running: 0,
+    done: 0,
+    failed: 0,
+  });
+
   const setJobsAndStore = (
     newJobs: RunningJob[] | ((prev: RunningJob[]) => RunningJob[]),
   ) => {
@@ -75,6 +89,7 @@ export function InferenceJobsProvider({
 
   function addJob(job: RunningJob) {
     setJobsAndStore((prev) => [...prev, job]);
+    void refreshQueue();
   }
 
   function removeJob(id: string) {
@@ -93,9 +108,89 @@ export function InferenceJobsProvider({
     return jobs.some((j) => j.type === 'dataset' && j.datasetId === datasetId);
   }
 
+  // Synchronise token state with localStorage to allow SSE reconnection on login/logout
+  const [token, setToken] = useState<string | null>(() =>
+    localStorage.getItem('access_token'),
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentToken = localStorage.getItem('access_token');
+      if (currentToken !== token) {
+        setToken(currentToken);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  async function fetchQueue() {
+    if (!isAuthenticated()) {
+      setQueueStatus({ queued: 0, running: 0, done: 0, failed: 0 });
+      return;
+    }
+    try {
+      const status = await getInferenceQueue();
+      setQueueStatus(status);
+    } catch (err) {
+      console.warn('Failed to fetch inference queue:', err);
+    }
+  }
+
+  async function refreshQueue() {
+    await fetchQueue();
+  }
+
+  useEffect(() => {
+    if (!token) {
+      setTimeout(() => {
+        setQueueStatus({ queued: 0, running: 0, done: 0, failed: 0 });
+      }, 0);
+      return;
+    }
+
+    setTimeout(() => {
+      void fetchQueue();
+    }, 0);
+
+    const path = `/inference/events?token=${encodeURIComponent(token)}`;
+    const url = BASE_URL.startsWith('http')
+      ? `${BASE_URL}${path}`
+      : `${window.location.origin}${BASE_URL}${path}`;
+
+    const eventSource = new EventSource(url);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'queue_updated') {
+          void fetchQueue();
+          window.dispatchEvent(new CustomEvent('inference_queue_updated'));
+        }
+      } catch (e) {
+        console.error('Failed to parse SSE event:', e);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.warn('SSE connection status changed:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [token]);
+
   return (
     <InferenceJobsContext.Provider
-      value={{ jobs, addJob, removeJob, cancelJob, isDatasetRunning }}
+      value={{
+        jobs,
+        addJob,
+        removeJob,
+        cancelJob,
+        isDatasetRunning,
+        queueStatus,
+        refreshQueue,
+      }}
     >
       {children}
     </InferenceJobsContext.Provider>

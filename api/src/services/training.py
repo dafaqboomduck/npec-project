@@ -139,23 +139,19 @@ class LocalTrainingService(AbstractTrainingService):
         Raises:
             RuntimeError: If a training run is already in progress.
         """
-        # Assemble latest confirmed corrections
-        data_dir, n_pairs = await self._materialize_feedback_dataset()
-        logger.info("Local training will use %d corrected pair(s).", n_pairs)
-        self._data_dir = data_dir
+        from api.src.services.locks import TRAINING_START_KEY, advisory_xact_lock
 
-        # Prevent concurrent training runs
-        existing = await self._get_running_id()
-        if existing is not None:
-            raise RuntimeError(
-                f"A training run ({existing}) is already in progress. "
-                "Stop it via DELETE /training/runs/{id} before starting a new one."
-            )
+        async with advisory_xact_lock(self._db, TRAINING_START_KEY) as got:
+            if not got:
+                raise RuntimeError("A training run is already being started.")
+            existing = await self._get_running_id()
+            if existing is not None:
+                raise RuntimeError(f"A training run ({existing}) is already in progress.")
 
-        repo = TrainingRunRepository(self._db)
-        params = hyperparameters.model_dump(exclude_none=True) if hyperparameters else {}
-        row = await repo.create(hyperparameters=params or None)
-        await self._db.commit()
+            repo = TrainingRunRepository(self._db)
+            params = hyperparameters.model_dump(exclude_none=True) if hyperparameters else {}
+            row = await repo.create(hyperparameters=params or None)
+            await self._db.commit()
 
         run_id = row.id
 
@@ -168,7 +164,7 @@ class LocalTrainingService(AbstractTrainingService):
         logger.info("Training run %s started (hyperparameters=%s)", run_id, params)
         return TrainingStartResponse(
             run_id=run_id,
-            message=f"Training run {run_id} started. Call GET /training/runs/{run_id} for progress.",
+            message=f"Training run {run_id} started.",
         )
 
     async def get_runs(self) -> list[TrainingRunSummary]:

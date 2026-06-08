@@ -10,11 +10,13 @@ import { logout, getUsername, getRole } from '../api/auth';
 import SettingsPanel from './SettingsPanel';
 import './NavBar.css';
 import { useState } from 'react';
+import { useInferenceJobs } from '../context/InferenceJobsContext';
 
 export default function NavBar() {
   const navigate = useNavigate();
   const username = getUsername();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const { queueStatus } = useInferenceJobs();
   // Show first letter of username (or first letter before @)
   const initials = (username.split('@')[0] ?? username).charAt(0).toUpperCase();
 
@@ -102,6 +104,20 @@ export default function NavBar() {
 
         {/* ── Right actions ── */}
         <div className="navbar-actions">
+          {/* Inference Queue Status */}
+          {(queueStatus.running > 0 || queueStatus.queued > 0) && (
+            <div
+              className="navbar-queue-status"
+              title={`${queueStatus.running} running, ${queueStatus.queued} queued`}
+            >
+              <span className="navbar-queue-dot" />
+              <span className="navbar-queue-text">
+                {queueStatus.running} running
+                {queueStatus.queued > 0 ? `, ${queueStatus.queued} queued` : ''}
+              </span>
+            </div>
+          )}
+
           {/* Settings */}
           <button
             className="navbar-icon-btn"

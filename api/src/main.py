@@ -10,6 +10,8 @@ All routers are registered here.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -21,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.src.config import settings
+from api.src.db.session import get_sessionmaker
 from api.src.dependencies import warmup_inference_service
 from api.src.routers import (
     auth,
@@ -34,6 +37,7 @@ from api.src.routers import (
     training,
 )
 from api.src.schemas.common import ErrorCode, ErrorResponse
+from api.src.services.inference_queue import consume_forever, reconcile_orphaned_jobs
 from api.src.services.training import reconcile_orphaned_training_runs
 
 # Logging
@@ -56,9 +60,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     logger.info("CV5 API starting up - docs at /docs")
     await warmup_inference_service()
+    sm = get_sessionmaker()
+    await reconcile_orphaned_jobs(sm)
     await reconcile_orphaned_training_runs()
 
+    stop = asyncio.Event()
+    consumer = asyncio.create_task(consume_forever(sm, stop), name="inference-consumer")
+
     yield
+
+    stop.set()
+    consumer.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await consumer
     logger.info("CV5 API shutting down")
 
 
@@ -85,6 +99,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Request body size limiter — reject oversized uploads before reading into memory.
+# The per-route validation (validate_file_size) enforces the precise 50 MB limit;
+# this middleware sets a generous ceiling (100 MB to allow for multipart overhead)
+# so that truly abusive payloads never allocate memory.
+MAX_REQUEST_BODY_BYTES = 100 * 1024 * 1024  # 100 MB
+
+
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    """Middleware to reject requests exceeding the maximum allowed body size."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_REQUEST_BODY_BYTES:
+        limit_mb = MAX_REQUEST_BODY_BYTES // (1024 * 1024)
+        return JSONResponse(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            content=ErrorResponse(
+                error_code=ErrorCode.INVALID_REQUEST,
+                message=f"Request body too large. Max size is {limit_mb} MB.",
+            ).model_dump(),
+        )
+    return await call_next(request)
+
 
 # Exception handlers
 #  FastAPI wraps HTTPException.detail under a "detail" key by default.

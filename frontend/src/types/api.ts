@@ -6,16 +6,8 @@
  */
 
 // ===========================================================================
-// Auth
+// Auth — AuthTokens lives in api/auth.ts (canonical location)
 // ===========================================================================
-
-export interface AuthTokens {
-  access_token: string;
-  token_type: 'bearer';
-  expires_in: number;
-  refresh_token: string;
-  role: 'user' | 'admin';
-}
 
 // ===========================================================================
 // Health
@@ -291,4 +283,11 @@ export interface ErrorResponse {
   error_code: string;
   message: string;
   detail?: Record<string, unknown>;
+}
+
+export interface InferenceQueueStatus {
+  queued: number;
+  running: number;
+  done: number;
+  failed: number;
 }

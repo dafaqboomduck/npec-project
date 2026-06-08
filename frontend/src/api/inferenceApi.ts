@@ -11,6 +11,7 @@ import type {
   MessageResponse,
   ConfirmPredictionRequest,
   ConfirmPredictionResponse,
+  InferenceQueueStatus,
 } from '../types/api';
 
 /**
@@ -91,4 +92,9 @@ export async function confirmPrediction(
       body: body ?? null,
     },
   );
+}
+
+/** GET /inference/queue — fetch database-backed inference queue status. */
+export async function getInferenceQueue(): Promise<InferenceQueueStatus> {
+  return apiClient<InferenceQueueStatus>('/inference/queue');
 }

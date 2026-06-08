@@ -172,11 +172,14 @@ export default function Models() {
     setError(null);
     setInfoMessage(null);
 
-    const config: TrainingStartRequest = {
-      learning_rate: parseFloat(learningRate) || 0.001,
-      batch_size: batchSize,
-      epochs: epochs,
-    };
+    const isCloud = import.meta.env.VITE_DEPLOYMENT_ENV === 'cloud';
+    const config: TrainingStartRequest | undefined = isCloud
+      ? undefined
+      : {
+          learning_rate: parseFloat(learningRate) || 0.001,
+          batch_size: batchSize,
+          epochs: epochs,
+        };
 
     try {
       const res = await startTrainingRun(config);
@@ -480,61 +483,78 @@ export default function Models() {
                 })()}
 
                 <form onSubmit={handleLaunchTraining} className="models-form">
-                  <div className="form-group">
-                    <label htmlFor="learning-rate">Learning Rate (&eta;)</label>
-                    <input
-                      id="learning-rate"
-                      type="number"
-                      step="0.0001"
-                      min="0.0001"
-                      max="0.1"
-                      value={learningRate}
-                      onChange={(e) => setLearningRate(e.target.value)}
-                      disabled={actionLoading || isNotImplemented}
-                      required
-                    />
-                    <small className="form-help">
-                      Governs weights convergence. Recommended: 0.001
-                    </small>
-                  </div>
+                  {import.meta.env.VITE_DEPLOYMENT_ENV !== 'cloud' ? (
+                    <>
+                      <div className="form-group">
+                        <label htmlFor="learning-rate">
+                          Learning Rate (&eta;)
+                        </label>
+                        <input
+                          id="learning-rate"
+                          type="number"
+                          step="0.0001"
+                          min="0.0001"
+                          max="0.1"
+                          value={learningRate}
+                          onChange={(e) => setLearningRate(e.target.value)}
+                          disabled={actionLoading || isNotImplemented}
+                          required
+                        />
+                        <small className="form-help">
+                          Governs weights convergence. Recommended: 0.001
+                        </small>
+                      </div>
 
-                  <div className="form-group">
-                    <label htmlFor="batch-size">Batch Size</label>
-                    <select
-                      id="batch-size"
-                      value={batchSize}
-                      onChange={(e) => setBatchSize(Number(e.target.value))}
-                      disabled={actionLoading || isNotImplemented}
+                      <div className="form-group">
+                        <label htmlFor="batch-size">Batch Size</label>
+                        <select
+                          id="batch-size"
+                          value={batchSize}
+                          onChange={(e) => setBatchSize(Number(e.target.value))}
+                          disabled={actionLoading || isNotImplemented}
+                        >
+                          <option value={8}>8 samples</option>
+                          <option value={16}>16 samples (Default)</option>
+                          <option value={32}>32 samples</option>
+                          <option value={64}>64 samples</option>
+                        </select>
+                        <small className="form-help">
+                          Sub-sampling constraints per forward pass.
+                        </small>
+                      </div>
+
+                      <div className="form-group">
+                        <div className="slider-header">
+                          <label htmlFor="epochs-range">Target Epochs</label>
+                          <span className="slider-badge">{epochs} epochs</span>
+                        </div>
+                        <input
+                          id="epochs-range"
+                          type="range"
+                          min="1"
+                          max="100"
+                          step="1"
+                          value={epochs}
+                          onChange={(e) => setEpochs(Number(e.target.value))}
+                          disabled={actionLoading || isNotImplemented}
+                        />
+                        <small className="form-help">
+                          Total full passes across dataset records.
+                        </small>
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      style={{
+                        marginBottom: '20px',
+                        color: 'var(--color-text-muted)',
+                        fontSize: '13px',
+                      }}
                     >
-                      <option value={8}>8 samples</option>
-                      <option value={16}>16 samples (Default)</option>
-                      <option value={32}>32 samples</option>
-                      <option value={64}>64 samples</option>
-                    </select>
-                    <small className="form-help">
-                      Sub-sampling constraints per forward pass.
-                    </small>
-                  </div>
-
-                  <div className="form-group">
-                    <div className="slider-header">
-                      <label htmlFor="epochs-range">Target Epochs</label>
-                      <span className="slider-badge">{epochs} epochs</span>
+                      Hyperparameters are managed automatically by the cloud
+                      coordinator.
                     </div>
-                    <input
-                      id="epochs-range"
-                      type="range"
-                      min="1"
-                      max="100"
-                      step="1"
-                      value={epochs}
-                      onChange={(e) => setEpochs(Number(e.target.value))}
-                      disabled={actionLoading || isNotImplemented}
-                    />
-                    <small className="form-help">
-                      Total full passes across dataset records.
-                    </small>
-                  </div>
+                  )}
 
                   <button
                     type="submit"
@@ -544,8 +564,12 @@ export default function Models() {
                     {isNotImplemented
                       ? 'Retraining Pipeline Offline'
                       : actionLoading
-                        ? 'Initializing Daemon...'
-                        : 'Launch Retraining Pipeline'}
+                        ? import.meta.env.VITE_DEPLOYMENT_ENV === 'cloud'
+                          ? 'Starting Retraining...'
+                          : 'Initializing Daemon...'
+                        : import.meta.env.VITE_DEPLOYMENT_ENV === 'cloud'
+                          ? 'Start Retraining'
+                          : 'Launch Retraining Pipeline'}
                   </button>
                 </form>
               </div>

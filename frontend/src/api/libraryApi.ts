@@ -8,26 +8,10 @@
 import { apiClient } from './client';
 import type { AnnotationResponse, MessageResponse } from '../types/api';
 
-// ---------------------------------------------------------------------------
-// Types (matching backend DatasetSummary / DatasetDetail schemas)
-// ---------------------------------------------------------------------------
-
-export interface DatasetSummary {
-  dataset_id: string;
-  name: string;
-  created_at: string;
-  modified_at: string;
-  count: number;
-  species?: string;
-  growth_stage?: string;
-  owner_email?: string | null;
-}
-
-export interface DatasetDetail extends DatasetSummary {
-  description?: string;
-  species?: string;
-  growth_stage?: string;
-}
+// Re-export dataset types from the canonical location so consumers
+// that import from libraryApi keep working without changes.
+export type { DatasetSummary, DatasetDetail } from '../types/api';
+import type { DatasetSummary, DatasetDetail } from '../types/api';
 
 // ---------------------------------------------------------------------------
 // API calls
@@ -162,8 +146,11 @@ export async function deleteAnnotation(id: string): Promise<MessageResponse> {
 
 /**
  * POST /datasets/:id/upload — upload multiple images to a dataset.
- * Uploads all files to the backend's real /upload endpoint.
+ * Uploads files with a concurrency limit to avoid overwhelming the
+ * browser and server with simultaneous requests.
  */
+const MAX_CONCURRENT_UPLOADS = 3;
+
 export async function uploadDatasetImages(
   datasetId: string,
   files: File[],
@@ -172,7 +159,7 @@ export async function uploadDatasetImages(
   let failed = 0;
   const errors: string[] = [];
 
-  const uploads = files.map(async (file) => {
+  async function uploadOne(file: File): Promise<void> {
     const formData = new FormData();
     formData.append('file', file);
     try {
@@ -209,9 +196,21 @@ export async function uploadDatasetImages(
       }
       errors.push(friendly);
     }
-  });
+  }
 
-  await Promise.all(uploads);
+  // Process files with a concurrency pool of MAX_CONCURRENT_UPLOADS
+  const queue = [...files];
+  const workers = Array.from(
+    { length: Math.min(MAX_CONCURRENT_UPLOADS, queue.length) },
+    async () => {
+      while (queue.length > 0) {
+        const file = queue.shift()!;
+        await uploadOne(file);
+      }
+    },
+  );
+  await Promise.all(workers);
+
   return { success, failed, errors };
 }
 

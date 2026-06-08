@@ -19,7 +19,7 @@ from __future__ import annotations
 import io
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -515,3 +515,38 @@ def test_confirm_prediction_works_without_body(client: TestClient) -> None:
             f"/api/v1/predictions/{prediction.prediction_id}/confirm",
         )
     assert response.status_code == 200
+
+
+# POST /annotations/{id}/run-inference
+
+
+def test_run_annotation_inference_requires_auth(client: TestClient) -> None:
+    app.dependency_overrides.pop(get_current_user, None)
+    response = client.post(f"/api/v1/annotations/{uuid.uuid4()}/run-inference")
+    assert response.status_code == 401
+
+
+def test_run_annotation_inference_returns_404_when_not_found(client: TestClient) -> None:
+    response = client.post(f"/api/v1/annotations/{uuid.uuid4()}/run-inference")
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "NOT_FOUND"
+
+
+def test_run_annotation_inference_returns_200_when_queued(client: TestClient) -> None:
+    from api.src.db.session import get_session
+    from tests.api.conftest import _make_mock_db
+
+    annotation_id = uuid.uuid4()
+    mock_ann = MagicMock()
+    mock_ann.id = annotation_id
+    mock_ann.image_uri = "minio://bucket/image.png"
+
+    # We need db.get to return our mock annotation
+    # and db.execute to return no existing jobs
+    db_mock = _make_mock_db()
+    db_mock.get.return_value = mock_ann
+    client.app.dependency_overrides[get_session] = lambda: db_mock
+
+    response = client.post(f"/api/v1/annotations/{annotation_id}/run-inference")
+    assert response.status_code == 200
+    assert "queued" in response.json()["message"]
