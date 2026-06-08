@@ -17,6 +17,7 @@ export interface HealthResponse {
   status: 'ok' | 'degraded' | 'unavailable';
   version: string;
   timestamp: string; // ISO 8601
+  deployment_env: string;
 }
 
 // ===========================================================================

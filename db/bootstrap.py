@@ -103,12 +103,12 @@ async def _ensure_normal_user(db) -> None:
         User(
             email=user_email,
             password_hash=hashed,
-            role="admin",
+            role="user",
             is_active=True,
         )
     )
     await db.commit()
-    logger.info("Created admin user: %s", user_email)
+    logger.info("Created user: %s", user_email)
 
 
 async def _ensure_baseline_model(db) -> None:

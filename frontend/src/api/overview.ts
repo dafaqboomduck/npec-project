@@ -18,7 +18,11 @@ import type {
   ModelHealthResponse,
   EnvironmentResponse,
   ModelSummary,
+  HealthResponse,
 } from '../types/api';
+
+export const getHealth = () =>
+  apiClient<HealthResponse>('/health', { staleTime: 30000 });
 
 export const getOverviewStatus = () =>
   apiClient<OverviewStatusResponse>('/overview/status', { staleTime: 10000 });

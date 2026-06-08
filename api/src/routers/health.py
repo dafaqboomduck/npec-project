@@ -6,6 +6,7 @@ Exposes GET /health.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,37 +43,51 @@ async def _check_db(db: AsyncSession) -> bool:
 
 
 async def _check_model(db: AsyncSession) -> bool:
-    """Check whether a deployed model version exists and its artifact is on disk.
+    """Check whether the deployed model is usable in the current environment.
 
-    Returns `degraded` (False) if:
-        - No deployed row exists.
-        - artifact_uri is NULL.
-        - The file at artifact_uri does not exist on disk.
+    Cloud: inference runs on a remote Azure ML endpoint, so there is no local
+    artifact. "Healthy" means a deployed ModelVersion row exists and the
+    endpoint URI is configured.
+
+    Local/on-prem: inference runs in-process from a .keras artifact, so the
+    deployed row's artifact_uri must point at a file that exists on disk.
 
     Args:
         db: An open async SQLAlchemy session.
 
     Returns:
-        `True` if both the `model_versions` row and the artifact
-        file are present.
+        `True` if the deployed model is usable in this environment.
     """
     try:
         result = await db.execute(
             select(ModelVersion.artifact_uri).where(ModelVersion.status == ModelStatus.DEPLOYED.value).limit(1)
         )
-        artifact_uri: str | None = result.scalar_one_or_none()
+        row = result.first()
 
+        if row is None:
+            logger.warning("Health check - no deployed model version found.")
+            return False
+
+        artifact_uri: str | None = row[0]
+
+        # Cloud: confirm a deployed model exists and the endpoint is configured.
+        if str(settings.deployment_env).lower() == "cloud":
+            if not os.getenv("AZUREML_ENDPOINT_URI"):
+                logger.warning("Health check - cloud mode but AZUREML_ENDPOINT_URI is not set.")
+                return False
+            return True
+
+        # Local/on-prem: the .keras artifact must be present on disk.
         if artifact_uri is None:
             logger.warning("Health check - no deployed model found or artifact_uri is NULL.")
             return False
 
-        artifact_path = Path(artifact_uri)
-        if not artifact_path.exists():
+        if not Path(artifact_uri).exists():
             logger.warning(
                 "Health check - artifact file missing at '%s'. "
                 "Place the .keras file there or deploy a model via "
                 "POST /models/{id}/deploy.",
-                artifact_path,
+                artifact_uri,
             )
             return False
 
@@ -126,4 +141,5 @@ async def get_health(
         status=service_status,
         version=settings.api_version,
         timestamp=datetime.now(timezone.utc),
+        deployment_env=settings.deployment_env,
     )

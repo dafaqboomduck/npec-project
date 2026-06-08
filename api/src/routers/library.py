@@ -34,6 +34,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.src.config import settings
 from api.src.core.security import get_current_user, require_admin
 from api.src.db.orm import Annotation
 from api.src.db.session import get_session
@@ -1036,6 +1037,15 @@ async def register_model(
         HTTPException: 403 for non-admin tokens.
         HTTPException: 409 if a model with the same version already exists.
     """
+    if settings.deployment_env == "cloud":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ErrorResponse(
+                error_code=ErrorCode.FORBIDDEN,
+                message="Model registration, deployment, and deletion are disabled in cloud environments.",
+            ).model_dump(),
+        )
+
     try:
         model = await ModelRepository(db).create(
             version=data.version,
@@ -1141,6 +1151,15 @@ async def delete_model(
         HTTPException: 404 if the model does not exist.
         HTTPException: 409 if predictions reference this model.
     """
+    if settings.deployment_env == "cloud":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ErrorResponse(
+                error_code=ErrorCode.FORBIDDEN,
+                message="Model registration, deployment, and deletion are disabled in cloud environments.",
+            ).model_dump(),
+        )
+
     from sqlalchemy.exc import IntegrityError
 
     try:
@@ -1192,6 +1211,15 @@ async def deploy_model(
         HTTPException: 403 for non-admin tokens.
         HTTPException: 404 if the model does not exist.
     """
+    if settings.deployment_env == "cloud":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ErrorResponse(
+                error_code=ErrorCode.FORBIDDEN,
+                message="Model registration, deployment, and deletion are disabled in cloud environments.",
+            ).model_dump(),
+        )
+
     try:
         await deployment_service.deploy(model_id)
     except FileNotFoundError as exc:

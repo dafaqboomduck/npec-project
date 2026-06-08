@@ -16,6 +16,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from api.src.config import settings
 from api.src.core.security import require_admin
 from api.src.dependencies import get_training_service
 from api.src.schemas.auth import TokenData
@@ -181,6 +182,15 @@ async def stop_training_run(
         HTTPException: 404 if the run does not exist.
         HTTPException: 409 if the run is not in running state.
     """
+    if settings.deployment_env == "cloud":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ErrorResponse(
+                error_code=ErrorCode.FORBIDDEN,
+                message="Retraining management is disabled in cloud environments.",
+            ).model_dump(),
+        )
+
     try:
         found = await service.stop(run_id)
     except ValueError as exc:

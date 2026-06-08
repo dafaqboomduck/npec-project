@@ -11,10 +11,11 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(env_file=".env", extra="ignore")
 
-    api_version: str = "0.1.0"
+    api_version: str = "1.0.3"
     database_url: str
-    secret_key: str = "dev-secret-key-replace-in-prod"  # default so .env is optional in dev
+    secret_key: str = "dev-secret-key-replace-in-prod"
     algorithm: str = "HS256"
+    deployment_env: str = "local"
 
 
 settings = Settings()

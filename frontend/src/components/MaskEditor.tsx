@@ -29,7 +29,7 @@ export default function MaskEditor({
   const [brushSize, setBrushSize] = useState(20);
   const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState<'brush' | 'eraser' | 'pan'>('brush');
-  const [maskOpacity, setMaskOpacity] = useState(0.5);
+  const maskOpacity = 1.0;
   const [isLoaded, setIsLoaded] = useState(false);
   const historyRef = useRef<ImageData[]>([]);
   const [canUndo, setCanUndo] = useState(false);
@@ -449,17 +449,7 @@ export default function MaskEditor({
             />
           </div>
 
-          <div className="me-tool-group">
-            <label>Mask Opacity: {(maskOpacity * 100).toFixed(0)}%</label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={maskOpacity}
-              onChange={(e) => setMaskOpacity(parseFloat(e.target.value))}
-            />
-          </div>
+
 
           <div className="me-help">
             <p>
@@ -467,7 +457,6 @@ export default function MaskEditor({
               <br />• Use <b>Scroll Wheel</b> to zoom.
               <br />• Select <b>Pan</b> tool or hold <b>Spacebar</b> + drag to
               pan.
-              <br />• Try opacity slider to compare masks.
             </p>
           </div>
         </aside>

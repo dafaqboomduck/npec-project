@@ -27,3 +27,4 @@ class HealthResponse(BaseModel):
     status: ServiceStatus
     version: str
     timestamp: datetime
+    deployment_env: str

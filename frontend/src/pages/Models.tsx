@@ -25,12 +25,13 @@ import {
   deployModel,
   getModelDetail,
 } from '../api/modelsApi';
+import { getHealth } from '../api/overview';
 import type {
   TrainingRunDetail,
-  TrainingStartRequest,
   ModelSummary,
   ModelDetail,
   ModelCreate,
+  TrainingStartRequest,
 } from '../types/api';
 import './Models.css';
 
@@ -47,6 +48,22 @@ export default function Models() {
 
   // ── UI States ──
   const [runs, setRuns] = useState<TrainingRunDetail[]>([]);
+  const [deploymentEnv, setDeploymentEnv] = useState<string | null>(null);
+
+  // ── Hyperparameter Controls ──
+  const [learningRate, setLearningRate] = useState('0.001');
+  const [batchSize, setBatchSize] = useState(16);
+  const [epochs, setEpochs] = useState(15);
+
+  useEffect(() => {
+    getHealth()
+      .then((res) => {
+        setDeploymentEnv(res.deployment_env);
+      })
+      .catch((err) => {
+        console.error('Failed to retrieve deployment environment:', err);
+      });
+  }, []);
   const [models, setModels] = useState<ModelSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -67,10 +84,7 @@ export default function Models() {
     isDelete: false,
   });
 
-  // ── Hyperparameter Form Controls (Retraining) ──
-  const [learningRate, setLearningRate] = useState<string>('0.001');
-  const [batchSize, setBatchSize] = useState<number>(16);
-  const [epochs, setEpochs] = useState<number>(50);
+
 
   // ── Register Model Form Controls (Registry) ──
   const [regVersion, setRegVersion] = useState('');
@@ -172,14 +186,13 @@ export default function Models() {
     setError(null);
     setInfoMessage(null);
 
-    const isCloud = import.meta.env.VITE_DEPLOYMENT_ENV === 'cloud';
-    const config: TrainingStartRequest | undefined = isCloud
-      ? undefined
-      : {
+    const config: TrainingStartRequest | undefined = deploymentEnv === 'local'
+      ? {
           learning_rate: parseFloat(learningRate) || 0.001,
           batch_size: batchSize,
           epochs: epochs,
-        };
+        }
+      : undefined;
 
     try {
       const res = await startTrainingRun(config);
@@ -439,8 +452,7 @@ export default function Models() {
               <div className="models-card models-form-card">
                 <h3 className="card-title">Retraining Launch Control</h3>
                 <p className="card-desc">
-                  Configure variables to invoke a new U-Net training background
-                  subprocess.
+                  Invoke a new U-Net training background subprocess.
                 </p>
 
                 {(() => {
@@ -483,7 +495,7 @@ export default function Models() {
                 })()}
 
                 <form onSubmit={handleLaunchTraining} className="models-form">
-                  {import.meta.env.VITE_DEPLOYMENT_ENV !== 'cloud' ? (
+                  {deploymentEnv === 'local' ? (
                     <>
                       <div className="form-group">
                         <label htmlFor="learning-rate">
@@ -564,12 +576,8 @@ export default function Models() {
                     {isNotImplemented
                       ? 'Retraining Pipeline Offline'
                       : actionLoading
-                        ? import.meta.env.VITE_DEPLOYMENT_ENV === 'cloud'
-                          ? 'Starting Retraining...'
-                          : 'Initializing Daemon...'
-                        : import.meta.env.VITE_DEPLOYMENT_ENV === 'cloud'
-                          ? 'Start Retraining'
-                          : 'Launch Retraining Pipeline'}
+                        ? 'Starting Retraining...'
+                        : 'Launch Retraining Pipeline'}
                   </button>
                 </form>
               </div>
@@ -692,7 +700,7 @@ export default function Models() {
                                   )}
                                 </td>
                                 <td className="cell-actions">
-                                  {isRunning ? (
+                                  {isRunning && deploymentEnv === 'local' ? (
                                     <button
                                       className="terminate-btn"
                                       onClick={(e) =>
@@ -796,106 +804,111 @@ export default function Models() {
             </div>
           ) : (
             /* Registry Workspaces */
-            <div className="models-grid">
+            <div
+              className="models-grid"
+              style={deploymentEnv !== 'local' ? { gridTemplateColumns: '1fr' } : undefined}
+            >
               {/* Left Side: Register New Model */}
-              <div className="models-card models-form-card">
-                <h3 className="card-title">Register Model Version</h3>
-                <p className="card-desc">
-                  Integrate new weights and register parameters directly into
-                  the U-Net registry.
-                </p>
+              {deploymentEnv === 'local' && (
+                <div className="models-card models-form-card">
+                  <h3 className="card-title">Register Model Version</h3>
+                  <p className="card-desc">
+                    Integrate new weights and register parameters directly into
+                    the U-Net registry.
+                  </p>
 
-                <form onSubmit={handleRegisterModel} className="models-form">
-                  <div className="form-group">
-                    <label htmlFor="reg-name">Model Name</label>
-                    <input
-                      id="reg-name"
-                      type="text"
-                      placeholder="e.g. U-Net Botanical Sage"
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      disabled={actionLoading}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="reg-version">Version string</label>
-                    <input
-                      id="reg-version"
-                      type="text"
-                      placeholder="e.g. v2.1.0"
-                      value={regVersion}
-                      onChange={(e) => setRegVersion(e.target.value)}
-                      disabled={actionLoading}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="reg-artifact">Artifact Storage URI</label>
-                    <input
-                      id="reg-artifact"
-                      type="text"
-                      placeholder="e.g. s3://models/unet_sage.keras"
-                      value={regArtifactUri}
-                      onChange={(e) => setRegArtifactUri(e.target.value)}
-                      disabled={actionLoading}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="reg-desc">Description</label>
-                    <input
-                      id="reg-desc"
-                      type="text"
-                      placeholder="Optional notes or training attributes"
-                      value={regDescription}
-                      onChange={(e) => setRegDescription(e.target.value)}
-                      disabled={actionLoading}
-                    />
-                  </div>
-
-                  <div className="form-row-metrics">
+                  <form onSubmit={handleRegisterModel} className="models-form">
                     <div className="form-group">
-                      <label htmlFor="reg-f1">F1 Score</label>
+                      <label htmlFor="reg-name">Model Name</label>
                       <input
-                        id="reg-f1"
-                        type="number"
-                        step="0.0001"
-                        min="0"
-                        max="1"
-                        placeholder="e.g. 0.942"
-                        value={regF1Score}
-                        onChange={(e) => setRegF1Score(e.target.value)}
+                        id="reg-name"
+                        type="text"
+                        placeholder="e.g. U-Net Botanical Sage"
+                        value={regName}
+                        onChange={(e) => setRegName(e.target.value)}
+                        disabled={actionLoading}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="reg-version">Version string</label>
+                      <input
+                        id="reg-version"
+                        type="text"
+                        placeholder="e.g. v2.1.0"
+                        value={regVersion}
+                        onChange={(e) => setRegVersion(e.target.value)}
+                        disabled={actionLoading}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="reg-artifact">Artifact Storage URI</label>
+                      <input
+                        id="reg-artifact"
+                        type="text"
+                        placeholder="e.g. s3://models/unet_sage.keras"
+                        value={regArtifactUri}
+                        onChange={(e) => setRegArtifactUri(e.target.value)}
+                        disabled={actionLoading}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="reg-desc">Description</label>
+                      <input
+                        id="reg-desc"
+                        type="text"
+                        placeholder="Optional notes or training attributes"
+                        value={regDescription}
+                        onChange={(e) => setRegDescription(e.target.value)}
                         disabled={actionLoading}
                       />
                     </div>
-                    <div className="form-group">
-                      <label htmlFor="reg-latency">Latency (ms)</label>
-                      <input
-                        id="reg-latency"
-                        type="number"
-                        placeholder="e.g. 150"
-                        value={regLatency}
-                        onChange={(e) => setRegLatency(e.target.value)}
-                        disabled={actionLoading}
-                      />
-                    </div>
-                  </div>
 
-                  <button
-                    type="submit"
-                    className="models-submit-btn"
-                    disabled={actionLoading}
-                  >
-                    {actionLoading
-                      ? 'Saving Registry record...'
-                      : 'Register Model Version'}
-                  </button>
-                </form>
-              </div>
+                    <div className="form-row-metrics">
+                      <div className="form-group">
+                        <label htmlFor="reg-f1">F1 Score</label>
+                        <input
+                          id="reg-f1"
+                          type="number"
+                          step="0.0001"
+                          min="0"
+                          max="1"
+                          placeholder="e.g. 0.942"
+                          value={regF1Score}
+                          onChange={(e) => setRegF1Score(e.target.value)}
+                          disabled={actionLoading}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="reg-latency">Latency (ms)</label>
+                        <input
+                          id="reg-latency"
+                          type="number"
+                          placeholder="e.g. 150"
+                          value={regLatency}
+                          onChange={(e) => setRegLatency(e.target.value)}
+                          disabled={actionLoading}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="models-submit-btn"
+                      disabled={actionLoading}
+                    >
+                      {actionLoading
+                        ? 'Saving Registry record...'
+                        : 'Register Model Version'}
+                    </button>
+                  </form>
+                </div>
+              )}
 
               {/* Right Side: Registered Models Table */}
               <div className="models-card models-table-card">
@@ -941,7 +954,7 @@ export default function Models() {
                           <th>NAME</th>
                           <th>STATUS</th>
                           <th>CREATED AT</th>
-                          <th aria-label="Actions"></th>
+                          {deploymentEnv === 'local' && <th aria-label="Actions"></th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -989,37 +1002,39 @@ export default function Models() {
                                     year: 'numeric',
                                   })}
                                 </td>
-                                <td className="cell-actions">
-                                  <div className="action-row-buttons">
-                                    {!isDeployed && (
+                                {deploymentEnv === 'local' && (
+                                  <td className="cell-actions">
+                                    <div className="action-row-buttons">
+                                      {!isDeployed && (
+                                        <button
+                                          className="deploy-btn"
+                                          onClick={(e) =>
+                                            handleDeployModel(model.model_id, e)
+                                          }
+                                          title="Deploy this version active"
+                                          disabled={actionLoading}
+                                        >
+                                          Deploy
+                                        </button>
+                                      )}
                                       <button
-                                        className="deploy-btn"
+                                        className="delete-btn"
                                         onClick={(e) =>
-                                          handleDeployModel(model.model_id, e)
+                                          handleDeleteModel(model.model_id, e)
                                         }
-                                        title="Deploy this version active"
+                                        title="Delete model version"
                                         disabled={actionLoading}
                                       >
-                                        Deploy
+                                        Delete
                                       </button>
-                                    )}
-                                    <button
-                                      className="delete-btn"
-                                      onClick={(e) =>
-                                        handleDeleteModel(model.model_id, e)
-                                      }
-                                      title="Delete model version"
-                                      disabled={actionLoading}
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>
-                                </td>
+                                    </div>
+                                  </td>
+                                )}
                               </tr>
 
                               {isExpanded && (
                                 <tr className="detail-row">
-                                  <td colSpan={5}>
+                                  <td colSpan={deploymentEnv === 'local' ? 5 : 4}>
                                     <div className="run-expanded-panel">
                                       <div className="panel-col">
                                         <h5>Model Attributes</h5>

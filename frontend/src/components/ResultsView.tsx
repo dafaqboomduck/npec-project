@@ -32,7 +32,7 @@ export default function ResultsView({
   isHistoryView = false,
 }: ResultsViewProps) {
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('scan');
-  const [maskOpacity, setMaskOpacity] = useState<number>(0.5);
+  const maskOpacity = 1.0;
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(
     null,
   );
@@ -147,22 +147,7 @@ export default function ResultsView({
               ))}
             </div>
           </div>
-          {overlayMode === 'mask' && (
-            <div className="rv-opacity-slider-container">
-              <label htmlFor="rv-mask-opacity">
-                Mask Opacity: {(maskOpacity * 100).toFixed(0)}%
-              </label>
-              <input
-                id="rv-mask-opacity"
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={maskOpacity}
-                onChange={(e) => setMaskOpacity(parseFloat(e.target.value))}
-              />
-            </div>
-          )}
+
           <div className="rv-overlay-canvas">
             {overlayMode === 'mask' ? (
               <div

@@ -13,6 +13,7 @@ AZUREML_REQUEST_TIMEOUT Request timeout in seconds (default: 180)
 from __future__ import annotations
 
 import base64
+import io
 import logging
 import os
 import time
@@ -20,6 +21,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import cv2
 import httpx
 import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +34,32 @@ logger = logging.getLogger(__name__)
 _ENDPOINT_URI = os.getenv("AZUREML_ENDPOINT_URI", "")
 _ENDPOINT_KEY = os.getenv("AZUREML_ENDPOINT_KEY", "")
 _REQUEST_TIMEOUT = int(os.getenv("AZUREML_REQUEST_TIMEOUT", "180"))
+
+
+def _prepare_payload(image_bytes: bytes, jpeg_quality: int = 90) -> str:
+    """JPEG-compress the image (WITHOUT resizing) to keep the tunnel payload small.
+
+    We deliberately do NOT downscale: the endpoint returns plant tip coordinates
+    (tip_x / tip_y) and root lengths in the pixel space of the image it receives.
+    If we shrank the image, every returned coordinate would be in the smaller
+    space and would land in the wrong place when drawn on the original full-size
+    image (tips clustered toward the top-left). The endpoint patchifies and
+    resizes internally, so it accepts full-resolution input up to its limits.
+
+    Re-encoding a large PNG as JPEG (quality 90) typically cuts a ~40 MB payload
+    to a few MB — small enough for the tunnel proxy — while preserving the
+    original dimensions, so the returned coordinates need no rescaling.
+    """
+    arr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        # Decode failed — fall back to sending original bytes untouched.
+        return base64.b64encode(image_bytes).decode()
+
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
+    if not ok:
+        return base64.b64encode(image_bytes).decode()
+    return base64.b64encode(buf.tobytes()).decode()
 
 
 class AzureMLInferenceService(AbstractInferenceService):
@@ -60,17 +88,25 @@ class AzureMLInferenceService(AbstractInferenceService):
         """
         start = time.perf_counter()
 
-        image_b64 = base64.b64encode(image_bytes).decode()
+        image_b64 = _prepare_payload(image_bytes)
+        send_filename = os.path.splitext(filename)[0] + ".jpg"
 
         async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
-            resp = await client.post(
-                _ENDPOINT_URI,
-                headers={
-                    "Authorization": f"Bearer {_ENDPOINT_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={"image_b64": image_b64, "filename": filename},
-            )
+            for attempt in range(2):
+                resp = await client.post(
+                    _ENDPOINT_URI,
+                    headers={
+                        "Authorization": f"Bearer {_ENDPOINT_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"image_b64": image_b64, "filename": send_filename},
+                )
+                if resp.status_code != 504:
+                    break
+                logger.warning("Endpoint 504 (attempt %d) — retrying", attempt + 1)
+
+        if resp.status_code == 504:
+            raise ValueError("Inference gateway timeout (504): payload too large or endpoint slow.")
 
         if resp.status_code != 200:
             raise ValueError(f"Azure ML endpoint returned HTTP {resp.status_code}: {resp.text[:200]}")
@@ -152,8 +188,6 @@ class _AzureImageResult:
             mask_bytes: bytes of the segmentation mask.
             plants: list of the detected plants.
         """
-        import io
-
         from PIL import Image
 
         combined_mask = np.array(Image.open(io.BytesIO(mask_bytes)).convert("L"))
