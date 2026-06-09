@@ -770,7 +770,7 @@ class TestHealthRouter:
 
         db = AsyncMock()
         result = MagicMock()
-        result.scalar_one_or_none.return_value = None
+        result.first.return_value = None
         db.execute = AsyncMock(return_value=result)
         assert await _check_model(db) is False
 
@@ -779,7 +779,7 @@ class TestHealthRouter:
 
         db = AsyncMock()
         result = MagicMock()
-        result.scalar_one_or_none.return_value = str(tmp_path / "missing.keras")
+        result.first.return_value = (str(tmp_path / "missing.keras"),)
         db.execute = AsyncMock(return_value=result)
         assert await _check_model(db) is False
 
@@ -790,7 +790,7 @@ class TestHealthRouter:
         f.write_bytes(b"")
         db = AsyncMock()
         result = MagicMock()
-        result.scalar_one_or_none.return_value = str(f)
+        result.first.return_value = (str(f),)
         db.execute = AsyncMock(return_value=result)
         assert await _check_model(db) is True
 
