@@ -296,6 +296,15 @@ def deploy(client: MLClient, serving_version: str, env_label: str) -> None:
             # the key leaves the old "1" value in place. Passing "0" forces
             # the override.
             "DISABLE_DISH_CROP": "0",
+            # Horizontal flip-merge in score.py runs the root + anchor models
+            # TWICE per request (once on the original image, once on the
+            # left-right mirror) and merges with elementwise max, to symmetrize
+            # a model spatial bias we noticed earlier. With the dish-cropping
+            # fix that bias is no longer the main failure mode, and the
+            # flip-merge doubles inference latency (~90s -> ~180s) for marginal
+            # quality improvement. Disabling by default; set DISABLE_FLIP_MERGE=0
+            # explicitly to bring it back if the bias returns on a future model.
+            "DISABLE_FLIP_MERGE": "1",
         },
         # K8s instance type — a named CPU/memory profile defined on the
         # cluster, not an Azure VM SKU. See INSTANCE_TYPE comment at top.
