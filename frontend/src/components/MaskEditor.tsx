@@ -449,8 +449,6 @@ export default function MaskEditor({
             />
           </div>
 
-
-
           <div className="me-help">
             <p>
               💡 Tips:

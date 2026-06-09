@@ -84,8 +84,6 @@ export default function Models() {
     isDelete: false,
   });
 
-
-
   // ── Register Model Form Controls (Registry) ──
   const [regVersion, setRegVersion] = useState('');
   const [regName, setRegName] = useState('');
@@ -186,13 +184,14 @@ export default function Models() {
     setError(null);
     setInfoMessage(null);
 
-    const config: TrainingStartRequest | undefined = deploymentEnv === 'local'
-      ? {
-          learning_rate: parseFloat(learningRate) || 0.001,
-          batch_size: batchSize,
-          epochs: epochs,
-        }
-      : undefined;
+    const config: TrainingStartRequest | undefined =
+      deploymentEnv === 'local'
+        ? {
+            learning_rate: parseFloat(learningRate) || 0.001,
+            batch_size: batchSize,
+            epochs: epochs,
+          }
+        : undefined;
 
     try {
       const res = await startTrainingRun(config);
@@ -806,7 +805,11 @@ export default function Models() {
             /* Registry Workspaces */
             <div
               className="models-grid"
-              style={deploymentEnv !== 'local' ? { gridTemplateColumns: '1fr' } : undefined}
+              style={
+                deploymentEnv !== 'local'
+                  ? { gridTemplateColumns: '1fr' }
+                  : undefined
+              }
             >
               {/* Left Side: Register New Model */}
               {deploymentEnv === 'local' && (
@@ -954,7 +957,9 @@ export default function Models() {
                           <th>NAME</th>
                           <th>STATUS</th>
                           <th>CREATED AT</th>
-                          {deploymentEnv === 'local' && <th aria-label="Actions"></th>}
+                          {deploymentEnv === 'local' && (
+                            <th aria-label="Actions"></th>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
@@ -1034,7 +1039,9 @@ export default function Models() {
 
                               {isExpanded && (
                                 <tr className="detail-row">
-                                  <td colSpan={deploymentEnv === 'local' ? 5 : 4}>
+                                  <td
+                                    colSpan={deploymentEnv === 'local' ? 5 : 4}
+                                  >
                                     <div className="run-expanded-panel">
                                       <div className="panel-col">
                                         <h5>Model Attributes</h5>
