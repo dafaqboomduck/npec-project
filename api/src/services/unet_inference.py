@@ -237,9 +237,18 @@ class UNetInferenceService(AbstractInferenceService):
         return self._executor
 
     def _shutdown_executor(self) -> None:
-        """Tear down the inference worker if one exists (frees its GPU memory)."""
+        """Tear down the inference worker if one exists (frees its GPU memory).
+
+        Uses wait=True so the OS process is fully gone (and its CUDA context
+        released) before this method returns. The idle reaper only fires when no
+        futures are in-flight, so there is nothing to wait on except the process
+        exit itself — a few hundred milliseconds at most, which is negligible
+        compared to the cold-start model reload the next request will do anyway.
+        Crucially, wait=False would release the lock before the old process exits,
+        letting a new worker spawn while the old one still holds the GPU context.
+        """
         if self._executor is not None:
-            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._executor.shutdown(wait=True, cancel_futures=True)
             self._executor = None
 
     def _ensure_reaper(self) -> None:
@@ -593,6 +602,23 @@ class UNetInferenceService(AbstractInferenceService):
             # The worker died mid-task (e.g. GPU OOM / segfault). The pool is
             # now unusable — drop it so the next request spawns a fresh one.
             logger.exception("Inference worker process died (possible GPU OOM) for '%s'", filename)
+            self._shutdown_executor()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=ErrorResponse(
+                    error_code=ErrorCode.INTERNAL_ERROR,
+                    message="An unexpected error occurred during inference.",
+                ).model_dump(),
+            )
+        except TypeError:
+            # A TypeError propagated out of the worker (e.g. npec_cv's
+            # restore_mask receiving None from a failed GPU allocation).  Treat
+            # the worker as corrupt — drop it so the next request gets a fresh
+            # process with a clean CUDA context.
+            logger.exception(
+                "Inference worker returned unexpected None (possible GPU init failure) for '%s'",
+                filename,
+            )
             self._shutdown_executor()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
