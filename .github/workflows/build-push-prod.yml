@@ -10,12 +10,14 @@ permissions:
   packages: write
 
 env:
-  REGISTRY: ghcr.io
+  REGISTRY: ghcr.io 
   IMAGE_PREFIX: ghcr.io/bredauniversityadsai/2025-26d-fai2-adsai-group-computervision5
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      tag: sha-${{ steps.sha.outputs.short }}
     steps:
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
@@ -91,7 +93,14 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
 
-      # Don't trigger Portainer deploy from PR builds, IP unreachable from GH actions runners and would cause confusion with failed deploys on PRs
-      # - name: Trigger Portainer webhook
-      #   run: |
-      #     curl -fsS -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
+  deploy:
+    needs: build-and-push
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Trigger Portainer redeploy
+        env:
+          WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+          TAG: ${{ needs.build-and-push.outputs.tag }}
+        run: |
+          curl --fail --silent --show-error -X POST "${WEBHOOK}?SERVICE_TAG=${TAG}"
