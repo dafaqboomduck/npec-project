@@ -19,6 +19,11 @@ import sys
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only")
+# Force local mode for all tests regardless of what .env contains. This
+# prevents cloud-only guards (403 on model management, skipped artifact
+# checks, azure storage backend) from breaking unit/integration tests.
+os.environ["DEPLOYMENT_ENV"] = "local"
+os.environ["STORAGE_BACKEND"] = "minio"
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
