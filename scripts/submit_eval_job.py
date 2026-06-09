@@ -31,7 +31,7 @@ from azure.identity import AzureCliCredential
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config.json"
 ENV_YAML = REPO_ROOT / "environments" / "azure-train-env.yml"
-COMPUTE_NAME = "lambda-4"
+COMPUTE_NAME = "lambda-0"
 INSTANCE_TYPE = "gpu"
 ENV_NAME = "root-detection-train"
 MODEL_NAME = "root-detection"
