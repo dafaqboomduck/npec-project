@@ -1,3 +1,4 @@
+import sys
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -86,11 +87,19 @@ def test_register_flow():
     mock_ml_client = MagicMock()
     mock_ml_client.data.get.return_value.version = "1.2.3"
 
-    with (
-        patch("api.src.services.feedback_export._ml_client", return_value=mock_ml_client),
-        patch("azure.ai.ml.entities.Data"),
-    ):
+    fake_azure = {
+        "azure": MagicMock(),
+        "azure.ai": MagicMock(),
+        "azure.ai.ml": MagicMock(),
+        "azure.ai.ml.entities": MagicMock(),
+        "azure.ai.ml.constants": MagicMock(),
+        "azure.identity": MagicMock(),
+    }
 
+    with (
+        patch.dict(sys.modules, fake_azure),
+        patch("api.src.services.feedback_export._ml_client", return_value=mock_ml_client),
+    ):
         version = _register(Path("/tmp/corrections"), 5)
         assert version == "1.2.4"
         mock_ml_client.data.create_or_update.assert_called_once()
