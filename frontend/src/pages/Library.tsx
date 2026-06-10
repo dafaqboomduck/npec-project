@@ -2852,14 +2852,6 @@ export default function Library() {
                                     .split('.')[0] + 'Z'}
                                 </span>
                               </span>
-                              <span className="lib-ds-list-meta-item">
-                                <span className="lib-ds-meta-label">
-                                  count:
-                                </span>{' '}
-                                <span className="lib-ds-meta-val">
-                                  {ds.count}
-                                </span>
-                              </span>
                               {/* Inference status pill */}
                               {isDatasetRunning(ds.dataset_id) ? (
                                 <span
