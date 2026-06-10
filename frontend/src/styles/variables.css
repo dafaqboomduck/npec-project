@@ -115,33 +115,37 @@
 /* ---------------------------------------------------------------------- */
 
 [data-theme='dark'] {
-  --color-bg: #0b1a14; /* Deep forest night */
-  --color-bg-white: #1b4332; /* Dark leaf surface */
-  --color-bg-subtle: #142d22; /* Mid forest surface */
+  --color-bg: #0b1a14; /* Deep forest night — --bg */
+  --color-bg-white: #10261c; /* Dark leaf surface — --surface */
+  --color-bg-subtle: #16331f; /* Mid forest surface — --surface-2 */
 
-  --color-primary: #d8f3dc; /* Light sage contrast */
-  --color-primary-mid: #95d5b2;
-  --color-primary-light: #74c69d;
+  --color-primary: #d8f3dc; /* Light sage contrast — --mint */
+  --color-primary-mid: #95d5b2; /* --green-ll */
+  --color-primary-light: #74c69d; /* --green-l */
 
-  --color-card-dark: #2d6a4f;
-  --color-card-dark-text: #ffffff;
-  --color-card-env: #142d22;
+  --color-card-dark: #1b4332; /* Active models card — --surface-3 */
+  --color-card-dark-text: #f0f7f0; /* --text */
+  --color-card-env: #16331f; /* Environment stats card — --surface-2 */
 
-  --color-text-primary: #f0f7f0;
-  --color-text-secondary: #b7e4c7;
-  --color-text-muted: #74907a;
-  --color-text-on-dark: #f0f7f0;
+  --color-text-primary: #f0f7f0; /* --text */
+  --color-text-secondary: #b7e4c7; /* --text-2 */
+  --color-text-muted: #7e9a86; /* --text-3 */
+  --color-text-on-dark: #f0f7f0; /* --text */
 
-  --color-border: #2d6a4f;
-  --color-border-subtle: #1b4332;
+  --color-border: #234f3a; /* --line */
+  --color-border-subtle: #1c4030; /* --line-soft */
 
-  --color-progress-track: #1b4332;
-  --color-progress-fill: #95d5b2;
+  --color-progress-track: #1c4030; /* --line-soft */
+  --color-progress-fill: #95d5b2; /* --green-ll */
 
-  --color-tag-bg: #2d6a4f;
-  --color-tag-text: #d8f3dc;
+  --color-tag-bg: #234f3a; /* --line */
+  --color-tag-text: #d8f3dc; /* --mint */
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --color-danger: #ef8f8f; /* --danger */
+  --color-warning: #e3b574; /* --amber */
+  --color-success: #52b788; /* --green */
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.45);
+  --shadow-card-hover: 0 12px 48px rgba(0, 0, 0, 0.55);
 }

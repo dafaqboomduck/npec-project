@@ -26,36 +26,44 @@ This document serves as the central documentation index for the repository, deta
 The platform is designed as a modular, decoupled set of services to separate concerns, enable independent deployment, and minimize runtime dependencies (e.g., preventing CLI calls from loading heavy TensorFlow models unless required).
 
 ```
-                      +-------------------+
-                      |   React Frontend  |
-                      |   (Vite + TS)     |
-                      +---------+---------+
-                                | REST / WebSockets
-                                v
-                      +-------------------+
-                      |    FastAPI API    | <---+
-                      |   (src/api/)      |     |
-                      +----+---------+----+     |
-      Read/Write           |         |          | Lineage Trace
-      Metadata             |         |          |
-                           v         v          |
-  +--------------+    +----+----+  +-+----------+----+
-  |  PostgreSQL  |<---| SQLAlchemy |  |   Lineage Core   |
-  |   (cv5db)    |    |   ORM   |  |   (lineage/)    |
-  +--------------+    +---------+  +-----------------+
-                                            |
-                                            | Managed Models
-                                            v
-                               +------------+------------+
-                               |     Azure ML Workspace  |
-                               |  - Model Registry       |
-                               |  - Kubernetes Endpoint  |
-                               +-------------------------+
+                         +------------------------+
+                         |     React Frontend     |
+                         |   (Vite + TS @ :3000)  |
+                         +-----------+------------+
+                                     |
+                                     | HTTP REST / WebSockets
+                                     v
+                         +------------------------+
+                         |      FastAPI API       | <---------------+
+                         |     (api/src/main.py)  |                 |
+                         +---+-------+--------+---+                 |
+                             |       |        |                     |
+                  Read/Write |       |        | Read/Write          | Lineage
+                  Metadata   |       |        | Raw Images & Masks  | Trace
+                             v       |        v                     |
+       +------------------+  |       |  +------------------+        |
+       |    PostgreSQL    |<-+       |  |  Object Storage  |        |
+       |  (SQLAlchemy ORM) |          |  |  (MinIO / S3)    |        |
+       +------------------+          |  +------------------+        |
+                                     v                              |
+                         +------------------------+                 |
+                         |      Lineage Core      | ----------------+
+                         |       (lineage/)       |
+                         +-----------+------------+
+                                     |
+                                     | Managed Models
+                                     v
+                         +------------------------+
+                         |   Azure ML Workspace   |
+                         | - Model Registry       |
+                         | - Kubernetes Endpoint  |
+                         +------------------------+
 ```
 
 *   **npec_cv** (`src/npec_cv/`): The core computer vision package. It wraps the U-Net segmentation, image pre-processing, post-processing, and morphological measurement calculations.
 *   **FastAPI API** (`src/api/`): The serving layer that exposes REST endpoints for health check, predictions, and training history, running background workers for image validation and queueing.
-*   **PostgreSQL Database (`cv5db`)**: Persists predictions, user accounts, model versions, audit logs, and training run history. No raw image data is stored here; it is queried by SQLAlchemy and managed via Alembic migrations.
+*   **PostgreSQL Database (`cv5db`)**: Persists predictions, user accounts, model versions, audit logs, and training run history. It is queried by SQLAlchemy and managed via Alembic migrations.
+*   **Object Storage (MinIO / S3)**: Serves as the central repository for raw uploaded Petri dish images, processed segmentation masks, and intermediate root tip visualization overlays. The database references these assets by URL/key rather than storing them in rows.
 *   **lineage** (`lineage/`): Dedicated package handling inference audit logging (`inference_audit_log` table) and tracking strict model provenance (Git commits, datasets, training run IDs).
 
 ### Data Pipeline Flow
@@ -173,9 +181,9 @@ The retraining pipeline (`scripts/submit_pipeline.py`) integrates training, para
 3.  **Cloud Serving**: Kubernetes online endpoint (`root-detection-endpoint`) hosted on `lambda-0` for scalable, authenticated inference.
 
 ### Branching Strategy & CI/CD Workflows
-We follow a Git branching strategy where development is conducted in feature branches, merged to `main` via Pull Requests.
-*   **PR Checks (`py-tests.yml`, `py-lint.yml`, `frontend-ci.yml`)**: Triggered on pull requests to `main`. Automatically runs code formatting checks, Ruff linting, and pytest suites. Merges are blocked unless all checks pass.
-*   **Release CD (`build-push-prod.yml`)**: Triggered on push to `main`. Builds Docker images for the migration helper, API, and frontend, tagging them with the Git SHA, and pushes them to GitHub Container Registry (GHCR).
+We follow a Git branching strategy where development is conducted in feature branches, merged to the `dev` branch via Pull Requests (using squash merges), and then the `dev` branch is merged to `main` via merge commits.
+*   **PR Checks (`py-tests.yml`, `py-lint.yml`, `frontend-ci.yml`)**: Triggered on pull requests to both `dev` and `main` branches. Automatically runs code formatting checks, Ruff linting, and pytest suites. Merges are blocked unless all checks pass.
+*   **Release CD (`build-push-prod.yml`)**: Triggered on push to `main`. Builds Docker images for the migration helper, API, and frontend, tagging them with both `:latest` and `:sha-<short-sha>` (based on the Git SHA), and pushes them to GitHub Container Registry (GHCR).
 
 ### Serving Model & Endpoint Versioning
 To serve predictions, we implement an online endpoint running `scripts/score.py`. 
@@ -216,6 +224,11 @@ A React/Vite/TypeScript frontend dashboard (`frontend/`) visualizes the system's
 *   **Image Uploader**: Drag-and-drop tool with client-side file size and format validation.
 *   **Interactive Segmentation Overlay**: Displays Petri dish images with overlayable segmentation masks (255=root, 0=background).
 *   **Live Monitoring**: Displays active job statuses, OT-2 robot connectivity and coordinate tracking, and historical prediction tables.
+
+### Operational & Model Quality Monitoring (Metabase)
+For operational observability and analytical oversight, we deploy **Metabase** connected directly to the read-replica/main PostgreSQL database. This enables stakeholders to monitor:
+*   **System Performance KPIs**: Real-time charts of request volume, system error rates, and response latency percentiles grouped by serving model version.
+*   **Model Quality & Drift Auditing**: Historical trend tracking of validation F1 scores across successive weekly retraining sweeps, along with lateral root count distribution comparisons to detect statistical feature drift.
 
 ---
 
@@ -289,20 +302,20 @@ cd frontend
 npm install
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to view the application dashboard.
+Open [http://localhost:3000](http://localhost:3000) to view the application dashboard (configured to port 3000 in `vite.config.ts` to override Vite's default 5173).
 
 ---
 
 ## 9. CLI & API Usage Examples
 
 ### Running Inference via CLI
-Analyze a single plant image:
+Run inference on a single plant image (passing the image path as a positional argument, and specifying the required model artifact directory):
 ```bash
-npec-cv predict --image data/samples/plant.png --output results/
+npec-cv predict data/samples/plant.png --artifact-dir scripts/ --output results/
 ```
 Batch-process a directory of images:
 ```bash
-npec-cv predict data/samples/ --confidence 0.05 --output results.json
+npec-cv predict data/samples/ --artifact-dir scripts/ --confidence 0.05 --output results.json
 ```
 
 ### Calling the API endpoint (FastAPI)

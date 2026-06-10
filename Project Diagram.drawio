@@ -1,11 +1,11 @@
 <mxfile host="app.diagrams.net">
   <diagram name="Page-1" id="pZaCx1ASlGq4_yxpNwZf">
-    <mxGraphModel dx="3142" dy="1651" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="4040" dy="2123" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
         <mxCell id="f0SAUpNnOfy4REwtwOpg-25" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;h1&gt;&lt;font style=&quot;font-size: 36px;&quot;&gt;Level 3 - Automated model deployment&lt;/font&gt;&lt;/h1&gt;" vertex="1">
-          <mxGeometry height="90" width="585" x="520" y="1070" as="geometry" />
+          <mxGeometry height="90" width="585" x="543.95" y="70" as="geometry" />
         </mxCell>
         <mxCell id="1uZrlfFnmPBMJj8hdFLu-130" edge="1" parent="1" source="1uZrlfFnmPBMJj8hdFLu-112" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;">
           <mxGeometry relative="1" as="geometry">
@@ -135,6 +135,12 @@
         </mxCell>
         <mxCell id="1uZrlfFnmPBMJj8hdFLu-38" parent="Z7qgB71HU1Wg6pQUR2fB-2" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;Alembic Migrations&lt;/b&gt;" vertex="1">
           <mxGeometry height="30" width="121.5" x="35.75999999999999" y="210.5" as="geometry" />
+        </mxCell>
+        <mxCell id="system-architecture-lineage-icon" parent="Z7qgB71HU1Wg6pQUR2fB-2" style="points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;fillColor=#FF6A00;strokeColor=none;shape=mxgraph.alibaba_cloud.microservice_architecture;" vertex="1">
+          <mxGeometry height="45" width="45" x="950" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="system-architecture-lineage-text" parent="Z7qgB71HU1Wg6pQUR2fB-2" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;Lineage - Audit &amp;amp; Traceability CLI&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="165" x="890" y="315" as="geometry" />
         </mxCell>
         <mxCell id="Z7qgB71HU1Wg6pQUR2fB-3" connectable="0" parent="1" style="group" value="" vertex="1">
           <mxGeometry height="589" width="400" x="1210" y="2100" as="geometry" />
@@ -333,10 +339,10 @@
           <mxGeometry height="30" width="167" x="266.5" y="1906" as="geometry" />
         </mxCell>
         <mxCell id="1uZrlfFnmPBMJj8hdFLu-111" parent="1" style="verticalLabelPosition=bottom;html=1;verticalAlign=top;align=center;strokeColor=none;fillColor=#00BEF2;shape=mxgraph.azure.server_rack;" value="" vertex="1">
-          <mxGeometry height="40" width="40" x="330.69" y="1966" as="geometry" />
+          <mxGeometry height="40" width="40" x="180" y="1966" as="geometry" />
         </mxCell>
         <mxCell id="1uZrlfFnmPBMJj8hdFLu-112" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;Local Server - Pull &amp;amp; restart stack&lt;/b&gt;" vertex="1">
-          <mxGeometry height="30" width="197.04" x="253.40999999999997" y="2006" as="geometry" />
+          <mxGeometry height="30" width="200" x="100" y="2006" as="geometry" />
         </mxCell>
         <mxCell id="1uZrlfFnmPBMJj8hdFLu-115" edge="1" parent="1" source="1uZrlfFnmPBMJj8hdFLu-95" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.462;exitY=0.981;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;exitPerimeter=0;" target="1uZrlfFnmPBMJj8hdFLu-93">
           <mxGeometry relative="1" as="geometry">
@@ -553,6 +559,212 @@
         <mxCell id="Z7qgB71HU1Wg6pQUR2fB-90" connectable="0" parent="Z7qgB71HU1Wg6pQUR2fB-89" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Pull model version" vertex="1">
           <mxGeometry relative="1" x="-0.2293" as="geometry">
             <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="github-deploy-cloud-icon" parent="1" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/app_services/Static_Web_Apps.svg;" vertex="1">
+          <mxGeometry height="32" width="40" x="480" y="1966" as="geometry" />
+        </mxCell>
+        <mxCell id="github-deploy-cloud-text" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;GitHub CD - Deploy Static FE&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="200" x="400" y="2006" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-push-to-cloud-deploy" edge="1" parent="1" source="1uZrlfFnmPBMJj8hdFLu-110" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="github-deploy-cloud-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-cloud-deploy-to-swa" edge="1" parent="1" source="github-deploy-cloud-text" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="Z7qgB71HU1Wg6pQUR2fB-47">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-api-to-lineage" edge="1" parent="1" source="1uZrlfFnmPBMJj8hdFLu-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="system-architecture-lineage-icon" value="audit log">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-lineage-to-azureml" edge="1" parent="1" source="system-architecture-lineage-text" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="Z7qgB71HU1Wg6pQUR2fB-45" value="provenance">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="user-flows-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;" vertex="1">
+          <mxGeometry height="910" width="1570" x="50" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="user-flows-title" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" value="&lt;h1&gt;System Entry Points &amp;amp; User Action Flows&lt;/h1&gt;" vertex="1">
+          <mxGeometry height="65" width="600" x="20" y="-10" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-header" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" value="&lt;h2&gt;&lt;font color=&quot;#27ae60&quot;&gt;Flow 1: Image Upload &amp;amp; Batch Inference&lt;/font&gt;&lt;/h2&gt;" vertex="1">
+          <mxGeometry height="55" width="500" x="30" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step1-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/general/User_Icon.svg;" vertex="1">
+          <mxGeometry height="48" width="48" x="50" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step1-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;1. User Uploads Image&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="10" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step2-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/app_services/App_Service_Domains.svg;" vertex="1">
+          <mxGeometry height="40" width="50" x="230" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step2-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;2. React UI Webpage&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="190" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step3-icon" parent="user-flows-box" style="aspect=fixed;sketch=0;html=1;dashed=0;whitespace=wrap;verticalLabelPosition=bottom;verticalAlign=top;fillColor=#2875E2;strokeColor=#ffffff;points=[[0.005,0.63,0],[0.1,0.2,0],[0.9,0.2,0],[0.5,0,0],[0.995,0.63,0],[0.72,0.99,0],[0.5,1,0],[0.28,0.99,0]];shape=mxgraph.kubernetes.icon2;kubernetesLabel=1;prIcon=api" vertex="1">
+          <mxGeometry height="43" width="45" x="410" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step3-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;3. API Gate (Inference)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="370" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step4-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/integration/Service_Bus.svg;" vertex="1">
+          <mxGeometry height="40" width="48" x="590" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step4-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;4. Inference queue&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="550" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step5-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/general/Cubes.svg;" vertex="1">
+          <mxGeometry height="45" width="45" x="770" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step5-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;5. Executes Pipeline&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="730" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step6-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/general/Files.svg;" vertex="1">
+          <mxGeometry height="48" width="40" x="950" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-step6-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;6. Save Mask &amp;amp; metrics&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="140" x="900" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-edge-1" edge="1" parent="user-flows-box" source="flow1-step1-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#27ae60;strokeWidth=2;" target="flow1-step2-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-edge-2" edge="1" parent="user-flows-box" source="flow1-step2-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#27ae60;strokeWidth=2;" target="flow1-step3-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-edge-3" edge="1" parent="user-flows-box" source="flow1-step3-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#27ae60;strokeWidth=2;" target="flow1-step4-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-edge-4" edge="1" parent="user-flows-box" source="flow1-step4-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#27ae60;strokeWidth=2;" target="flow1-step5-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow1-edge-5" edge="1" parent="user-flows-box" source="flow1-step5-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#27ae60;strokeWidth=2;" target="flow1-step6-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-header" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" value="&lt;h2&gt;&lt;font color=&quot;#e67e22&quot;&gt;Flow 2: Interactive Mask Editing &amp;amp; Archiving&lt;/font&gt;&lt;/h2&gt;" vertex="1">
+          <mxGeometry height="35" width="500" x="30" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-step1-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/general/User_Icon.svg;" vertex="1">
+          <mxGeometry height="48" width="48" x="50" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-step1-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;1. Corrects Mask (UI)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="10" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-step2-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/app_services/App_Service_Domains.svg;" vertex="1">
+          <mxGeometry height="40" width="50" x="230" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-step2-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;2. Mask Editor Panel&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="190" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-step3-icon" parent="user-flows-box" style="aspect=fixed;sketch=0;html=1;dashed=0;whitespace=wrap;verticalLabelPosition=bottom;verticalAlign=top;fillColor=#2875E2;strokeColor=#ffffff;points=[[0.005,0.63,0],[0.1,0.2,0],[0.9,0.2,0],[0.5,0,0],[0.995,0.63,0],[0.72,0.99,0],[0.5,1,0],[0.28,0.99,0]];shape=mxgraph.kubernetes.icon2;kubernetesLabel=1;prIcon=api" vertex="1">
+          <mxGeometry height="43" width="45" x="410" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-step3-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;3. API Gate (Library)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="370" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-step4-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/general/Files.svg;" vertex="1">
+          <mxGeometry height="48" width="40" x="590" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-step4-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;4. Update MinIO &amp;amp; DB&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="140" x="540" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-edge-1" edge="1" parent="user-flows-box" source="flow2-step1-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#e67e22;strokeWidth=2;" target="flow2-step2-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-edge-2" edge="1" parent="user-flows-box" source="flow2-step2-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#e67e22;strokeWidth=2;" target="flow2-step3-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow2-edge-3" edge="1" parent="user-flows-box" source="flow2-step3-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#e67e22;strokeWidth=2;" target="flow2-step4-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-header" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" value="&lt;h2&gt;&lt;font color=&quot;#2980b9&quot;&gt;Flow 3: Retraining &amp;amp; Active Weight Rollout&lt;/font&gt;&lt;/h2&gt;" vertex="1">
+          <mxGeometry height="35" width="500" x="30" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step1-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/general/Scheduler.svg;" vertex="1">
+          <mxGeometry height="45" width="45" x="50" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step1-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;1. Scheduler / User Trigger&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="140" x="5" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step2-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/app_services/App_Service_Domains.svg;" vertex="1">
+          <mxGeometry height="40" width="50" x="230" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step2-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;2. Dashboard UI&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="190" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step3-icon" parent="user-flows-box" style="aspect=fixed;sketch=0;html=1;dashed=0;whitespace=wrap;verticalLabelPosition=bottom;verticalAlign=top;fillColor=#2875E2;strokeColor=#ffffff;points=[[0.005,0.63,0],[0.1,0.2,0],[0.9,0.2,0],[0.5,0,0],[0.995,0.63,0],[0.72,0.99,0],[0.5,1,0],[0.28,0.99,0]];shape=mxgraph.kubernetes.icon2;kubernetesLabel=1;prIcon=api" vertex="1">
+          <mxGeometry height="43" width="45" x="410" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step3-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;3. API Gate (Retraining)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="370" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step4-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/machine_learning/Compute_Clusters.svg;" vertex="1">
+          <mxGeometry height="42" width="50" x="590" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step4-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;4. Azure ML Training&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="550" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step5-icon" parent="user-flows-box" style="image;aspect=fixed;perimeter=ellipsePerimeter;html=1;align=center;shadow=0;dashed=0;fontColor=#4277BB;labelBackgroundColor=default;fontSize=12;spacingTop=3;image=img/lib/ibm/data/model.svg;" vertex="1">
+          <mxGeometry height="60" width="60" x="770" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step5-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;5. Register Weights&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="140" x="730" y="645" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step6-icon" parent="user-flows-box" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/general/Dev_Console.svg;" vertex="1">
+          <mxGeometry height="42" width="52.5" x="950" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-step6-text" parent="user-flows-box" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;6. Pull weights to inference&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="150" x="900" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-edge-1" edge="1" parent="user-flows-box" source="flow3-step1-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2980b9;strokeWidth=2;" target="flow3-step2-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-edge-2" edge="1" parent="user-flows-box" source="flow3-step2-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2980b9;strokeWidth=2;" target="flow3-step3-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-edge-3" edge="1" parent="user-flows-box" source="flow3-step3-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2980b9;strokeWidth=2;" target="flow3-step4-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-edge-4" edge="1" parent="user-flows-box" source="flow3-step4-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2980b9;strokeWidth=2;" target="flow3-step5-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="flow3-edge-5" edge="1" parent="user-flows-box" source="flow3-step5-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2980b9;strokeWidth=2;" target="flow3-step6-icon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link-legend-to-data-pipeline" edge="1" parent="1" source="flow1-step5-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#27ae60;strokeWidth=2;dashed=1;" target="1uZrlfFnmPBMJj8hdFLu-47" value="Starts">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="843" y="260" />
+              <mxPoint x="1410" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="link-legend-to-s3-bucket" edge="1" parent="1" source="flow1-step6-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#27ae60;strokeWidth=2;dashed=1;" target="1uZrlfFnmPBMJj8hdFLu-14" value="Saves Masks">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1020" y="410" />
+              <mxPoint x="760" y="410" />
+              <mxPoint x="760" y="2458" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="link-legend-f2-to-s3-bucket" edge="1" parent="1" source="flow2-step4-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#e67e22;strokeWidth=2;dashed=1;" target="1uZrlfFnmPBMJj8hdFLu-14" value="Saves Edits">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link-legend-to-submit-pipeline" edge="1" parent="1" source="flow3-step3-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2980b9;strokeWidth=2;dashed=1;" target="Z7qgB71HU1Wg6pQUR2fB-63" value="Triggers Script">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="482" y="700" />
+              <mxPoint x="1130" y="700" />
+              <mxPoint x="1130" y="1748" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="link-legend-to-ml-compute" edge="1" parent="1" source="flow3-step4-icon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2980b9;strokeWidth=2;dashed=1;" target="Z7qgB71HU1Wg6pQUR2fB-40" value="Runs On">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="665" y="880" />
+              <mxPoint x="980" y="880" />
+              <mxPoint x="980" y="1334" />
+            </Array>
           </mxGeometry>
         </mxCell>
       </root>

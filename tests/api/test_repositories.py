@@ -742,7 +742,7 @@ class TestDashboardRepository:
         rows = [("arabidopsis", 5), ("maize", 3)]
         db = _make_db(execute_results=[_execute_result(all_rows=rows)])
         out = await DashboardRepository(db).get_data_distribution()
-        assert [s.species for s in out.species_counts] == ["arabidopsis", "maize"]
+        assert [s.species for s in out.species_counts] == ["Arabidopsis", "Maize"]
         assert [s.count for s in out.species_counts] == [5, 3]
 
 

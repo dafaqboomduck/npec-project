@@ -8,7 +8,7 @@
  * API base: http://localhost:8000/api/v1  (see VITE_API_URL env var)
  */
 
-import { apiClient } from './client';
+import { apiClient, scheduleProactiveRefresh } from './client';
 
 // ---------------------------------------------------------------------------
 // Types (mirroring api_schema.md AuthResponse)
@@ -82,9 +82,6 @@ export async function refreshToken(): Promise<AuthTokens> {
 export async function logout(): Promise<void> {
   const refreshToken = localStorage.getItem('refresh_token');
 
-  // Always clear local state first so the UI reacts immediately
-  clearTokens();
-
   if (refreshToken) {
     // Swallow errors — even if the server is unreachable the session is gone locally
     await apiClient<void>('/auth/logout', {
@@ -92,6 +89,9 @@ export async function logout(): Promise<void> {
       body: { refresh_token: refreshToken },
     }).catch(() => undefined);
   }
+
+  // Clear local state after the call completes (or fails)
+  clearTokens();
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +109,7 @@ export function saveTokens(tokens: AuthTokens, username: string): void {
   localStorage.setItem('refresh_token', tokens.refresh_token);
   localStorage.setItem('role', tokens.role);
   localStorage.setItem('username', username);
+  scheduleProactiveRefresh();
 }
 
 export function clearTokens(): void {

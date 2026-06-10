@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Config
 SECRET_KEY: str = settings.secret_key
 ALGORITHM: str = settings.algorithm
-ACCESS_TOKEN_EXPIRE_SECONDS: int = 3600  # 1h
+ACCESS_TOKEN_EXPIRE_SECONDS: int = 3600  # 1 hour expiration
 
 # Password hashing
 

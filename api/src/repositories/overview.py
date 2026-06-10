@@ -139,15 +139,12 @@ class OverviewRepository:
 
         model_id, model_f1 = deployed
 
-        # Latest latency from monitoring metrics
+        # Average latency from monitoring metrics
         latency_result = await self._db.execute(
-            select(MonitoringMetric.metric_value)
-            .where(
+            select(func.avg(MonitoringMetric.metric_value)).where(
                 MonitoringMetric.metric_name == "prediction_latency_ms",
                 MonitoringMetric.model_version_id == model_id,
             )
-            .order_by(MonitoringMetric.recorded_at.desc())
-            .limit(1)
         )
         latency_ms = int(latency_result.scalar_one_or_none() or 0)
 

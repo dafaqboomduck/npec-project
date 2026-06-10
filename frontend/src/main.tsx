@@ -27,8 +27,12 @@ import Library from './pages/Library';
 import Models from './pages/Models';
 import Lab from './pages/Lab';
 import { isAuthenticated, getRole } from './api/auth';
+import { scheduleProactiveRefresh } from './api/client';
 import { InferenceJobsProvider } from './context/InferenceJobsContext';
 import { ThemeProvider } from './context/ThemeContext';
+
+// Start the proactive token refresh loop
+scheduleProactiveRefresh();
 
 /** Redirects unauthenticated users to /login. */
 function RequireAuth({ children }: { children: React.ReactNode }) {

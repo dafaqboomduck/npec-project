@@ -396,7 +396,7 @@ export default function Overview() {
                 {/* Latency */}
                 <div className="health-metric">
                   <div className="health-metric-header">
-                    <span className="health-metric-label">LATENCY</span>
+                    <span className="health-metric-label">AVERAGE LATENCY</span>
                     <span className="health-metric-value">
                       {health
                         ? `${(health.latency_ms / 1000).toFixed(3)}s`

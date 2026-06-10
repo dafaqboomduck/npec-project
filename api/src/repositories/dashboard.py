@@ -197,17 +197,19 @@ class DashboardRepository:
         """
         result = await self._db.execute(
             select(
-                Annotation.species,
+                func.lower(Annotation.species).label("species_lower"),
                 func.count(Annotation.id).label("count"),
             )
             .where(
                 Annotation.species.is_not(None),
                 Annotation.status == AnnotationStatus.ANNOTATED.value,
             )
-            .group_by(Annotation.species)
+            .group_by(func.lower(Annotation.species))
             .order_by(func.count(Annotation.id).desc())
         )
         rows = result.all()
         return DataDistributionResponse(
-            species_counts=[SpeciesCount(species=species, count=count) for species, count in rows]
+            species_counts=[
+                SpeciesCount(species=species_lower.capitalize(), count=count) for species_lower, count in rows
+            ]
         )

@@ -27,6 +27,109 @@ interface CacheEntry {
 
 const apiCache = new Map<string, CacheEntry>();
 
+// Token refresh state and queuing variables
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+let refreshTimeoutId: number | null = null;
+
+function subscribeTokenRefresh(cb: (token: string) => void) {
+  refreshSubscribers.push(cb);
+}
+
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+function getJwtExpiry(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(''),
+    );
+    const payload = JSON.parse(jsonPayload) as { exp?: number };
+    return payload.exp ? payload.exp * 1000 : null; // Convert to milliseconds
+  } catch {
+    return null;
+  }
+}
+
+export function scheduleProactiveRefresh(): void {
+  if (refreshTimeoutId) {
+    clearTimeout(refreshTimeoutId as number);
+    refreshTimeoutId = null;
+  }
+
+  const accessToken = localStorage.getItem('access_token');
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!accessToken || !refreshToken) return;
+
+  const expiry = getJwtExpiry(accessToken);
+  if (!expiry) return;
+
+  const now = Date.now();
+  const timeUntilExpiry = expiry - now;
+
+  // Refresh 2 seconds before expiry (or 10% of expiry time for very short lifetimes)
+  const refreshLeadTime =
+    timeUntilExpiry > 20000 ? 10000 : Math.max(1000, timeUntilExpiry / 2);
+  const delay = timeUntilExpiry - refreshLeadTime;
+
+  if (delay <= 0) {
+    // If the token is already expired or very close, refresh immediately
+    void performTokenRefresh()
+      .then(() => scheduleProactiveRefresh())
+      .catch(() => {});
+  } else {
+    refreshTimeoutId = window.setTimeout(() => {
+      void performTokenRefresh()
+        .then(() => scheduleProactiveRefresh())
+        .catch(() => {});
+    }, delay);
+  }
+}
+
+async function performTokenRefresh(): Promise<string> {
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!refreshToken) {
+    throw new Error('No refresh token stored');
+  }
+
+  const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to refresh session');
+  }
+
+  const data = (await res.json()) as {
+    access_token: string;
+    refresh_token: string;
+    role: string;
+  };
+
+  localStorage.setItem('access_token', data.access_token);
+  localStorage.setItem('refresh_token', data.refresh_token);
+  localStorage.setItem('role', data.role);
+
+  // Re-schedule the next proactive refresh
+  scheduleProactiveRefresh();
+
+  return data.access_token;
+}
+
 /**
  * Core fetch wrapper that automatically handles the base URL, authentication
  * headers, and JSON serialization. Includes an optional in-memory caching system
@@ -75,16 +178,98 @@ export async function apiClient<T>(
   const response = await fetch(`${BASE_URL}${endpoint}`, config);
 
   if (!response.ok) {
-    // If the token is invalid/expired and this isn't a login attempt itself,
-    // clear the session state and redirect directly to the login page.
-    if (response.status === 401 && endpoint !== '/auth/token') {
+    // If the token is invalid/expired and this isn't an authentication attempt itself,
+    // attempt to refresh the access token silently.
+    if (
+      response.status === 401 &&
+      endpoint !== '/auth/token' &&
+      endpoint !== '/auth/refresh'
+    ) {
+      if (isRefreshing) {
+        // If a refresh is already in progress, queue this request until it finishes
+        try {
+          const newToken = await new Promise<string>((resolve, reject) => {
+            subscribeTokenRefresh((token) => resolve(token));
+            // Safety timeout in case the refresh request hangs
+            setTimeout(() => reject(new Error('Refresh timeout')), 10000);
+          });
+
+          // Retry the request with the new access token
+          const retryConfig: RequestInit = {
+            ...config,
+            headers: {
+              ...config.headers,
+              Authorization: `Bearer ${newToken}`,
+            },
+          };
+          const retryResponse = await fetch(
+            `${BASE_URL}${endpoint}`,
+            retryConfig,
+          );
+          if (retryResponse.ok) {
+            if (retryResponse.status === 204) {
+              if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+                apiCache.clear();
+              }
+              return {} as T;
+            }
+            return (await retryResponse.json()) as T;
+          }
+        } catch {
+          // If retry fails, continue to default logout logic
+        }
+      } else {
+        isRefreshing = true;
+        try {
+          const newToken = await performTokenRefresh();
+          isRefreshing = false;
+          onRefreshed(newToken);
+
+          // Retry the request with the new access token
+          const retryConfig: RequestInit = {
+            ...config,
+            headers: {
+              ...config.headers,
+              Authorization: `Bearer ${newToken}`,
+            },
+          };
+          const retryResponse = await fetch(
+            `${BASE_URL}${endpoint}`,
+            retryConfig,
+          );
+          if (retryResponse.ok) {
+            if (retryResponse.status === 204) {
+              if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+                apiCache.clear();
+              }
+              return {} as T;
+            }
+            return (await retryResponse.json()) as T;
+          }
+        } catch {
+          isRefreshing = false;
+          // Refresh failed - clear the session and redirect to /login
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('role');
+          localStorage.removeItem('username');
+          window.location.href = '/login';
+          await new Promise((r) => setTimeout(r, 10000));
+          throw new Error('Session expired. Please log in again.');
+        }
+      }
+    }
+
+    // Default logout for auth endpoint failures (or if silent refresh retry still returned 401)
+    if (
+      response.status === 401 &&
+      (endpoint === '/auth/token' || endpoint === '/auth/refresh')
+    ) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('role');
       localStorage.removeItem('username');
       window.location.href = '/login';
-
-      // Delay throw to prevent UI errors while the browser navigates away
       await new Promise((r) => setTimeout(r, 10000));
     }
 
