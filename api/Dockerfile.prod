@@ -60,8 +60,8 @@ COPY scripts/*.py /app/scripts/
 
 # Non-root user
 RUN adduser --disabled-password --gecos "" --uid 1001 appuser \
-    && mkdir -p /tmp/npec_masks /tmp/npec_annotation_masks \
-    && chown appuser:appuser /tmp/npec_masks /tmp/npec_annotation_masks
+    && mkdir -p /tmp/npec_masks /tmp/npec_annotation_masks /app/artifacts \
+    && chown appuser:appuser /tmp/npec_masks /tmp/npec_annotation_masks /app/artifacts
 USER appuser
 
 ENV PYTHONUNBUFFERED=1 \

@@ -51,7 +51,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       BASELINE_MODEL_URI: ${BASELINE_MODEL_URI}
     volumes:
-      - ./artifacts:/app/artifacts
+      - cv5_artifacts:/app/artifacts
     depends_on:
       - migrations
     restart: "no"
@@ -92,7 +92,7 @@ services:
     ports:
       - "2021:8000"
     volumes:
-      - ./artifacts:/app/artifacts
+      - cv5_artifacts:/app/artifacts
       - cv5_models:/opt/npec_models
     depends_on:
       - db
@@ -140,3 +140,6 @@ volumes:
   cv5_models:
     external: true
     name: cv5_models_prod
+  cv5_artifacts:
+    external: true
+    name: cv5_artifacts_prod
