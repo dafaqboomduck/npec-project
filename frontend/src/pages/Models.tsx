@@ -722,48 +722,50 @@ export default function Models() {
                                 <tr className="detail-row">
                                   <td colSpan={5}>
                                     <div className="run-expanded-panel">
-                                      <div className="panel-col">
-                                        <h5>Configuration Metrics</h5>
-                                        <ul>
-                                          <li>
-                                            <span>Learning Rate:</span>
-                                            <strong>
-                                              {run.hyperparameters
-                                                ?.learning_rate !== undefined
-                                                ? String(
-                                                    run.hyperparameters
-                                                      .learning_rate,
-                                                  )
-                                                : '0.001'}
-                                            </strong>
-                                          </li>
-                                          <li>
-                                            <span>Batch Size:</span>
-                                            <strong>
-                                              {run.hyperparameters
-                                                ?.batch_size !== undefined
-                                                ? String(
-                                                    run.hyperparameters
-                                                      .batch_size,
-                                                  )
-                                                : '16'}{' '}
-                                              samples
-                                            </strong>
-                                          </li>
-                                          <li>
-                                            <span>Target Epochs:</span>
-                                            <strong>
-                                              {run.hyperparameters?.epochs !==
-                                              undefined
-                                                ? String(
-                                                    run.hyperparameters.epochs,
-                                                  )
-                                                : '50'}{' '}
-                                              epochs
-                                            </strong>
-                                          </li>
-                                        </ul>
-                                      </div>
+                                      {deploymentEnv !== 'cloud' && (
+                                        <div className="panel-col">
+                                          <h5>Configuration Metrics</h5>
+                                          <ul>
+                                            <li>
+                                              <span>Learning Rate:</span>
+                                              <strong>
+                                                {run.hyperparameters
+                                                  ?.learning_rate !== undefined
+                                                  ? String(
+                                                      run.hyperparameters
+                                                        .learning_rate,
+                                                    )
+                                                  : '0.001'}
+                                              </strong>
+                                            </li>
+                                            <li>
+                                              <span>Batch Size:</span>
+                                              <strong>
+                                                {run.hyperparameters
+                                                  ?.batch_size !== undefined
+                                                  ? String(
+                                                      run.hyperparameters
+                                                        .batch_size,
+                                                    )
+                                                  : '16'}{' '}
+                                                samples
+                                              </strong>
+                                            </li>
+                                            <li>
+                                              <span>Target Epochs:</span>
+                                              <strong>
+                                                {run.hyperparameters?.epochs !==
+                                                undefined
+                                                  ? String(
+                                                      run.hyperparameters.epochs,
+                                                    )
+                                                  : '50'}{' '}
+                                                epochs
+                                              </strong>
+                                            </li>
+                                          </ul>
+                                        </div>
+                                      )}
 
                                       <div className="panel-col">
                                         <h5>Subprocess Telemetry</h5>

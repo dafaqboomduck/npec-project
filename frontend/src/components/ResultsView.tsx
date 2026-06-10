@@ -32,7 +32,6 @@ export default function ResultsView({
   isHistoryView = false,
 }: ResultsViewProps) {
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('scan');
-  const maskOpacity = 1.0;
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(
     null,
   );
@@ -159,34 +158,33 @@ export default function ResultsView({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  background: '#000000',
                 }}
               >
-                {inputDisplayUrl ? (
+                {result.segmentation_mask_url ? (
                   <img
-                    src={inputDisplayUrl}
-                    alt="Base scan"
-                    className="rv-overlay-img"
-                    onClick={() => setLightboxSrc(inputDisplayUrl)}
-                    title="Click to enlarge base scan"
-                    style={{ cursor: 'pointer' }}
+                    src={getArtifactUrl(result.segmentation_mask_url)}
+                    alt="Mask preview"
+                    className="rv-overlay-img-mask"
+                    onClick={() =>
+                      setLightboxSrc(
+                        getArtifactUrl(result.segmentation_mask_url),
+                      )
+                    }
+                    title="Click to enlarge mask"
+                    style={{
+                      cursor: 'pointer',
+                      maxHeight: '340px',
+                      objectFit: 'contain',
+                      position: 'relative',
+                      opacity: 1.0,
+                      pointerEvents: 'auto',
+                    }}
                   />
                 ) : (
                   <span className="rv-overlay-placeholder">
-                    No scan image available
+                    No mask image available
                   </span>
-                )}
-                {result.segmentation_mask_url && (
-                  <img
-                    src={getArtifactUrl(result.segmentation_mask_url)}
-                    alt="Mask overlay"
-                    className="rv-overlay-img-mask"
-                    style={{
-                      position: 'absolute',
-                      opacity: maskOpacity,
-                      mixBlendMode: 'screen',
-                      pointerEvents: 'none',
-                    }}
-                  />
                 )}
               </div>
             ) : displayImageUrl ? (

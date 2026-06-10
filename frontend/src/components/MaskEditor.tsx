@@ -118,11 +118,13 @@ export default function MaskEditor({
     const img = new Image();
     const mask = new Image();
 
-    img.crossOrigin = 'anonymous';
-    mask.crossOrigin = 'anonymous';
+    let imgObjectUrl = '';
+    let maskObjectUrl = '';
+    let isCleanedUp = false;
 
     let loadedCount = 0;
     const onLoaded = () => {
+      if (isCleanedUp) return;
       loadedCount++;
       if (loadedCount === 2) {
         // Match canvas size to image resolution
@@ -142,12 +144,62 @@ export default function MaskEditor({
 
     img.onload = onLoaded;
     mask.onload = onLoaded;
-    img.src = originalImageUrl;
-    mask.src = maskImageUrl;
+
+    img.onerror = () => {
+      console.error('Failed to load original image in MaskEditor');
+    };
+    mask.onerror = () => {
+      console.error('Failed to load mask image in MaskEditor');
+    };
+
+    // Fetch original image and convert to object URL to bypass browser cache CORS issues
+    fetch(originalImageUrl, { cache: 'no-cache' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        if (isCleanedUp) return;
+        imgObjectUrl = URL.createObjectURL(blob);
+        img.src = imgObjectUrl;
+      })
+      .catch((err) => {
+        console.warn('Fallback to direct src load for original image due to fetch error:', err);
+        if (isCleanedUp) return;
+        img.crossOrigin = 'anonymous';
+        img.src = originalImageUrl;
+      });
+
+    // Fetch mask image and convert to object URL
+    fetch(maskImageUrl, { cache: 'no-cache' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        if (isCleanedUp) return;
+        maskObjectUrl = URL.createObjectURL(blob);
+        mask.src = maskObjectUrl;
+      })
+      .catch((err) => {
+        console.warn('Fallback to direct src load for mask image due to fetch error:', err);
+        if (isCleanedUp) return;
+        mask.crossOrigin = 'anonymous';
+        mask.src = maskImageUrl;
+      });
 
     return () => {
+      isCleanedUp = true;
       img.onload = null;
       mask.onload = null;
+      img.onerror = null;
+      mask.onerror = null;
+      if (imgObjectUrl) {
+        URL.revokeObjectURL(imgObjectUrl);
+      }
+      if (maskObjectUrl) {
+        URL.revokeObjectURL(maskObjectUrl);
+      }
     };
   }, [inline, isOpen, originalImageUrl, maskImageUrl]);
 
