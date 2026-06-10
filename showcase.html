@@ -597,7 +597,7 @@ const DATA = {
   minio:{short:'S3-compatible store for the big binaries.',
     detailed:'Holds what the database intentionally doesn’t: input scans, segmentation masks, and root-tip visualization overlays. The API hands the browser short-lived presigned URLs, so large images never round-trip through the API process.',
     tech:['MinIO','S3 API','presigned URLs'], flows:['Save image','Save mask','Serve overlay'],
-    technical:[['Pluggable backend','A storage abstraction lets dev swap MinIO for a local filesystem backend transparently.'],['Presigned access','Time-limited (TTL) presigned URLs front every artifact.'],['On-prem port','Exposed on <b>2023</b> (9000 internal) in the production stack.']]},
+    technical:[['Pluggable backend','A storage abstraction lets dev swap MinIO for a local filesystem backend transparently.'],['Presigned access','Time-limited (TTL) presigned URLs front every artifact.'],['Ports','<b>9000/9001</b> locally; published on <b>2023</b> in the on-prem production stack.']]},
   lineage:{short:'A chain of custody for every prediction.',
     detailed:'Every inference call writes one audit row — request ID, input SHA-256, latency, deployment environment and the exact serving model version. A traceability tool then walks backward from any prediction to that model’s git commit, training-run ID, datasets and MLflow run — and honestly labels pre-pipeline “baseline” models that have no upstream training.',
     tech:['inference_audit_log','Lineage CLI','SHA-256'], flows:['Trace prediction → model','→ commit · run · dataset'],
@@ -811,9 +811,9 @@ function buildNodes(){
     ig.innerHTML=ICON[n.id]; g.appendChild(ig);
     const tt=el('text',{class:'ttl', x:14, y:38}); tt.textContent=n.label; g.appendChild(tt);
     const ss=el('text',{class:'sub', x:14, y:50}); ss.textContent=n.sub; g.appendChild(ss);
-    g.addEventListener('mouseenter',()=>{ if(!selected && !g.classList.contains('faded')) focusNode(n.id,false); registerInteraction(); });
+    g.addEventListener('mouseenter',()=>{ if(!selected && !g.classList.contains('faded') && !g.classList.contains('gone')) focusNode(n.id,false); registerInteraction(); });
     g.addEventListener('mouseleave',()=>{ if(!selected) clearFocus(); });
-    g.addEventListener('click',(ev)=>{ ev.stopPropagation(); if(!g.classList.contains('faded')) selectNode(n.id); });
+    g.addEventListener('click',(ev)=>{ ev.stopPropagation(); if(!g.classList.contains('faded') && !g.classList.contains('gone')) selectNode(n.id); });
     elNodes.appendChild(g);
     nodeEls[n.id]={g,box,dot,tier:tl,ico:ig,ttl:tt,sub:ss};
   });
@@ -867,21 +867,24 @@ const dEyebrow=document.getElementById('dEyebrow'), dTitle=document.getElementBy
 function chip(t,cls){const s=document.createElement('span');s.className='chip'+(cls?' '+cls:'');s.textContent=t;return s;}
 function renderDetail(id){
   const n=NMAP[id], d=DATA[id], col=TIER[n.tier].c;
+  // per-mode overrides: title/sub AND optional detail content, so the panel
+  // always matches the component as shown in the current deployment mode.
+  const ov=(LAYOUT[curMode] && LAYOUT[curMode].node && LAYOUT[curMode].node[id]) || {};
   dPlacement.style.display='none';
   dReelCta.style.display='none';
   dEyebrow.innerHTML='';
   const badge=document.createElement('span'); badge.className='badge'; badge.textContent=TIER[n.tier].lab;
   badge.style.background=col; badge.style.color= v('--bg');
   dEyebrow.appendChild(badge);
-  dTitle.textContent=n.label;
-  dShort.textContent=d.short;
+  dTitle.textContent=ov.label||n.label;
+  dShort.textContent=ov.dShort||d.short;
   dShort.style.display='block';      // reel hides this; restore for node detail
-  dBody.textContent=d.detailed;
-  dTech.innerHTML=''; d.tech.forEach(t=>dTech.appendChild(chip(t)));
-  dFlows.innerHTML=''; d.flows.forEach(t=>dFlows.appendChild(chip(t,'flow'))); dFlowsWrap.style.display='block';
+  dBody.textContent=ov.dDetailed||d.detailed;
+  dTech.innerHTML=''; (ov.dTech||d.tech).forEach(t=>dTech.appendChild(chip(t)));
+  dFlows.innerHTML=''; (ov.dFlows||d.flows).forEach(t=>dFlows.appendChild(chip(t,'flow'))); dFlowsWrap.style.display='block';
   dDeepWrap.style.display='block';
   deepInner.innerHTML='';
-  d.technical.forEach(([k,t])=>{
+  (ov.dTechnical||d.technical).forEach(([k,t])=>{
     const row=document.createElement('div'); row.className='tline';
     row.innerHTML=`<span class="k"></span><p><b>${k}</b> — ${t}</p>`;
     deepInner.appendChild(row);
@@ -994,8 +997,20 @@ const LAYOUT={
       lineage:{x:650,y:536},cvengine:{x:456,y:536}},
     node:{researcher:{sub:'users'},ot2:{sub:'in the lab'},frontend:{sub:'cloud-hosted UI'},
       api:{sub:'cloud API'},azureml:{sub:'registry · training'},
-      postgres:{sub:'managed'},k8s:{label:'AzureML endpoint',sub:'inference · HTTPS'},
-      minio:{label:'Azure Blob',sub:'object storage'},lineage:{sub:'audit'},
+      postgres:{sub:'managed'},
+      k8s:{label:'AzureML endpoint',sub:'inference · HTTPS',
+        dShort:'The remote scoring endpoint the cloud API calls over HTTPS.',
+        dDetailed:'A managed AzureML online endpoint (a KubernetesOnlineEndpoint) that serves the combined root + anchor model. The cloud API carries no TensorFlow itself — it POSTs each image to this endpoint over HTTPS and gets the mask back. The endpoint runs on the Arc-connected lambda-0 cluster, so inference is CPU-based at €0 incremental cloud-compute cost.',
+        dTech:['AzureML endpoint','KubernetesOnlineEndpoint','HTTPS'],
+        dFlows:['Score image','Rolling deploy'],
+        dTechnical:[['Remote scoring','The API’s <b>AzureMLInferenceService</b> POSTs the image and waits for the mask — no local model load.'],['CPU serving','~45–50 s per image; concurrency pinned to 1; requests queue ≤ 60 s.'],['Rolling deploy','<b>deploy_endpoint.py</b> rolls 100% traffic to a newly registered model version.']]},
+      minio:{label:'Azure Blob',sub:'object storage',
+        dShort:'Azure Blob storage for images, masks and overlays.',
+        dDetailed:'In the cloud deployment the object store is Azure Blob (container npec-artifacts), selected automatically when DEPLOYMENT_ENV=cloud. It holds the same artifacts MinIO does on-prem — input scans, segmentation masks and root-tip overlays — served to the browser via short-lived URLs.',
+        dTech:['Azure Blob','npec-artifacts','presigned URLs'],
+        dFlows:['Save image','Save mask','Serve overlay'],
+        dTechnical:[['AzureBlobStorageBackend','Chosen through the storage abstraction when <b>DEPLOYMENT_ENV=cloud</b> — same interface as the MinIO backend.'],['Artifact container','Images &amp; masks live in the <b>npec-artifacts</b> container.'],['Data residency','Stored in Azure — this is where image data crosses into the cloud provider.']]},
+      lineage:{sub:'audit'},
       cvengine:{hidden:true}},
     hide:['api-cvengine','azureml-cvengine','cvengine-minio'], cross:[],
   },
