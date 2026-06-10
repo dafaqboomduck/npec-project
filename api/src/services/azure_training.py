@@ -148,7 +148,7 @@ class AzureMLTrainingService(AbstractTrainingService):
             RuntimeError: If the script fails or the job name cannot be parsed.
         """
         result = subprocess.run(
-            ["python", "/app/scripts/submit_pipeline.py", "--schedule", "--run-now"],
+            ["python", "/app/scripts/submit_pipeline.py", "--run-now"],
             capture_output=True,
             text=True,
             check=True,
