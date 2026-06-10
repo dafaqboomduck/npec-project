@@ -67,7 +67,7 @@ jobs:
           target: runtime
           push: true
           build-args: |
-            NPEC_CV_VERSION=${{ vars.NPEC_CV_VERSION }}
+            NPEC_CV_VERSION=${{ vars.NPEC_CV_VERSION }} 
           secrets: |
             github_token=${{ secrets.GITHUB_TOKEN }}
           tags: |

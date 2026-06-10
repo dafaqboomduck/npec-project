@@ -7,7 +7,7 @@ After this runs, the endpoint has TWO deployments configured:
     current  - 100% traffic (production, unchanged)
     proof    -   0% traffic (proof of multi-slot capability)
 
-Both deployments run their own pod on the lambda-0 K8s cluster; both load
+Both deployments run their own pod on the lambda-4 K8s cluster; both load
 the same combined root+anchor model artifact; only `current` receives real
 client requests. The `proof` deployment is purely there for the studio
 graph and the `az ml online-deployment list` output to show two slots.
@@ -16,7 +16,7 @@ Usage:
     python scripts/add_proof_deployment.py
 
 When the mentor / teacher has seen the proof, delete the second slot to
-free K8s resources on lambda-0:
+free K8s resources on lambda-4:
 
     az ml online-deployment delete --name proof ^
         --endpoint-name root-detection-endpoint ^
@@ -77,7 +77,7 @@ def main() -> None:
     print(f"Adding deployment       : {PROOF_DEPLOYMENT_NAME}")
     print(f"Serving model           : {SERVING_MODEL_NAME} v{serving_version}")
     print(f"Environment             : {env_label}")
-    print(f"Compute / instance_type : lambda-0 / {INSTANCE_TYPE}")
+    print(f"Compute / instance_type : lambda-4 / {INSTANCE_TYPE}")
     print(f"Instance count          : {INSTANCE_COUNT}")
     print()
 
@@ -109,7 +109,7 @@ def main() -> None:
         readiness_probe=ProbeSettings(failure_threshold=30, timeout=10, period=10, initial_delay=10),
     )
 
-    print(f"Deploying {PROOF_DEPLOYMENT_NAME} ...  (~5-10 min while the pod starts on lambda-0)")
+    print(f"Deploying {PROOF_DEPLOYMENT_NAME} ...  (~5-10 min while the pod starts on lambda-4)")
     client.online_deployments.begin_create_or_update(deployment).result()
     print(f"Deployment {PROOF_DEPLOYMENT_NAME} created.")
 

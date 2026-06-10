@@ -30,11 +30,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-cv5}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cv5}
       POSTGRES_DB: ${POSTGRES_DB:-cv5db}
+      METABASE_DB_PASSWORD: ${METABASE_DB_PASSWORD:-metabase}
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - cv5_pgdata:/var/lib/postgresql/data
       - ./db/seeds:/seeds:ro
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cv5} -d ${POSTGRES_DB:-cv5db}" ]
       interval: 5s
@@ -146,6 +148,29 @@ services:
       - ./db/seeds:/seeds:ro
     command: >
       bash -c 'psql -h db -U $${DB_USER} -d $${DB_NAME} -f /seeds/dev_seed.sql'
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: cv5-metabase
+    restart: unless-stopped
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: db
+      MB_DB_PORT: 5432
+      MB_DB_DBNAME: metabaseappdb
+      MB_DB_USER: metabase
+      MB_DB_PASS: ${METABASE_DB_PASSWORD:-metabase}
+    ports:
+      - "2024:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "-I", "http://localhost:3000/api/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
 
 volumes:
   cv5_pgdata:

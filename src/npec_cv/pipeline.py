@@ -237,7 +237,6 @@ class CVPipeline:
 
         if img is None:
             raise ValueError(f"Could not load image from {img_path}")
-
         # Add this color space correction before passing it on
         if img.ndim == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)

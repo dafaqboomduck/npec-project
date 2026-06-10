@@ -107,6 +107,28 @@ services:
     depends_on:
       - api
 
+  metabase:
+    image: metabase/metabase:latest
+    container_name: cv5-metabase
+    restart: unless-stopped
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: db
+      MB_DB_PORT: 5432
+      MB_DB_DBNAME: metabaseappdb
+      MB_DB_USER: metabase
+      MB_DB_PASS: ${METABASE_DB_PASSWORD:-metabase}
+    ports:
+      - "2024:3000"
+    depends_on:
+      - db
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "-I", "http://localhost:3000/api/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
 volumes:
   cv5_npec_pgdata:
     external: true

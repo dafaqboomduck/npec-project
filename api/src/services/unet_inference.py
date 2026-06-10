@@ -431,7 +431,7 @@ class UNetInferenceService(AbstractInferenceService):
         input_ref = f"sha256: {hashlib.sha256(image_bytes).hexdigest()}"
 
         audit = None
-        if db is not None and _DEPLOYMENT_ENV == "cloud":
+        if db is not None:
             from lineage import InferenceLogger
 
             audit = InferenceLogger(
