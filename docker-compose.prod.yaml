@@ -6,6 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      METABASE_DB_PASSWORD: ${METABASE_DB_PASSWORD}
     volumes:
       - cv5_npec_pgdata:/var/lib/postgresql/data
     healthcheck:
