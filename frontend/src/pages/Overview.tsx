@@ -129,9 +129,9 @@ export default function Overview() {
   // Display name: strip the domain from an email, capitalise first letter
   const displayName = username.includes('@')
     ? username
-        .split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, (c) => c.toUpperCase())
+      .split('@')[0]
+      .replace(/[._-]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
     : username;
 
   // ── Data state ──
@@ -176,12 +176,12 @@ export default function Overview() {
   const currentModel = deployedModels[0] ?? null;
 
   // ── Health bar fill widths ──
-  const f1Pct = health ? Math.round(health.f1_score * 100) : null;
+  const f1Pct = health ? (health.f1_score * 100) : null;
   const latencyPct = health
     ? Math.min(
-        (Math.log10(health.latency_ms + 1) / Math.log10(60_000)) * 100,
-        100,
-      )
+      (Math.log10(health.latency_ms + 1) / Math.log10(60_000)) * 100,
+      100,
+    )
     : null;
   const latencyDanger = health ? health.latency_ms > 32_000 : false;
 
@@ -233,8 +233,8 @@ export default function Overview() {
                 {loading
                   ? '—'
                   : String(
-                      status?.active_model_count ?? deployedModels.length,
-                    ).padStart(2, '0')}
+                    status?.active_model_count ?? deployedModels.length,
+                  ).padStart(2, '0')}
               </span>
               <div className="model-badges">
                 {deployedModels.length > 0 ? (

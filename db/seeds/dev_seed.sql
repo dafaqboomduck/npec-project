@@ -51,11 +51,11 @@ INSERT INTO model_versions (
 )
 VALUES (
     '00000000-0000-0000-0000-000000000000',
-    'unet-npec-v0.0.0-placeholder',
+    'unet-npec-v0.0.0-baseline',
     'NPEC U-Net Baseline',
-    'Placeholder baseline shipped with the project. Pre-pipeline artifact — no upstream training run. See migration 0010 for the baseline flag semantics.',
+    'Baseline shipped with the project. Pre-pipeline artifact — no upstream training run.',
     'deployed',
-    0.8813, 0.8901, 0.8727, 31352,
+    0.8813, 0.8901, 0.8727, 31352, 
     '/app/artifacts/models/v1/',
     now(),
     true

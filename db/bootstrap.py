@@ -111,13 +111,8 @@ async def _ensure_normal_user(db) -> None:
     logger.info("Created user: %s", user_email)
 
 
-async def _ensure_baseline_model(db) -> None:
+async def _ensure_baseline_model(db) -> bool:
     from api.src.db.orm import ModelVersion
-
-    result = await db.execute(select(ModelVersion).where(ModelVersion.status == "deployed").limit(1))
-    if result.scalar_one_or_none() is not None:
-        logger.info("Deployed model already exists, skipping baseline registration.")
-        return True
 
     artifact_uri = os.environ.get("BASELINE_MODEL_URI", "/app/artifacts/models/v1/")
     if not Path(artifact_uri).exists():
@@ -127,6 +122,26 @@ async def _ensure_baseline_model(db) -> None:
             artifact_uri,
         )
         # return False
+
+    # Update the baseline in place if it already exists, rather than skipping.
+    result = await db.execute(select(ModelVersion).where(ModelVersion.version == "unet-npec-v1.0.0-baseline"))
+    existing = result.scalar_one_or_none()
+    if existing is not None:
+        existing.f1_score = 0.7932
+        existing.status = "deployed"
+        existing.artifact_uri = artifact_uri
+        existing.deployed_at = datetime.now(timezone.utc)
+        existing.baseline = True
+        await db.commit()
+        logger.info("Updated existing baseline model (f1=%.4f).", existing.f1_score)
+        return True
+
+    # No baseline yet. If some *other* model is already deployed, don't
+    # clobber it with a baseline — that's the original guard's intent.
+    result = await db.execute(select(ModelVersion).where(ModelVersion.status == "deployed").limit(1))
+    if result.scalar_one_or_none() is not None:
+        logger.info("A non-baseline deployed model exists, skipping baseline registration.")
+        return True
 
     # Lineage: this model genuinely has no upstream training run. Mark
     # it as a baseline so traces report it honestly. See migration 0010
@@ -138,7 +153,7 @@ async def _ensure_baseline_model(db) -> None:
             name="NPEC U-Net Baseline",
             description="Baseline model shipped with the application.",
             status="deployed",
-            f1_score=0.8813,
+            f1_score=0.7932,
             artifact_uri=artifact_uri,
             deployed_at=datetime.now(timezone.utc),
             baseline=True,
