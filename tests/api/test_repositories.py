@@ -688,7 +688,7 @@ class TestDashboardRepository:
             execute_results=[
                 _execute_result(first_row=deployed),
                 _execute_result(scalar_one_or_none=0.92),
-                _execute_result(scalar_one_or_none=12.5),
+                _execute_result(scalar_one_or_none=80.0),
             ]
         )
         out = await DashboardRepository(db).get_metrics()

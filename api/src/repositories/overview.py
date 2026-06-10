@@ -164,7 +164,7 @@ class OverviewRepository:
         f1_score = float(model_f1 or 0.0)
 
         return ModelHealthResponse(
-            f1_score=round(f1_score, 4),
+            f1_score=round(f1_score, 2),
             latency_ms=latency_ms,
             drift_status=_drift_status(drift_score),
         )

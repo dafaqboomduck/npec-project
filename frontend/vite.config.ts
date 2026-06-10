@@ -20,6 +20,9 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_DEPLOYMENT_ENV': JSON.stringify(
         env.DEPLOYMENT_ENV || process.env.DEPLOYMENT_ENV || 'local',
       ),
+      'import.meta.env.VITE_API_URL': JSON.stringify(
+        env.VITE_API_URL || process.env.VITE_API_URL || null,
+      ),
     },
 
     server: {

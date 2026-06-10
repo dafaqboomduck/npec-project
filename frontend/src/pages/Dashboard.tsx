@@ -291,8 +291,8 @@ export default function Dashboard() {
                     <span className="kpi-value">
                       {metrics
                         ? metrics.throughput_img_per_s >= 1
-                          ? `${metrics.throughput_img_per_s.toFixed(1)} img/s`
-                          : `${(metrics.throughput_img_per_s * 60).toFixed(1)} img/min`
+                          ? `${metrics.throughput_img_per_s.toFixed(3)} img/s`
+                          : `${(metrics.throughput_img_per_s * 60).toFixed(3)} img/min`
                         : '—'}
                     </span>
                     {metrics && metrics.throughput_img_per_s > 0 ? (

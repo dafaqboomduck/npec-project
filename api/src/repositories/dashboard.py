@@ -101,18 +101,21 @@ class DashboardRepository:
         if f1_score is None:
             f1_score = float(model_f1 or 0.0)
 
-        # Throughput — filter by run if given, otherwise latest globally
-        tp_query = (
-            select(MonitoringMetric.metric_value)
-            .where(MonitoringMetric.metric_name == "throughput_img_per_s")
-            .order_by(MonitoringMetric.recorded_at.desc())
-            .limit(1)
+        # Throughput — calculate dynamically: round(1000.0 / avg(prediction_latency_ms), 3)
+        tp_query = select(func.avg(MonitoringMetric.metric_value)).where(
+            MonitoringMetric.metric_name == "prediction_latency_ms"
         )
         if run_id is not None:
             tp_query = tp_query.where(MonitoringMetric.labels["run_id"].astext == str(run_id))
+        else:
+            tp_query = tp_query.where(MonitoringMetric.model_version_id == model_id)
 
         throughput_result = await self._db.execute(tp_query)
-        throughput = round(float(throughput_result.scalar_one_or_none() or 0.0), 2)
+        avg_latency = throughput_result.scalar_one_or_none()
+        if avg_latency and float(avg_latency) > 0:
+            throughput = round(1000.0 / float(avg_latency), 3)
+        else:
+            throughput = 0.0
 
         return DashboardMetricsResponse(
             f1_score=round(float(f1_score), 4),
