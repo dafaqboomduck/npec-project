@@ -39,6 +39,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Write Azure ML config.json
+        run: |
+          cat > config.json <<'EOF'
+          {
+            "subscription_id": "${{ secrets.SUBSCRIPTION_ID }}",
+            "resource_group": "${{ vars.RESOURCE_GROUP }}",
+            "workspace_name": "${{ vars.WORKSPACE_NAME }}"
+          }
+          EOF
+
       - name: Build and push api
         uses: docker/build-push-action@v6
         with:
