@@ -30,6 +30,7 @@ export default function MaskEditor({
   const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState<'brush' | 'eraser' | 'pan'>('brush');
   const maskOpacity = 1.0;
+  const [bgOpacity, setBgOpacity] = useState(0.6);
   const [isLoaded, setIsLoaded] = useState(false);
   const historyRef = useRef<ImageData[]>([]);
   const [canUndo, setCanUndo] = useState(false);
@@ -164,7 +165,10 @@ export default function MaskEditor({
         img.src = imgObjectUrl;
       })
       .catch((err) => {
-        console.warn('Fallback to direct src load for original image due to fetch error:', err);
+        console.warn(
+          'Fallback to direct src load for original image due to fetch error:',
+          err,
+        );
         if (isCleanedUp) return;
         img.crossOrigin = 'anonymous';
         img.src = originalImageUrl;
@@ -182,7 +186,10 @@ export default function MaskEditor({
         mask.src = maskObjectUrl;
       })
       .catch((err) => {
-        console.warn('Fallback to direct src load for mask image due to fetch error:', err);
+        console.warn(
+          'Fallback to direct src load for mask image due to fetch error:',
+          err,
+        );
         if (isCleanedUp) return;
         mask.crossOrigin = 'anonymous';
         mask.src = maskImageUrl;
@@ -394,19 +401,19 @@ export default function MaskEditor({
                 className={`me-toggle-btn ${tool === 'brush' ? 'active' : ''}`}
                 onClick={() => setTool('brush')}
               >
-                🖌 Brush
+                Brush
               </button>
               <button
                 className={`me-toggle-btn ${tool === 'eraser' ? 'active' : ''}`}
                 onClick={() => setTool('eraser')}
               >
-                🧽 Eraser
+                Eraser
               </button>
               <button
                 className={`me-toggle-btn ${tool === 'pan' ? 'active' : ''}`}
                 onClick={() => setTool('pan')}
               >
-                ✋ Pan & Zoom
+                Pan & Zoom
               </button>
             </div>
           </div>
@@ -425,7 +432,7 @@ export default function MaskEditor({
                 }}
                 title="Zoom In"
               >
-                ➕
+                +
               </button>
               <button
                 className="me-btn me-btn--secondary"
@@ -438,7 +445,7 @@ export default function MaskEditor({
                 }}
                 title="Zoom Out"
               >
-                ➖
+                -
               </button>
               <button
                 className="me-btn me-btn--secondary"
@@ -451,7 +458,7 @@ export default function MaskEditor({
                 }}
                 title="Reset Zoom & Pan"
               >
-                🔄 Reset
+                Reset
               </button>
             </div>
           </div>
@@ -501,9 +508,21 @@ export default function MaskEditor({
             />
           </div>
 
+          <div className="me-tool-group">
+            <label>Background Opacity: {Math.round(bgOpacity * 100)}%</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={bgOpacity}
+              onChange={(e) => setBgOpacity(parseFloat(e.target.value))}
+            />
+          </div>
+
           <div className="me-help">
             <p>
-              💡 Tips:
+              Tips:
               <br />• Use <b>Scroll Wheel</b> to zoom.
               <br />• Select <b>Pan</b> tool or hold <b>Spacebar</b> + drag to
               pan.
@@ -540,6 +559,7 @@ export default function MaskEditor({
             style={{
               transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
               transformOrigin: '0 0',
+              backgroundColor: '#000000',
             }}
           >
             {/* Background image (locked) */}
@@ -548,6 +568,7 @@ export default function MaskEditor({
               className="me-background-img"
               alt="Scan background"
               draggable={false}
+              style={{ opacity: bgOpacity }}
             />
 
             {/* Drawing Canvas */}
@@ -561,7 +582,10 @@ export default function MaskEditor({
               onTouchStart={startDrawing}
               onTouchMove={draw}
               onTouchEnd={stopDrawing}
-              style={{ opacity: maskOpacity }}
+              style={{
+                opacity: maskOpacity,
+                mixBlendMode: 'screen',
+              }}
             />
           </div>
         </div>

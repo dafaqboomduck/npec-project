@@ -757,7 +757,8 @@ export default function Models() {
                                                 {run.hyperparameters?.epochs !==
                                                 undefined
                                                   ? String(
-                                                      run.hyperparameters.epochs,
+                                                      run.hyperparameters
+                                                        .epochs,
                                                     )
                                                   : '50'}{' '}
                                                 epochs
