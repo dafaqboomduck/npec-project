@@ -294,12 +294,22 @@ class LocalTrainingService(AbstractTrainingService):
 
         deployed_artifact_dir = await _get_deployed_artifact_dir()
 
+        # Rebuild the confirmed-feedback dataset for this run and point the
+        # trainer at it. Returns the dir even if empty (written may be 0).
+        data_dir, written = await self._materialize_feedback_dataset()
+        logger.info(
+            "Training run %s fine-tuning on %d confirmed pair(s) from '%s'",
+            run_id,
+            written,
+            data_dir,
+        )
+
         env = _build_subprocess_env(
             run_id=run_id,
             hyperparameters=hyperparameters,
             output_dir=output_dir,
             artifact_dir=deployed_artifact_dir,
-            data_dir=self._data_dir,
+            data_dir=data_dir,
         )
 
         try:
@@ -408,13 +418,16 @@ class LocalTrainingService(AbstractTrainingService):
                 session_factory=session_factory,
             )
 
-    async def _materialize_feedback_dataset(self) -> tuple[Path]:
+    async def _materialize_feedback_dataset(self) -> tuple[Path, int]:
         """Write all human-confirmed (image, corrected-mask) pairs into NPEC_DATA_DIR.
 
         The local trainer pairs by identical stem and treats any non-zero mask
         pixel as foreground, so write images/<stem>.png + masks/<stem>.png.
         The feedback set is rebuilt each run so the trainer always fine-tunes
         on the current confirmed set.
+
+        Returns:
+            tuple of (data directory, number of pairs written).
         """
         import asyncio
         import uuid as _uuid
@@ -422,6 +435,7 @@ class LocalTrainingService(AbstractTrainingService):
         from sqlalchemy import select
 
         from api.src.db.orm import Annotation, Prediction
+        from api.src.db.session import get_sessionmaker
         from api.src.schemas.library import AnnotationStatus
         from api.src.services.storage import get_storage_backend
 
@@ -434,18 +448,22 @@ class LocalTrainingService(AbstractTrainingService):
             for p in d.glob("ann_*"):
                 p.unlink(missing_ok=True)
 
-        rows = (
-            await self._db.execute(
-                select(Annotation.id, Annotation.image_uri, Annotation.mask_uri)
-                .join(Prediction, Prediction.id == Annotation.prediction_id)
-                .where(
-                    Annotation.status == AnnotationStatus.ANNOTATED.value,
-                    Annotation.image_uri.is_not(None),
-                    Annotation.mask_uri.is_not(None),
-                    Prediction.confirmed_at.is_not(None),
+        # Use a fresh session: this runs inside the background training task,
+        # which outlives the request-scoped self._db (closed by the time the
+        # task executes). All other helpers in this module do the same.
+        async with get_sessionmaker()() as db:
+            rows = (
+                await db.execute(
+                    select(Annotation.id, Annotation.image_uri, Annotation.mask_uri)
+                    .join(Prediction, Prediction.id == Annotation.prediction_id)
+                    .where(
+                        Annotation.status == AnnotationStatus.ANNOTATED.value,
+                        Annotation.image_uri.is_not(None),
+                        Annotation.mask_uri.is_not(None),
+                        Prediction.confirmed_at.is_not(None),
+                    )
                 )
-            )
-        ).all()
+            ).all()
 
         storage = get_storage_backend()
         written = 0
