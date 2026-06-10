@@ -71,7 +71,6 @@ jobs:
         with:
           context: .
           file: frontend/Dockerfile
-          target: cloud
           push: true
           build-args: |
             VITE_API_URL=${{ secrets.VITE_API_URL_CLOUD }}
