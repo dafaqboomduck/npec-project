@@ -271,12 +271,19 @@ pre-commit install
 pip install -e src/npec_cv
 
 # Optional: Install with CUDA support for GPU-accelerated local runs
-pip install -e src/npec_cv[cuda]
+pip install -e "src/npec_cv[cuda]"
+```
+
+Download the model checkpoints (fetched from the GitHub release, cached at `~/.cache/npec_cv/models/v<version>/`). Requires a GitHub Personal Access Token with `repo` scope:
+```bash
+export GITHUB_TOKEN=<your-token>
+npec-cv download-models
 ```
 
 Verify the CLI works:
 ```bash
 npec-cv --help
+npec-cv version   # prints e.g. 0.2.2
 ```
 
 ### 2. Database Setup
@@ -308,27 +315,85 @@ Open [http://localhost:3000](http://localhost:3000) to view the application dash
 
 ## 9. CLI & API Usage Examples
 
-### Running Inference via CLI
-Run inference on a single plant image (passing the image path as a positional argument, and specifying the required model artifact directory):
+### CLI — `npec-cv`
+
+Check which model checkpoints are loaded and their default thresholds:
 ```bash
-npec-cv predict data/samples/plant.png --artifact-dir scripts/ --output results/
-```
-Batch-process a directory of images:
-```bash
-npec-cv predict data/samples/ --artifact-dir scripts/ --confidence 0.05 --output results.json
+npec-cv info
 ```
 
-### Calling the API endpoint (FastAPI)
-Run the local FastAPI server:
+Analyze a single image (`--artifact-dir` points to the directory containing the `.keras` files — omit it if models were downloaded via `npec-cv download-models` and the config resolves the cache automatically):
+```bash
+npec-cv predict scan_day3.png --artifact-dir ~/.cache/npec_cv/models/v0.2.2
+```
+
+Batch-process a directory and save the results to a JSON file:
+```bash
+npec-cv predict data/day3/ -a ~/.cache/npec_cv/models/v0.2.2 --output results.json
+```
+
+Tune the detection threshold — raise to suppress false positives, lower for faint roots:
+```bash
+# Suppress false positives on a high-contrast scan
+npec-cv predict high_contrast_scan_day7.png -a ~/.cache/npec_cv/models/v0.2.2 --confidence 0.3
+
+# Faint day-1 roots
+npec-cv predict scan_day1.png -a ~/.cache/npec_cv/models/v0.2.2 --confidence 0.005
+```
+
+Output is a JSON object (single image) or JSON array (directory) with per-plant `length_px`, `tip_location`, `pixel_count`, and `confidence_score`.
+
+### Python API
+
+```python
+from pathlib import Path
+from npec_cv import CVPipeline, cv_pipeline
+
+# Single image
+pipeline = CVPipeline()
+result = pipeline.process_single_image(Path("scan_day3.png"))
+for plant_id, plant in result.plant_results.items():
+    if plant.detected:
+        print(f"Plant {plant_id}: {plant.length}px, tip at {plant.end_point}")
+
+# Batch directory — writes plant_lengths.csv alongside the input folder
+csv_path = cv_pipeline("data/day3/")
+```
+
+### REST API
+
+Run the local server:
 ```bash
 uvicorn api.src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-Perform a prediction using `curl`:
+
+Get a JWT token, then submit an image via `multipart/form-data`:
 ```bash
-curl -X POST http://localhost:8000/api/v1/inference/predict \
-     -H "Content-Type: application/json" \
-     -d '{"image_b64": "<base64-string>", "filename": "sample.png"}'
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=admin&password=secret" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s -X POST http://localhost:8000/api/v1/predict \
+     -H "Authorization: Bearer $TOKEN" \
+     -F "file=@scan_day3.png"
 ```
+
+Retrieve, confirm, or discard a prediction by UUID:
+```bash
+# Retrieve result
+curl -s http://localhost:8000/api/v1/predictions/<uuid> -H "Authorization: Bearer $TOKEN"
+
+# Confirm and add to the annotation library
+curl -s -X POST http://localhost:8000/api/v1/predictions/<uuid>/confirm \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"species": "Arabidopsis thaliana", "age_days": 3, "treatment": "control"}'
+
+# Discard
+curl -s -X DELETE http://localhost:8000/api/v1/predictions/<uuid> -H "Authorization: Bearer $TOKEN"
+```
+
+Interactive API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
