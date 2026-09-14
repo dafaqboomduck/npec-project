@@ -127,7 +127,7 @@ async def _ensure_baseline_model(db) -> bool:
     result = await db.execute(select(ModelVersion).where(ModelVersion.version == "unet-npec-v1.0.0-baseline"))
     existing = result.scalar_one_or_none()
     if existing is not None:
-        existing.f1_score = 0.7932
+        existing.f1_score = 0.8813
         existing.status = "deployed"
         existing.artifact_uri = artifact_uri
         existing.deployed_at = datetime.now(timezone.utc)
