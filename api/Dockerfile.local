@@ -29,6 +29,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --extra-index-url https://pypi.org/simple/ \
     "npec-cv[cuda]${NPEC_CV_VERSION:+==$NPEC_CV_VERSION}"
 
+# cuDNN 9.11 dropped Pascal (sm_61). The [cuda] extra pins 9.16, which
+# enumerates the GPU fine but has no executable conv kernels for a 1060.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install "nvidia-cudnn-cu12==9.10.2.21"
+
 # Models come straight from the build context into the path the runtime reads.
 # Prod downloads these from the matching GitHub release and symlinks the
 # version-pinned cache dir to /opt/npec_models/current/v1; here we just place
@@ -52,6 +57,7 @@ COPY --from=deps /usr/local/bin /usr/local/bin
 COPY --from=deps --chown=1001:1001 /opt/npec_models /opt/npec_models
 
 COPY api/ ./api/
+COPY db/ ./db
 COPY lineage/ ./lineage/
 COPY scripts/*.py /app/scripts/
 
